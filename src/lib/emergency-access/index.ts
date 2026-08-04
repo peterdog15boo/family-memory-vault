@@ -24,7 +24,6 @@ import {
 } from "@/lib/emergency-access/access";
 import {
   DEFAULT_WAITING_PERIOD_HOURS,
-  EMERGENCY_ACCESS_SAFETY,
   TEMPORARY_GRANT_DURATION_DAYS,
   type CreateEmergencyAccessDesignationInput,
   type UpdateEmergencyAccessDesignationInput,

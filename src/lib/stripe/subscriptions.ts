@@ -141,7 +141,7 @@ export async function ensureStripeCustomer(userId: string): Promise<{
 }> {
   await seedPlans();
   const { ensureFreeSubscription } = await import("@/lib/plans");
-  let row = await ensureFreeSubscription(userId);
+  const row = await ensureFreeSubscription(userId);
 
   if (row.stripeCustomerId) {
     return { customerId: row.stripeCustomerId, subscription: row };

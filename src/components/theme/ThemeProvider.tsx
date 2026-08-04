@@ -26,7 +26,7 @@ type ThemeContextValue = {
   /** Switch to Original. */
   restoreOriginal: () => void;
   /** Switch to Modern (site default). */
-  useModernDefault: () => void;
+  applyModernDefault: () => void;
   toggleTheme: () => void;
   ready: boolean;
   isModern: boolean;
@@ -89,7 +89,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [setTheme]);
 
   /** Return to the site default (Modern). */
-  const useModernDefault = useCallback(() => {
+  const applyModernDefault = useCallback(() => {
     setTheme("modern");
   }, [setTheme]);
 
@@ -102,12 +102,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       theme,
       setTheme,
       restoreOriginal,
-      useModernDefault,
+      applyModernDefault,
       toggleTheme,
       ready,
       isModern: theme === "modern",
     }),
-    [theme, setTheme, restoreOriginal, useModernDefault, toggleTheme, ready],
+    [theme, setTheme, restoreOriginal, applyModernDefault, toggleTheme, ready],
   );
 
   return (

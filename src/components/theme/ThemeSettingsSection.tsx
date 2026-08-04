@@ -10,7 +10,7 @@ import { THEME_EVALUATION_PAGES } from "@/lib/theme/types";
  * Settings section for choosing Modern (default) vs Original appearance.
  */
 export function ThemeSettingsSection() {
-  const { theme, useModernDefault, ready, isModern } = useTheme();
+  const { theme, applyModernDefault, ready, isModern } = useTheme();
 
   return (
     <section id="appearance" className="ui-card ui-card-elevated ui-card-pad-lg">
@@ -52,7 +52,7 @@ export function ThemeSettingsSection() {
           <button
             type="button"
             disabled={!ready}
-            onClick={() => useModernDefault()}
+            onClick={() => applyModernDefault()}
             className="ui-btn ui-btn-primary"
           >
             Use Modern (default)

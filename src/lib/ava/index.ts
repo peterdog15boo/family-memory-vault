@@ -730,7 +730,7 @@ export async function getAvaProgress(userId: string): Promise<AvaProgress> {
     !rawHp.encourageMemorySkipped;
 
   const reconciled = reconcileHelperProgress(state, signals);
-  let liveState = reconciled.state;
+  const liveState = reconciled.state;
   if (reconciled.dirty) {
     void patchAvaState(userId, {
       helperProgress: reconciled.progressPatch,

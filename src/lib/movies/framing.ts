@@ -188,7 +188,7 @@ export function computeFramingFromFaces(
     signature: faceBoxSignature(major),
   };
 
-  let maxZoomAmount = resolveMaxZoomFromSubjectBounds(subjectBounds);
+  const maxZoomAmount = resolveMaxZoomFromSubjectBounds(subjectBounds);
 
   return {
     focalPointX: clamp01(focalPointX),
