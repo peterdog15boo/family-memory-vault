@@ -794,6 +794,46 @@ export function buildRenderPlan(
 /* Frame rendering (sharp)                                                    */
 /* -------------------------------------------------------------------------- */
 
+function movieSourceMaxLongEdge(fast: boolean): number {
+  const fromEnv = Number(process.env.MOVIE_SOURCE_MAX_LONG_EDGE ?? 0);
+  if (Number.isFinite(fromEnv) && fromEnv > 0) return fromEnv;
+  return fast ? 1920 : 2560;
+}
+
+/** Decode, orient, and cap pixel volume before Ken Burns (Railway RAM). */
+async function prepareOrientedPhotoSource(
+  body: Buffer,
+  fast: boolean,
+): Promise<{ oriented: Buffer; sourceWidth: number; sourceHeight: number }> {
+  let oriented = await sharp(body).rotate().toBuffer();
+  let meta = await sharp(oriented).metadata();
+  let sourceWidth = meta.width ?? 1;
+  let sourceHeight = meta.height ?? 1;
+  const maxLong = movieSourceMaxLongEdge(fast);
+  const longEdge = Math.max(sourceWidth, sourceHeight);
+  if (longEdge > maxLong) {
+    const scale = maxLong / longEdge;
+    const newW = Math.max(1, Math.round(sourceWidth * scale));
+    const newH = Math.max(1, Math.round(sourceHeight * scale));
+    oriented = await sharp(oriented)
+      .resize(newW, newH, {
+        fit: "inside",
+        withoutEnlargement: true,
+        kernel: "lanczos3",
+      })
+      .toBuffer();
+    meta = await sharp(oriented).metadata();
+    sourceWidth = meta.width ?? newW;
+    sourceHeight = meta.height ?? newH;
+    console.info("[movies] Downscaled photo source for render", {
+      maxLongEdge: maxLong,
+      sourceWidth,
+      sourceHeight,
+    });
+  }
+  return { oriented, sourceWidth, sourceHeight };
+}
+
 /**
  * Rasterize photo/title clips to JPEG frames and normalize memory videos to
  * MP4 segments (same canvas), preserving album order.
@@ -906,10 +946,8 @@ export async function renderMovieAssets(
     }
 
     // Decode + auto-orient once; reuse for all Ken Burns samples.
-    const oriented = await sharp(body).rotate().toBuffer();
-    const meta = await sharp(oriented).metadata();
-    const sourceWidth = meta.width ?? plan.width;
-    const sourceHeight = meta.height ?? plan.height;
+    const { oriented, sourceWidth, sourceHeight } =
+      await prepareOrientedPhotoSource(Buffer.from(body), plan.fast);
 
     // Fail-closed face framing: if plan has no faces, re-fetch before render
     // rather than silently center-cropping portraits.
