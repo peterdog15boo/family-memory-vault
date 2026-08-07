@@ -134,6 +134,22 @@ export async function requireAdminApi(): Promise<AdminApiAuthResult> {
     };
   }
 
+  try {
+    const { hasAcceptedBetaNda, isBetaNdaRequired } = await import(
+      "@/lib/beta-nda"
+    );
+    if (isBetaNdaRequired() && !(await hasAcceptedBetaNda(userId))) {
+      return { ok: false, status: 403, error: "Beta NDA acceptance required" };
+    }
+  } catch (error) {
+    console.error("[auth.admin] beta NDA check failed", error);
+    return {
+      ok: false,
+      status: 403,
+      error: "Unable to verify beta agreement status",
+    };
+  }
+
   return { ok: true, userId };
 }
 

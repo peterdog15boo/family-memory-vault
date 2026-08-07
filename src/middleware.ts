@@ -23,6 +23,8 @@ const isProtectedRoute = createRouteMatcher([
   "/assistant(.*)",
   "/admin(.*)",
   "/suspended",
+  "/beta-agree",
+  "/api/beta-nda(.*)",
   "/api/upload-url",
   "/api/upload(.*)",
   "/api/documents(.*)",
@@ -74,6 +76,7 @@ export default clerkMiddleware(async (auth, request) => {
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-request-id", requestId);
+  requestHeaders.set("x-pathname", path);
 
   const response = NextResponse.next({
     request: { headers: requestHeaders },

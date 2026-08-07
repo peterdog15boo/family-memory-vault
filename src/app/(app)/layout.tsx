@@ -1,9 +1,11 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { isUserSuspended } from "@/lib/admin/users";
 import { getAvaProgress } from "@/lib/ava";
 import { isAdmin } from "@/lib/auth/admin";
+import { shouldRedirectToBetaNda } from "@/lib/beta-nda/gate";
 import { getUnreadCount } from "@/lib/notifications";
 import type { AvaProgress } from "@/lib/ava/types";
 import { ensureAppUser } from "@/lib/users";
@@ -92,6 +94,18 @@ export default async function AppLayout({
     } catch (error) {
       console.warn("[app.layout] ensureAppUser failed", error);
     }
+  }
+
+  if (userId && (await shouldRedirectToBetaNda(userId))) {
+    const hdrs = await headers();
+    const path = hdrs.get("x-pathname")?.trim() || "/dashboard";
+    const safe =
+      path.startsWith("/") &&
+      !path.startsWith("//") &&
+      !path.startsWith("/beta-agree")
+        ? path
+        : "/dashboard";
+    redirect(`/beta-agree?redirect_url=${encodeURIComponent(safe)}`);
   }
 
   const [{ displayName, email }, unreadCount, admin, avaProgress] =

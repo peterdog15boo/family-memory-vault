@@ -1704,6 +1704,42 @@ export const memoryBoxOrders = pgTable(
   ],
 );
 
+/**
+ * Beta Tester NDA clickwrap acceptances (audit trail).
+ * Gate checks this table when BETA_NDA_REQUIRED=true.
+ */
+export const betaNdaAcceptances = pgTable(
+  "beta_nda_acceptances",
+  {
+    id: text("id").primaryKey(),
+    /** Clerk user when signed in at acceptance time. */
+    userId: text("user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    fullName: text("full_name").notNull(),
+    email: text("email").notNull(),
+    ndaVersion: text("nda_version").notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("beta_nda_acceptances_user_id_idx").on(table.userId),
+    index("beta_nda_acceptances_email_idx").on(table.email),
+    index("beta_nda_acceptances_nda_version_idx").on(table.ndaVersion),
+    index("beta_nda_acceptances_accepted_at_idx").on(table.acceptedAt),
+    uniqueIndex("beta_nda_acceptances_user_version_uidx").on(
+      table.userId,
+      table.ndaVersion,
+    ),
+  ],
+);
+
 /* -------------------------------------------------------------------------- */
 /* Relations                                                                  */
 /* -------------------------------------------------------------------------- */
@@ -1712,6 +1748,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   media: many(media),
   memories: many(memories),
   movies: many(movies),
+  betaNdaAcceptances: many(betaNdaAcceptances),
   people: many(people),
   faces: many(faces),
   moderationEvents: many(moderationEvents),
@@ -1745,6 +1782,16 @@ export const adminAuditLogsRelations = relations(adminAuditLogs, ({ one }) => ({
     references: [users.id],
   }),
 }));
+
+export const betaNdaAcceptancesRelations = relations(
+  betaNdaAcceptances,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [betaNdaAcceptances.userId],
+      references: [users.id],
+    }),
+  }),
+);
 
 export const notificationsRelations = relations(notifications, ({ one }) => ({
   user: one(users, {
@@ -2114,6 +2161,8 @@ export type SensitiveAccessEvent = typeof sensitiveAccessEvents.$inferSelect;
 export type NewSensitiveAccessEvent = typeof sensitiveAccessEvents.$inferInsert;
 export type MemoryBoxOrder = typeof memoryBoxOrders.$inferSelect;
 export type NewMemoryBoxOrder = typeof memoryBoxOrders.$inferInsert;
+export type BetaNdaAcceptance = typeof betaNdaAcceptances.$inferSelect;
+export type NewBetaNdaAcceptance = typeof betaNdaAcceptances.$inferInsert;
 
 /** @deprecated Use ProcessingJob — kept for queue helper compatibility */
 export type QueueJob = ProcessingJob;

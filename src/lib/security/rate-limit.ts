@@ -119,4 +119,5 @@ export const RATE_LIMITS = {
   legacyVideosComplete: { limit: 20, windowMs: 60_000 },
   legacyVideosMutate: { limit: 40, windowMs: 60_000 },
   memoryBoxOrder: { limit: 8, windowMs: 60_000 },
+  betaNdaAccept: { limit: 10, windowMs: 60_000 },
 } as const;

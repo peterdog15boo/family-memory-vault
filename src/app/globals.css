@@ -6976,3 +6976,191 @@ html {
 .memory-box-confirm-secondary:hover {
   color: var(--ink);
 }
+
+/* —— Beta Tester NDA clickwrap —— */
+.beta-nda-shell {
+  min-height: 100dvh;
+  background:
+    radial-gradient(
+      ellipse 80% 50% at 50% -10%,
+      color-mix(in srgb, var(--accent) 12%, transparent),
+      transparent 70%
+    ),
+    var(--canvas);
+  padding: clamp(1.25rem, 4vw, 2.5rem) clamp(1rem, 3vw, 1.5rem)
+    clamp(2rem, 6vh, 3.5rem);
+}
+
+.beta-nda-page {
+  width: min(100%, 42rem);
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.beta-nda-header {
+  text-align: center;
+}
+
+.beta-nda-eyebrow {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.beta-nda-title {
+  margin: 0.55rem 0 0;
+  font-family: var(--font-display-family);
+  font-size: clamp(1.85rem, 4vw, 2.45rem);
+  font-weight: 550;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--ink);
+}
+
+.beta-nda-lead {
+  margin: 0.65rem auto 0;
+  max-width: 34rem;
+  font-size: 0.98rem;
+  line-height: 1.55;
+  color: var(--ink-muted);
+}
+
+.beta-nda-version {
+  margin: 0.55rem 0 0;
+  font-size: 0.78rem;
+  color: var(--ink-muted);
+  opacity: 0.85;
+}
+
+.beta-nda-scroll {
+  max-height: min(52vh, 28rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 1.15rem 1.1rem 1.35rem;
+  border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  border-radius: 0.85rem;
+  background: color-mix(in srgb, var(--canvas-elevated, var(--canvas)) 92%, white);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--ink) 4%, transparent);
+  -webkit-overflow-scrolling: touch;
+}
+
+.beta-nda-doc-title {
+  margin: 0 0 0.85rem;
+  font-family: var(--font-display-family);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  text-align: center;
+}
+
+.beta-nda-section {
+  margin-top: 1.1rem;
+}
+
+.beta-nda-h {
+  margin: 0 0 0.4rem;
+  font-family: var(--font-display-family);
+  font-size: 1.02rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.beta-nda-p {
+  margin: 0 0 0.65rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--ink-muted);
+}
+
+.beta-nda-list {
+  margin: 0 0 0.75rem;
+  padding-left: 1.15rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--ink-muted);
+}
+
+.beta-nda-list li + li {
+  margin-top: 0.35rem;
+}
+
+.beta-nda-closing {
+  margin-top: 1rem;
+  font-weight: 550;
+  color: var(--ink);
+}
+
+.beta-nda-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding-top: 0.25rem;
+}
+
+.beta-nda-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.beta-nda-input {
+  width: 100%;
+}
+
+.beta-nda-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.beta-nda-check input {
+  margin-top: 0.2rem;
+  width: 1.05rem;
+  height: 1.05rem;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+
+.beta-nda-check.is-error {
+  color: color-mix(in srgb, #b42318 80%, var(--ink));
+}
+
+.beta-nda-error {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #b42318;
+}
+
+.beta-nda-submit {
+  width: 100%;
+  justify-content: center;
+  min-height: 2.85rem;
+  margin-top: 0.15rem;
+}
+
+.beta-nda-submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (min-width: 720px) {
+  .beta-nda-scroll {
+    max-height: min(56vh, 32rem);
+    padding: 1.35rem 1.4rem 1.5rem;
+  }
+}
+

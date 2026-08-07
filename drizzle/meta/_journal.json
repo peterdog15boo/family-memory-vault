@@ -204,6 +204,13 @@
       "when": 1785447100000,
       "tag": "0039_memory_box_payment",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1785447200000,
+      "tag": "0040_beta_nda_acceptances",
+      "breakpoints": true
     }
   ]
 }
