@@ -8,6 +8,7 @@ import { HintTooltip } from "@/components/ui/HintTooltip";
 import { COPY } from "@/lib/copy";
 import {
   getSafeMediaLibrary,
+  MEDIA_LIBRARY_INITIAL_SIZE,
   MEDIA_PAGE_SIZE,
 } from "@/lib/media/queries";
 import { serializeSafeMediaItem } from "@/lib/memories";
@@ -22,10 +23,16 @@ export default async function MediaLibraryPage() {
     redirect("/");
   }
 
-  const library = await getSafeMediaLibrary(userId, {
-    ownLimit: MEDIA_PAGE_SIZE,
-    sharedLimit: MEDIA_PAGE_SIZE,
-  });
+  let library;
+  try {
+    library = await getSafeMediaLibrary(userId, {
+      ownLimit: MEDIA_LIBRARY_INITIAL_SIZE,
+      sharedLimit: MEDIA_LIBRARY_INITIAL_SIZE,
+    });
+  } catch (error) {
+    console.error("[media.page] getSafeMediaLibrary failed", error);
+    throw error;
+  }
   const own = library.own.map(serializeSafeMediaItem);
   const shared = library.shared.map(serializeSafeMediaItem);
 

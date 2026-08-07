@@ -12,6 +12,12 @@ import { isR2Configured } from "@/lib/upload/constants";
 /** Default page size for media grids (library + load-more). */
 export const MEDIA_PAGE_SIZE = 48;
 
+/** First paint on /media — smaller than load-more max to keep SSR signing bounded. */
+export const MEDIA_LIBRARY_INITIAL_SIZE = 24;
+
+/** Cap concurrent R2 presigns during SSR (avoids serverless spikes on large libraries). */
+const MEDIA_PRESIGN_CONCURRENCY = 8;
+
 /**
  * Gallery preview signed URL TTL — long enough for browsing a page,
  * short enough that stale tabs need a refresh. Capped by R2 max (1h).
@@ -160,10 +166,34 @@ export type MediaReviewSummary = {
   rejectedCount: number;
 };
 
+async function mapInConcurrency<T, R>(
+  items: T[],
+  mapper: (item: T) => Promise<R>,
+  concurrency = MEDIA_PRESIGN_CONCURRENCY,
+): Promise<R[]> {
+  if (items.length === 0) return [];
+  const out: R[] = new Array(items.length);
+  let index = 0;
+
+  async function worker() {
+    while (index < items.length) {
+      const current = index++;
+      out[current] = await mapper(items[current]!);
+    }
+  }
+
+  const workers = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    () => worker(),
+  );
+  await Promise.all(workers);
+  return out;
+}
+
 async function mapSafeMediaRows(
   rows: MediaGalleryRow[],
 ): Promise<SafeMediaItem[]> {
-  const items = await Promise.all(rows.map((row) => toSafeMediaItem(row)));
+  const items = await mapInConcurrency(rows, (row) => toSafeMediaItem(row));
   return items.filter((item): item is SafeMediaItem => item !== null);
 }
 
