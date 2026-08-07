@@ -1209,7 +1209,7 @@ export async function renderMovieAssets(
           sourceWidth: nextSourceWidth,
           sourceHeight: nextSourceHeight,
           framing: transitionFraming,
-          maxSamples: Math.ceil(nextMotionSeconds * motionFps * 2) + 2,
+          maxSamples: Math.ceil(nextMotionSeconds * motionFps * oversample) + 2,
         });
 
         const txCount = transitionSampleCount(
