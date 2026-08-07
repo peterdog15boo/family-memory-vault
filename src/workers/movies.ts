@@ -19,6 +19,7 @@
 
 import { config as loadEnv } from "dotenv";
 import { eq } from "drizzle-orm";
+import sharp from "sharp";
 import { z } from "zod";
 import { getDb } from "@/lib/db";
 import { movies, type Movie, type ProcessingJob } from "@/lib/db/schema";
@@ -37,6 +38,11 @@ import {
 } from "@/lib/queue";
 import { LogEvents, logJobFailure } from "@/lib/observability/events";
 import { errorFields, logger } from "@/lib/observability/logger";
+
+// Bound native RAM on small Railway containers (1GB). Parallel sharp + ffmpeg
+// otherwise climbs past ~850MB and the process is OOM-killed mid-render.
+sharp.cache(false);
+sharp.concurrency(1);
 
 const movieJobPayloadSchema = z.object({
   movieId: z.string().min(1),

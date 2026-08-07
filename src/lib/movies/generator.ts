@@ -798,7 +798,7 @@ function movieSourceMaxLongEdge(fast: boolean): number {
   const fromEnv = Number(process.env.MOVIE_SOURCE_MAX_LONG_EDGE ?? 0);
   if (Number.isFinite(fromEnv) && fromEnv > 0) return fromEnv;
   // Keep worker RAM bounded on small containers (Railway etc.).
-  return fast ? 1280 : 2560;
+  return fast ? 960 : 2560;
 }
 
 /** Decode, orient, and cap pixel volume before Ken Burns (Railway RAM). */
@@ -1086,8 +1086,8 @@ export async function renderMovieAssets(
       leadMs + clip.durationMs,
     );
 
-    // Render samples with limited concurrency for throughput without thrashing RAM.
-    const concurrency = plan.fast ? 2 : 3;
+    // Render samples serially in fast mode — parallel sharp frames OOMs small Railway containers.
+    const concurrency = plan.fast ? 1 : 2;
     const sampleBuffers: Buffer[] = new Array(samplesForClip.length);
     for (let start = 0; start < samplesForClip.length; start += concurrency) {
       const batch = samplesForClip.slice(start, start + concurrency);
