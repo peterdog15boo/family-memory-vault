@@ -1,6 +1,6 @@
 /**
- * Build and (in development) log family invite links.
- * Production delivery goes through sendFamilyInviteEmail (see email/lifecycle).
+ * Build absolute family invite accept links (uses getAppUrl / NEXT_PUBLIC_APP_URL).
+ * In development, optionally log the link for local testing when email is unset.
  */
 
 import { getAppUrl } from "@/lib/env";
@@ -17,8 +17,8 @@ export function buildFamilyInviteLink(inviteToken: string): string {
 }
 
 /**
- * Log the invite link in development so you can copy it without email.
- * No-op in production (email will be added later).
+ * Log the invite link in development for local debugging.
+ * No-op in production — delivery is via Resend.
  */
 export function logFamilyInviteLink(options: {
   familyId: string;
@@ -30,7 +30,7 @@ export function logFamilyInviteLink(options: {
 
   console.info(
     [
-      "[family.invite] Pending invite (dev — copy this link):",
+      "[family.invite] Pending invite link (dev):",
       `  familyId: ${options.familyId}`,
       `  memberId: ${options.memberId}`,
       `  email:    ${options.email}`,

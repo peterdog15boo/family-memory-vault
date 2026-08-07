@@ -280,7 +280,8 @@ export function lerpColorGrade(
     label: to.label,
     brightness: lerp(from.brightness, to.brightness, x),
     saturation: lerp(from.saturation, to.saturation, x),
-    hue: lerp(from.hue, to.hue, x),
+    // Sharp modulate() requires an integer hue (degrees).
+    hue: Math.round(lerp(from.hue, to.hue, x)),
     tint: tintOpacity <= 0.001 ? null : lerpRgb(from.tint, to.tint, x),
     tintOpacity,
     vignette: x >= 0.2 ? to.vignette || from.vignette : from.vignette,

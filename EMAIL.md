@@ -83,5 +83,5 @@ Full matrix: [NOTIFICATIONS.md](./NOTIFICATIONS.md).
 ## Notes
 
 - Helpers never throw on Resend API errors — they return `{ ok: false, error }`. Callers can log and continue.
-- Lifecycle queues are fire-and-forget so email outages don’t fail uploads, invites, or movie jobs.
+- Most lifecycle queues are fire-and-forget so email outages don’t fail uploads or movie jobs. **Family invites await delivery** — `POST /api/family/invite` returns an error if Resend is unset or the send fails (the pending invite is still saved so the owner can retry).
 - Without `RESEND_API_KEY`, watch the server console for `[email] RESEND_API_KEY not set — logging email instead of sending`.

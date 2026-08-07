@@ -95,6 +95,22 @@ async function dispatchStripeWebhookEvent(
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
+      if (session.mode === "payment") {
+        const kind = session.metadata?.kind?.trim();
+        if (kind === "memory_box" || session.metadata?.memoryBoxOrderId) {
+          const { markMemoryBoxOrderPaidFromCheckout } = await import(
+            "@/lib/memory-box/checkout"
+          );
+          const order = await markMemoryBoxOrderPaidFromCheckout(session);
+          return {
+            handled: true,
+            detail: order
+              ? `memory box paid ${order.id}`
+              : "memory box checkout completed (order missing)",
+          };
+        }
+        return { handled: true, detail: "ignored non-memory-box payment checkout" };
+      }
       if (session.mode !== "subscription") {
         return { handled: true, detail: "ignored non-subscription checkout" };
       }

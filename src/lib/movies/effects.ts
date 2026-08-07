@@ -150,10 +150,11 @@ export function applyPreparedGrade(
   pipeline: Sharp,
   pack: GradeOverlayPack,
 ): Sharp {
+  const hue = Number.isFinite(pack.hue) ? Math.round(pack.hue) : 0;
   let next = pipeline.modulate({
     brightness: pack.brightness,
     saturation: pack.saturation,
-    hue: Math.round(pack.hue || 0),
+    hue,
   });
 
   if (pack.contrast !== 1) {

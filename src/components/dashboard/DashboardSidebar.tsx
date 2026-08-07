@@ -11,6 +11,7 @@ import {
   Home,
   ImageIcon,
   Images,
+  Package,
   Settings,
   Shield,
   Sparkles,
@@ -68,6 +69,7 @@ export function DashboardSidebar({ isAdmin = false }: DashboardSidebarProps) {
     { href: "/documents", label: "Documents", icon: FileText },
     { href: "/people", label: "People", icon: Users },
     { href: "/family", label: "Family", icon: Home },
+    { href: "/family-memory-box", label: "Digitize", icon: Package },
     { href: "/billing", label: "Billing", icon: CreditCard },
     { href: "/settings", label: "Settings", icon: Settings },
     ...(isAdmin
@@ -103,6 +105,7 @@ export function DashboardSidebar({ isAdmin = false }: DashboardSidebarProps) {
     {
       label: "Account",
       items: [
+        { href: "/family-memory-box", label: "Digitize", icon: Package },
         { href: "/billing", label: "Plan", icon: CreditCard },
         { href: "/settings", label: "Settings", icon: Settings },
         ...(isAdmin
@@ -123,6 +126,13 @@ export function DashboardSidebar({ isAdmin = false }: DashboardSidebarProps) {
     }
     if (item.href === "/documents/legacy") {
       return pathname.startsWith("/documents/legacy");
+    }
+    if (item.href === "/family-memory-box") {
+      return (
+        pathname === "/family-memory-box" ||
+        pathname.startsWith("/family-memory-box/") ||
+        pathname.startsWith("/digitize")
+      );
     }
     if (item.href === "/documents") {
       return (

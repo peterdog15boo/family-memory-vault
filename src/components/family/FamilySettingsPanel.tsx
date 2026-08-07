@@ -251,15 +251,8 @@ export function FamilySettingsPanel({
                         code?: string;
                         member?: SerializedFamilyMember;
                         inviteLink?: string;
+                        emailSent?: boolean;
                       };
-                      if (!response.ok) {
-                        throw new Error(
-                          userFacingApiError(
-                            data,
-                            "Could not send invite.",
-                          ),
-                        );
-                      }
                       if (data.member) {
                         setMembersByFamilyId((prev) => {
                           const list = prev[family.id] ?? [];
@@ -280,20 +273,15 @@ export function FamilySettingsPanel({
                           }));
                         }
                       }
-                      if (data.inviteLink) {
-                        try {
-                          await navigator.clipboard.writeText(data.inviteLink);
-                          setNotice(
-                            `Invite link copied for ${payload.email}. Share it privately — email delivery comes later.`,
-                          );
-                        } catch {
-                          setNotice(
-                            `Invite ready for ${payload.email}. Use Copy link on the pending invite below.`,
-                          );
-                        }
-                      } else {
-                        setNotice(`Invite sent to ${payload.email}.`);
+                      if (!response.ok) {
+                        throw new Error(
+                          userFacingApiError(
+                            data,
+                            "Could not send invite email.",
+                          ),
+                        );
                       }
+                      setNotice(`Invite sent to ${payload.email}.`);
                     })
                   }
                 />
@@ -664,8 +652,9 @@ function InviteForm({
         Invite someone
       </h3>
       <p className="mt-1 text-xs leading-relaxed text-ink-muted">
-        We’ll create a secure invite link. In development it’s copied for you
-        and logged on the server — email delivery comes next.
+        We’ll email them a secure invite link to join this family vault.
+        Sending again to a pending invite refreshes the link and resends the
+        email.
       </p>
       <div className="mt-3 flex flex-col gap-2 sm:flex-row">
         <label className="sr-only" htmlFor={`invite-email-${familyId}`}>

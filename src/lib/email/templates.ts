@@ -33,6 +33,9 @@ function layout(options: {
   bodyHtml: string;
   ctaLabel?: string;
   ctaHref?: string;
+  /** Shown under the CTA for clients that strip buttons */
+  plainLinkHref?: string;
+  footerNote?: string;
 }): string {
   const cta =
     options.ctaLabel && options.ctaHref
@@ -44,6 +47,20 @@ function layout(options: {
         </a>
       </p>`
       : "";
+
+  const plainLink =
+    options.plainLinkHref
+      ? `
+      <p style="margin:16px 0 0;font-size:13px;line-height:1.5;color:#6a6560;word-break:break-all;">
+        Or paste this link into your browser:<br />
+        <a href="${escapeHtml(options.plainLinkHref)}" style="color:#4a7c6f;">${escapeHtml(options.plainLinkHref)}</a>
+      </p>`
+      : "";
+
+  const footer = escapeHtml(
+    options.footerNote ??
+      `You’re receiving this because you have an account with ${BRAND}.`,
+  );
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -72,8 +89,9 @@ function layout(options: {
             <td style="padding:8px 28px 32px;font-family:system-ui,-apple-system,sans-serif;font-size:15px;line-height:1.6;color:#4a4641;">
               ${options.bodyHtml}
               ${cta}
+              ${plainLink}
               <p style="margin:32px 0 0;font-size:12px;line-height:1.5;color:#8a847c;">
-                You’re receiving this because you have an account with ${escapeHtml(BRAND)}.
+                ${footer}
               </p>
             </td>
           </tr>
@@ -145,7 +163,12 @@ export function familyInviteEmail(data: {
     ``,
     `${data.inviterName} invited you to join "${data.familyName}" on ${BRAND}${rolePart}.`,
     ``,
-    `Accept the invitation: ${data.inviteUrl}`,
+    `${BRAND} is a private place for your family to keep photos, videos, and shared memories together — safely, and only with people you invite.`,
+    ``,
+    `Accept the invitation:`,
+    data.inviteUrl,
+    ``,
+    `If the button doesn’t work, paste the link above into your browser.`,
   ].join("\n");
 
   return {
@@ -156,10 +179,13 @@ export function familyInviteEmail(data: {
       heading: "You're invited",
       bodyHtml: paragraphs([
         `${data.inviterName} invited you to join “${data.familyName}” on ${BRAND}${rolePart}.`,
+        `${BRAND} is a private place for your family to keep photos, videos, and shared memories together — safely, and only with people you invite.`,
         `Join to see shared memories and help preserve your family’s photos together.`,
       ]),
       ctaLabel: "Accept invitation",
       ctaHref: data.inviteUrl,
+      plainLinkHref: data.inviteUrl,
+      footerNote: `This invitation was sent by ${data.inviterName} via ${BRAND}. If you weren’t expecting it, you can ignore this email.`,
     }),
   };
 }
@@ -303,6 +329,93 @@ export function paymentFailedEmail(data: {
       ]),
       ctaLabel: "Update billing",
       ctaHref: href,
+    }),
+  };
+}
+
+/** Internal ops alert when a Family Memory Box order is submitted. */
+export function memoryBoxOrderAdminEmail(data: {
+  orderId: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  addressLines: string[];
+  estimatedPhotos: number;
+  estimatedVideoTapes: number;
+  estimatedFilmReels: number;
+  otherItemsNotes?: string | null;
+  specialInstructions?: string | null;
+  priceLabel?: string;
+  paymentStatus?: string | null;
+  adminUrl?: string;
+  linkedUserId?: string | null;
+}): EmailContent {
+  const subject = `New Family Memory Box order — ${data.fullName}`;
+  const address = data.addressLines.join("\n");
+  const priceLine = data.priceLabel ? `Price: ${data.priceLabel}` : null;
+  const paymentLine = data.paymentStatus
+    ? `Payment: ${data.paymentStatus}`
+    : null;
+  const accountLine = data.linkedUserId
+    ? `Linked account: ${data.linkedUserId}`
+    : "Guest order (match via name/email/phone later)";
+  const text = [
+    `New Family Memory Box order`,
+    ``,
+    `Order ID: ${data.orderId}`,
+    accountLine,
+    `Name: ${data.fullName}`,
+    `Email: ${data.email}`,
+    `Phone: ${data.phone}`,
+    priceLine,
+    paymentLine,
+    ``,
+    `Address:`,
+    address,
+    ``,
+    `Estimates:`,
+    `  Photos: ${data.estimatedPhotos}`,
+    `  Video tapes: ${data.estimatedVideoTapes}`,
+    `  Film reels: ${data.estimatedFilmReels}`,
+    data.otherItemsNotes ? `  Other: ${data.otherItemsNotes}` : null,
+    data.specialInstructions
+      ? `\nCustomer notes:\n${data.specialInstructions}`
+      : null,
+    data.adminUrl ? `\nAdmin: ${data.adminUrl}` : null,
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
+
+  const bodyLines = [
+    `${data.fullName} ordered a Family Memory Box${data.priceLabel ? ` (${data.priceLabel})` : ""}.`,
+    data.linkedUserId
+      ? `Linked to account ${data.linkedUserId}.`
+      : "Guest order — match later via contact details.",
+    data.paymentStatus
+      ? `Payment status: ${data.paymentStatus}.`
+      : "Payment status unknown.",
+    `Email: ${data.email} · Phone: ${data.phone}`,
+    `Address: ${data.addressLines.join(", ")}`,
+    `Estimates — photos: ${data.estimatedPhotos}, tapes: ${data.estimatedVideoTapes}, reels: ${data.estimatedFilmReels}.`,
+  ];
+  if (data.otherItemsNotes) {
+    bodyLines.push(`Other items: ${data.otherItemsNotes}`);
+  }
+  if (data.specialInstructions) {
+    bodyLines.push(`Notes: ${data.specialInstructions}`);
+  }
+  bodyLines.push(`Order ID: ${data.orderId}`);
+
+  return {
+    subject,
+    text,
+    html: layout({
+      preview: `New Memory Box order from ${data.fullName}.`,
+      heading: "New Memory Box order",
+      bodyHtml: paragraphs(bodyLines),
+      ctaLabel: data.adminUrl ? "View orders" : undefined,
+      ctaHref: data.adminUrl,
+      footerNote: `Internal notification from ${BRAND}.`,
     }),
   };
 }

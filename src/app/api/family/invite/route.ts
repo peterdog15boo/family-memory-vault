@@ -17,7 +17,7 @@ import {
 import { serializeFamilyMember } from "@/lib/families/serialize";
 import {
   getUserContact,
-  queueFamilyInviteLifecycle,
+  sendFamilyInviteLifecycle,
 } from "@/lib/email/lifecycle";
 import {
   enforceRateLimit,
@@ -32,8 +32,9 @@ const inviteBodySchema = z.object({
 });
 
 /**
- * POST /api/family/invite — create a pending invite (owner only).
- * Sends invitation email; in development the accept link is also logged.
+ * POST /api/family/invite — create a pending invite and email the recipient
+ * (owner only). Re-inviting the same pending email regenerates the token and
+ * resends. Success is returned only when the invite email was actually sent.
  */
 export async function POST(request: Request) {
   const authResult = await requireFamilyApiUser();
@@ -57,7 +58,7 @@ export async function POST(request: Request) {
   const parsed = inviteBodySchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Invalid invite request", details: parsed.error.flatten() },
+      { error: "Please enter a valid email address.", details: parsed.error.flatten() },
       { status: 400 },
     );
   }
@@ -93,7 +94,7 @@ export async function POST(request: Request) {
       getUserContact(userId),
     ]);
 
-    queueFamilyInviteLifecycle({
+    const lifecycle = await sendFamilyInviteLifecycle({
       inviteeEmail: member.invitedEmail,
       inviteeUserId: member.userId,
       inviterName:
@@ -105,11 +106,37 @@ export async function POST(request: Request) {
       acceptPath,
     });
 
+    const email = lifecycle.email;
+    const delivered = email.ok && !email.logged;
+    if (!delivered) {
+      const message = email.logged
+        ? "Invite email is not configured on the server. Ask an admin to set RESEND_API_KEY, then try again."
+        : "Could not send the invite email. Please try again in a moment.";
+      console.error("[family.invite] email delivery failed", {
+        familyId: member.familyId,
+        memberId: member.id,
+        inviteeEmail: member.invitedEmail,
+        logged: Boolean(email.logged),
+        error: email.error,
+      });
+      return NextResponse.json(
+        {
+          error: message,
+          code: "email_send_failed",
+          /** Pending invite exists so the owner can retry (resends). */
+          member: serializeFamilyMember(member),
+          inviteLink,
+          emailSent: false,
+        },
+        { status: 502 },
+      );
+    }
+
     return NextResponse.json(
       {
         member: serializeFamilyMember(member),
-        /** Handy for the inviting owner (also emailed to the invitee). */
         inviteLink,
+        emailSent: true,
       },
       { status: 201 },
     );

@@ -10,6 +10,7 @@ import {
   ClipboardCheck,
   Film,
   LayoutDashboard,
+  Package,
   ScrollText,
   Shield,
   Users,
@@ -37,6 +38,12 @@ export const ADMIN_NAV: readonly AdminNavItem[] = [
     label: "Users",
     description: "Search accounts, change plans, suspend, grant admin.",
     icon: Users,
+  },
+  {
+    href: "/admin/memory-box",
+    label: "Memory Box",
+    description: "Digitizing intake requests and status tracking.",
+    icon: Package,
   },
   {
     href: "/admin/safety",

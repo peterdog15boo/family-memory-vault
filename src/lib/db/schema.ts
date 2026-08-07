@@ -1607,6 +1607,104 @@ export const sensitiveAccessEvents = pgTable(
 );
 
 /* -------------------------------------------------------------------------- */
+/* Family Memory Box orders (physical media digitizing)                         */
+/* -------------------------------------------------------------------------- */
+
+export const MEMORY_BOX_ORDER_STATUSES = [
+  "requested",
+  "box_shipped",
+  "box_received",
+  "processing",
+  "completed",
+  "cancelled",
+] as const;
+
+export type MemoryBoxOrderStatus = (typeof MEMORY_BOX_ORDER_STATUSES)[number];
+
+export const memoryBoxOrderStatusEnum = pgEnum(
+  "memory_box_order_status",
+  MEMORY_BOX_ORDER_STATUSES,
+);
+
+/** Payment state — never imply paid unless Checkout/webhook confirmed it. */
+export const MEMORY_BOX_PAYMENT_STATUSES = [
+  "unpaid",
+  "checkout_pending",
+  "paid",
+  "manual_follow_up",
+] as const;
+
+export type MemoryBoxPaymentStatus =
+  (typeof MEMORY_BOX_PAYMENT_STATUSES)[number];
+
+export const memoryBoxPaymentStatusEnum = pgEnum(
+  "memory_box_payment_status",
+  MEMORY_BOX_PAYMENT_STATUSES,
+);
+
+/** Flat digitizing price in USD cents ($199). */
+export const MEMORY_BOX_PRICE_CENTS = 19_900;
+
+/**
+ * Customer intake for Family Memory Box digitizing service.
+ * Public form submissions; optional link to signed-in user.
+ */
+export const memoryBoxOrders = pgTable(
+  "memory_box_orders",
+  {
+    id: text("id").primaryKey(),
+    /** Set when the submitter was signed in. */
+    userId: text("user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    fullName: text("full_name").notNull(),
+    email: text("email").notNull(),
+    phone: text("phone").notNull(),
+    addressLine1: text("address_line1").notNull(),
+    addressLine2: text("address_line2"),
+    city: text("city").notNull(),
+    state: text("state").notNull(),
+    postalCode: text("postal_code").notNull(),
+    country: text("country").notNull().default("US"),
+    estimatedPhotos: integer("estimated_photos").notNull().default(0),
+    estimatedVideoTapes: integer("estimated_video_tapes").notNull().default(0),
+    estimatedFilmReels: integer("estimated_film_reels").notNull().default(0),
+    otherItemsNotes: text("other_items_notes"),
+    /** Optional notes / special instructions from the customer. */
+    customerNotes: text("customer_notes"),
+    /** Customer acknowledged estimates are approximate. */
+    estimatesAcknowledged: boolean("estimates_acknowledged").notNull(),
+    status: memoryBoxOrderStatusEnum("status").notNull().default("requested"),
+    paymentStatus: memoryBoxPaymentStatusEnum("payment_status")
+      .notNull()
+      .default("unpaid"),
+    /** Quoted flat price in USD cents. */
+    priceCents: integer("price_cents")
+      .notNull()
+      .default(MEMORY_BOX_PRICE_CENTS),
+    stripeCheckoutSessionId: text("stripe_checkout_session_id"),
+    stripePaymentIntentId: text("stripe_payment_intent_id"),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("memory_box_orders_email_idx").on(table.email),
+    index("memory_box_orders_status_idx").on(table.status),
+    index("memory_box_orders_payment_status_idx").on(table.paymentStatus),
+    index("memory_box_orders_created_at_idx").on(table.createdAt),
+    index("memory_box_orders_user_id_idx").on(table.userId),
+    uniqueIndex("memory_box_orders_stripe_session_uidx").on(
+      table.stripeCheckoutSessionId,
+    ),
+  ],
+);
+
+/* -------------------------------------------------------------------------- */
 /* Relations                                                                  */
 /* -------------------------------------------------------------------------- */
 
@@ -2014,6 +2112,8 @@ export type NewEmergencyAccessDesignation =
   typeof emergencyAccessDesignations.$inferInsert;
 export type SensitiveAccessEvent = typeof sensitiveAccessEvents.$inferSelect;
 export type NewSensitiveAccessEvent = typeof sensitiveAccessEvents.$inferInsert;
+export type MemoryBoxOrder = typeof memoryBoxOrders.$inferSelect;
+export type NewMemoryBoxOrder = typeof memoryBoxOrders.$inferInsert;
 
 /** @deprecated Use ProcessingJob — kept for queue helper compatibility */
 export type QueueJob = ProcessingJob;

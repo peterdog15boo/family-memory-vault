@@ -76,6 +76,19 @@ async function uploadWithProgress(
   });
 }
 
+function uploadFailureMessage(error: unknown): string {
+  if (!(error instanceof Error)) return "Upload failed.";
+  if (/\(413\)/.test(error.message)) {
+    return (
+      "Upload was blocked because the file is too large for the server proxy " +
+      "(common on Vercel when R2 CORS is missing). Add your production site " +
+      "origin to the R2 bucket CORS AllowedOrigins, then try again so the " +
+      "browser can upload directly to storage."
+    );
+  }
+  return error.message;
+}
+
 function isLikelyCorsOrNetworkUploadError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const msg = error.message.toLowerCase();
@@ -257,10 +270,7 @@ export function MediaUploader({
       } catch (error) {
         updateItem(item.id, {
           status: "error",
-          error:
-            error instanceof Error
-              ? error.message
-              : "Upload failed. Please try again.",
+          error: uploadFailureMessage(error),
         });
       }
     },

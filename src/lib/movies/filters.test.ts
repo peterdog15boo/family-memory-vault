@@ -222,13 +222,14 @@ describe("prepareGradeOverlays + applyColorGrade", () => {
       .jpeg()
       .toBuffer();
 
-    // teal_orange hue is -6; medium intensity lerps to a float like -5.28
+    // teal_orange hue is -6; medium intensity used to lerp to -5.28 and crash Sharp.
     const grade = resolveMovieColorGrade({
       themeGrade: COLOR_GRADE_IDENTITY,
       filterId: "teal_orange",
       intensity: "medium",
     });
-    expect(Number.isInteger(grade.hue)).toBe(false);
+    expect(Number.isInteger(grade.hue)).toBe(true);
+    expect(grade.hue).toBe(Math.round(-6 * 0.88));
 
     const pack = await prepareGradeOverlays(grade, 40, 24);
     expect(Number.isInteger(pack.hue)).toBe(true);

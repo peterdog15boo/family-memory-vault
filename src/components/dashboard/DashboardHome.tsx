@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { ArrowRight, Clapperboard, Plus, Sparkles, Upload } from "lucide-react";
 import { AskAiOpenButton } from "@/components/assistant/AskAiOpenButton";
+import { BetaSurveyBanner } from "@/components/beta/BetaSurveyBanner";
 import { CurrentPlanBadge } from "@/components/billing/CurrentPlanBadge";
 import { StorageUsageCard } from "@/components/billing/StorageUsageCard";
 import { UsageLimitBanner } from "@/components/billing/UsageLimitBanner";
+import { DigitizePromoCard } from "@/components/dashboard/DigitizePromoCard";
 import { MediaGallery } from "@/components/dashboard/MediaGallery";
 import { ReviewStatusBanner } from "@/components/dashboard/ReviewStatusBanner";
 import { LibrarySection } from "@/components/library/LibrarySection";
@@ -83,6 +85,7 @@ export function DashboardHomeModern({
         <OnboardingChecklist progress={onboarding} />
       ) : null}
 
+      <BetaSurveyBanner />
       <UsageLimitBanner summary={usage} />
 
       <section className="home-shelf" aria-labelledby="home-memories-title">
@@ -169,10 +172,18 @@ export function DashboardHomeModern({
               Upload from your phone or computer. We’ll keep them private until
               they’re ready.
             </p>
-            <Link href="/upload" className="ui-btn ui-btn-primary">
-              <Upload className="size-4" aria-hidden />
-              Upload photos
-            </Link>
+            <div className="mt-4 flex flex-col items-center gap-2 sm:flex-row sm:justify-center">
+              <Link href="/upload" className="ui-btn ui-btn-primary">
+                <Upload className="size-4" aria-hidden />
+                Upload photos
+              </Link>
+              <Link
+                href="/family-memory-box"
+                className="text-sm font-medium text-ink-muted underline-offset-2 transition hover:text-ink hover:underline"
+              >
+                Or digitize old photos &amp; tapes
+              </Link>
+            </div>
           </div>
         )}
       </section>
@@ -192,9 +203,12 @@ export function DashboardHomeModern({
             emptyTitle={COPY.empty.mediaShared.title}
             emptyDescription={COPY.empty.mediaShared.description}
             emptyActionHref={null}
+            emptySecondaryAction={null}
           />
         </section>
       ) : null}
+
+      <DigitizePromoCard />
 
       <details className="home-account-details">
         <summary className="home-account-summary">Plan & storage</summary>
@@ -252,6 +266,8 @@ export function DashboardHomeOriginal({
       {onboarding.show ? (
         <OnboardingChecklist progress={onboarding} />
       ) : null}
+
+      <BetaSurveyBanner />
 
       <section className="app-overview" aria-label="Plan and storage">
         <UsageLimitBanner summary={usage} />
@@ -325,7 +341,13 @@ export function DashboardHomeOriginal({
           </Link>
         }
       >
-        <MediaGallery items={mediaOwn} />
+        <MediaGallery
+          items={mediaOwn}
+          emptySecondaryAction={{
+            href: "/family-memory-box",
+            label: "Or digitize old photos & tapes",
+          }}
+        />
       </LibrarySection>
 
       {hasFamilyMedia || mediaShared.length > 0 ? (
@@ -349,9 +371,12 @@ export function DashboardHomeOriginal({
             emptyTitle={COPY.empty.mediaShared.title}
             emptyDescription={COPY.empty.mediaShared.description}
             emptyActionHref={null}
+            emptySecondaryAction={null}
           />
         </LibrarySection>
       ) : null}
+
+      <DigitizePromoCard />
     </div>
     </>
   );

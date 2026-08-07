@@ -6,6 +6,7 @@ import { AskAiFab } from "@/components/assistant/AskAiFab";
 import { AskAiPanel } from "@/components/assistant/AskAiPanel";
 import { AskAiProvider, useAskAi } from "@/components/assistant/AskAiContext";
 import { AvaHelper } from "@/components/ava/AvaHelper";
+import { BetaFeedbackLink } from "@/components/beta/BetaFeedbackLink";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { AppFooter } from "@/components/dashboard/AppFooter";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
@@ -79,6 +80,7 @@ function DashboardShellInner({
           </div>
         )}
         <div className="dashboard-shell-toolbar ml-auto flex items-center gap-2 sm:gap-3">
+          <BetaFeedbackLink />
           <button
             type="button"
             onClick={() => openAskAi()}

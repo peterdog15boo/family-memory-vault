@@ -26,12 +26,14 @@ export function MarketingFooter() {
   const links = modern
     ? [
         { href: "/#promise", label: "Preserve" },
+        { href: "/family-memory-box", label: "Digitize" },
         { href: "/privacy", label: "Privacy" },
         { href: "/pricing", label: "Pricing" },
       ]
     : [
         { href: "/privacy", label: "Privacy" },
         { href: "/#how-it-works", label: "How it works" },
+        { href: "/family-memory-box", label: "Digitize" },
         { href: "/pricing", label: "Pricing" },
       ];
 

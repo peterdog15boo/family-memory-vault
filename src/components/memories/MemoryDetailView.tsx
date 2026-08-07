@@ -814,7 +814,7 @@ export function MemoryDetailView({
                           <MediaThumb item={item} />
                           <span
                             className={cn(
-                              "absolute left-1.5 top-1.5 flex size-5 items-center justify-center rounded-full border",
+                              "absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-full border",
                               selected
                                 ? "border-accent bg-accent text-accent-foreground"
                                 : "border-ink/20 bg-canvas/80 text-transparent",

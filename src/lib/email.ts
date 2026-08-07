@@ -31,6 +31,7 @@ export {
   storageWarningEmail,
   paymentSuccessEmail,
   paymentFailedEmail,
+  memoryBoxOrderAdminEmail,
   emailAppUrl,
 } from "@/lib/email/templates";
 

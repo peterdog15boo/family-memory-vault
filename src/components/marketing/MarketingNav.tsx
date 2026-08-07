@@ -13,11 +13,13 @@ const MODERN_NAV_LINKS = [
   { href: "/#promise", label: "Preserve" },
   { href: "/#privacy", label: "Privacy" },
   { href: "/#legacy", label: "Legacy" },
+  { href: "/family-memory-box", label: "Digitize" },
 ] as const;
 
 const ORIGINAL_NAV_LINKS = [
   { href: "/#privacy", label: "Privacy" },
   { href: "/#how-it-works", label: "How it works" },
+  { href: "/family-memory-box", label: "Digitize" },
   { href: "/pricing", label: "Pricing" },
 ] as const;
 
@@ -78,7 +80,10 @@ export function MarketingNav() {
         <nav className="marketing-nav-links" aria-label="Marketing">
           {navLinks.map((link) => {
             const active =
-              link.href === "/pricing" && pathname.startsWith("/pricing");
+              (link.href === "/pricing" && pathname.startsWith("/pricing")) ||
+              (link.href === "/family-memory-box" &&
+                (pathname.startsWith("/family-memory-box") ||
+                  pathname.startsWith("/digitize")));
             return (
               <Link
                 key={link.href}

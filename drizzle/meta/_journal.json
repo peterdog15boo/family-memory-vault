@@ -183,6 +183,27 @@
       "when": 1785446800000,
       "tag": "0036_emergency_access_type",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1785446900000,
+      "tag": "0037_memory_box_orders",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1785447000000,
+      "tag": "0038_memory_box_orders_ops",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1785447100000,
+      "tag": "0039_memory_box_payment",
+      "breakpoints": true
     }
   ]
 }

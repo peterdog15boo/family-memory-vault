@@ -141,6 +141,10 @@ export function PaginatedMediaLibrary({
           items={own}
           onDelete={handleDeleteOwn}
           deletingId={deletingId}
+          emptySecondaryAction={{
+            href: "/family-memory-box",
+            label: "Or digitize old photos & tapes",
+          }}
         />
         {ownHasMore ? (
           <LoadMoreButton
@@ -163,6 +167,7 @@ export function PaginatedMediaLibrary({
             emptyTitle={COPY.empty.mediaShared.title}
             emptyDescription={COPY.empty.mediaShared.description}
             emptyActionHref={null}
+            emptySecondaryAction={null}
           />
           {sharedHasMore ? (
             <LoadMoreButton

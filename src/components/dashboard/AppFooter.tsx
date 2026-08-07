@@ -8,6 +8,7 @@ import { APP_FOOTER_MEDIA } from "@/content/page-hero-media";
 const FOOTER_LINKS = [
   { href: "/settings", label: "Settings" },
   { href: "/family", label: "Family" },
+  { href: "/family-memory-box", label: "Digitize" },
   { href: "/documents", label: "Documents" },
   { href: "/memories", label: "Memories" },
   { href: "/privacy", label: "Privacy" },

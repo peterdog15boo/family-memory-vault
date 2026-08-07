@@ -18,6 +18,7 @@ import {
   sendStorageWarningEmail,
   sendWelcomeEmail,
 } from "@/lib/email";
+import type { SendEmailResult } from "@/lib/email";
 import {
   notifyFamilyInvite,
   notifyMediaReady,
@@ -100,6 +101,12 @@ export function queueWelcomeEmail(input: {
 /* Family invite                                                               */
 /* -------------------------------------------------------------------------- */
 
+export type FamilyInviteLifecycleResult = {
+  /** Result of the invite email send (always attempted — invites are transactional). */
+  email: SendEmailResult;
+  notifiedInApp: boolean;
+};
+
 export async function sendFamilyInviteLifecycle(input: {
   inviteeEmail: string;
   inviteeUserId?: string | null;
@@ -110,48 +117,63 @@ export async function sendFamilyInviteLifecycle(input: {
   inviteUrl: string;
   /** Relative app path for in-app notification deep link */
   acceptPath?: string;
-}): Promise<void> {
-  const { userAllowsEmail } = await import("@/lib/account-preferences");
-
-  // Always email brand-new invitees (no account / prefs yet). Existing users
-  // can opt out of invite emails; they still get in-app when enabled.
-  let allowEmail = true;
-  if (input.inviteeUserId) {
-    allowEmail = await userAllowsEmail(input.inviteeUserId, "family_invite");
+}): Promise<FamilyInviteLifecycleResult> {
+  // Family invites are transactional: always email the address the owner typed.
+  // Preference opt-outs apply to other lifecycle mail, not owner-initiated invites.
+  const email = await sendFamilyInviteEmail({
+    to: input.inviteeEmail,
+    inviterName: input.inviterName,
+    familyName: input.familyName,
+    role: input.role,
+    inviteUrl: input.inviteUrl,
+  });
+  if (!email.ok) {
+    console.error(
+      "[email.lifecycle] family invite email failed",
+      {
+        familyId: input.familyId,
+        inviteeEmail: input.inviteeEmail,
+        error: email.error,
+      },
+    );
+  } else if (email.logged) {
+    console.warn(
+      "[email.lifecycle] family invite email logged only (RESEND_API_KEY unset)",
+      {
+        familyId: input.familyId,
+        inviteeEmail: input.inviteeEmail,
+      },
+    );
   }
 
-  if (allowEmail) {
-    const emailResult = await sendFamilyInviteEmail({
-      to: input.inviteeEmail,
-      inviterName: input.inviterName,
-      familyName: input.familyName,
-      role: input.role,
-      inviteUrl: input.inviteUrl,
-    });
-    if (!emailResult.ok) {
-      console.error(
-        "[email.lifecycle] family invite email failed",
-        emailResult.error,
-      );
-    }
-  }
-
+  let notifiedInApp = false;
   // In-app bell only if invitee already has an account.
   if (input.inviteeUserId) {
     try {
-      await notifyFamilyInvite(input.inviteeUserId, {
-        familyId: input.familyId,
-        familyName: input.familyName,
-        inviterName: input.inviterName,
-        role: input.role ?? undefined,
-        link: input.acceptPath ?? "/family",
-      });
+      const { userAllowsEmail } = await import("@/lib/account-preferences");
+      const allowNotify = await userAllowsEmail(
+        input.inviteeUserId,
+        "family_invite",
+      );
+      if (allowNotify) {
+        await notifyFamilyInvite(input.inviteeUserId, {
+          familyId: input.familyId,
+          familyName: input.familyName,
+          inviterName: input.inviterName,
+          role: input.role ?? undefined,
+          link: input.acceptPath ?? "/family",
+        });
+        notifiedInApp = true;
+      }
     } catch (error) {
       console.error("[email.lifecycle] family invite notification failed", error);
     }
   }
+
+  return { email, notifiedInApp };
 }
 
+/** Fire-and-forget wrapper — prefer awaiting `sendFamilyInviteLifecycle` for invites. */
 export function queueFamilyInviteLifecycle(
   input: Parameters<typeof sendFamilyInviteLifecycle>[0],
 ): void {

@@ -23,6 +23,11 @@ type MediaGalleryProps = {
   /** Show Upload CTA on empty (default true when using default copy). */
   emptyActionHref?: string | null;
   emptyActionLabel?: string;
+  /** Secondary text link on empty (e.g. Digitize). */
+  emptySecondaryAction?: {
+    href: string;
+    label: string;
+  } | null;
   /** Owner-only delete from the preview lightbox. */
   onDelete?: (item: GalleryItem) => void | Promise<void>;
   deletingId?: string | null;
@@ -145,6 +150,10 @@ export function MediaGallery({
   emptyDescription = COPY.empty.mediaOwn.description,
   emptyActionHref = "/upload",
   emptyActionLabel = "Upload photos",
+  emptySecondaryAction = {
+    href: "/family-memory-box",
+    label: "Or digitize old photos & tapes",
+  },
   onDelete,
   deletingId = null,
 }: MediaGalleryProps) {
@@ -218,6 +227,7 @@ export function MediaGallery({
               }
             : undefined
         }
+        secondaryAction={emptySecondaryAction ?? undefined}
         size="large"
       />
     );
