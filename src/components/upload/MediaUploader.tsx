@@ -92,10 +92,13 @@ function uploadFailureMessage(error: unknown): string {
 function isLikelyCorsOrNetworkUploadError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const msg = error.message.toLowerCase();
+  // 403/405 from R2 often means missing bucket CORS (browser blocked the real PUT).
   return (
     msg.includes("network error while uploading to storage") ||
     msg.includes("failed to fetch") ||
-    msg.includes("networkerror")
+    msg.includes("networkerror") ||
+    /\(403\)/.test(error.message) ||
+    /\(405\)/.test(error.message)
   );
 }
 

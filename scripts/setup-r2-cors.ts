@@ -49,6 +49,9 @@ function collectOrigins(): string[] {
     "http://localhost:3002",
     "http://127.0.0.1:3001",
     "http://127.0.0.1:3002",
+    // Production app hosts (browser PUTs to R2 need these).
+    "https://www.familymemoryvault.ai",
+    "https://familymemoryvault.ai",
   ]);
 
   for (const envName of [
@@ -133,5 +136,22 @@ async function main() {
 
 main().catch((error) => {
   console.error("Failed to set CORS:", error);
+  const code =
+    error && typeof error === "object" && "Code" in error
+      ? String((error as { Code?: string }).Code)
+      : "";
+  if (code === "AccessDenied" || /Access Denied/i.test(String(error))) {
+    console.error(`
+Object API tokens often cannot change bucket CORS.
+
+Fix via Cloudflare dashboard instead:
+  1. https://dash.cloudflare.com → R2 → bucket "family-memory-vault" → Settings
+  2. CORS Policy → Add CORS policy → JSON tab
+  3. Paste scripts/r2-cors-production.json and Save
+
+Or create an API token with Account → Workers R2 Storage → Edit, then:
+  npx wrangler r2 bucket cors set family-memory-vault --file scripts/r2-cors-production.json
+`);
+  }
   process.exit(1);
 });
