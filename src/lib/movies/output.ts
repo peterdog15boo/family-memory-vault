@@ -124,13 +124,14 @@ function encodeProfileForQuality(quality: QualityMode): Omit<
     case "fast":
       return {
         x264Preset: "veryfast",
-        crf: 21,
+        crf: 23,
         profile: "main",
         level: "4.0",
-        fps: 30,
-        frameJpegQuality: 94,
-        maxrate: "6M",
-        bufsize: "12M",
+        // Lower fps + JPEG quality keeps Railway 1GB workers under the OOM line.
+        fps: 24,
+        frameJpegQuality: 88,
+        maxrate: "4M",
+        bufsize: "8M",
       };
     case "ultra":
       // Premium 4K path — slower encode, higher bit budget.

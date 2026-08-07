@@ -133,7 +133,7 @@ export function resolveKenBurnsSampleCount(input: {
 
   const durationMs = Math.max(1, input.durationMs);
   const seconds = durationMs / 1000;
-  const baseFps = input.targetFps ?? (input.fast ? 20 : 30);
+  const baseFps = input.targetFps ?? (input.fast ? 15 : 30);
 
   // Oversample vs encode fps so JPEG holds are shorter than one video frame
   // for gentle zooms (small crop deltas need denser intermediate crops).
@@ -151,7 +151,7 @@ export function resolveKenBurnsSampleCount(input: {
   const fromDuration = Math.round(seconds * density);
   const maxSamples =
     input.maxSamples ??
-    (input.fast ? 120 : Math.max(480, Math.ceil(seconds * density)));
+    (input.fast ? 60 : Math.max(480, Math.ceil(seconds * density)));
   // At least 2 samples so start (0%) and end (100%) are distinct.
   return Math.max(2, Math.min(fromDuration, maxSamples));
 }

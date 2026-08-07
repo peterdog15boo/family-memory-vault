@@ -1002,10 +1002,11 @@ export async function renderMovieAssets(
     });
 
     // Sample density ≥ encode fps (motion.ts may oversample gentle zooms).
-    // Ceiling must allow oversampling — never clamp to duration×fps only.
+    // Fast mode stays near encode fps — Railway 1GB OOMs at 2× oversample.
     const encodeFps = Math.max(1, plan.output.fps);
     const motionSeconds = Math.max(0.001, motionDurationMs / 1000);
-    const motionFps = encodeFps;
+    const motionFps = plan.fast ? Math.min(encodeFps, 15) : encodeFps;
+    const oversample = plan.fast ? 1 : 2;
     const zoomPlan = buildKenBurnsTimeline({
       durationMs: motionDurationMs,
       photoIndex: photoIndex,
@@ -1019,8 +1020,7 @@ export async function renderMovieAssets(
       sourceWidth,
       sourceHeight,
       framing,
-      // Allow 2× oversample for gentle zooms on long stills (≤15s).
-      maxSamples: Math.ceil(motionSeconds * motionFps * 2) + 2,
+      maxSamples: Math.ceil(motionSeconds * motionFps * oversample) + 2,
     });
 
     const sampleCrops = zoomPlan.samples
@@ -1119,6 +1119,7 @@ export async function renderMovieAssets(
       const path = join(workDir, `frame_${String(index).padStart(4, "0")}.jpg`);
       const jpeg = sampleBuffers[k]!;
       await writeFile(path, jpeg);
+      sampleBuffers[k] = null as unknown as Buffer;
       pushFrame({
         index,
         path,
@@ -1127,6 +1128,7 @@ export async function renderMovieAssets(
       });
       index += 1;
     }
+    sampleBuffers.length = 0;
 
     // Transition into the next photo clip — both sides keep zooming.
     const nextClip = plan.clips
@@ -1140,10 +1142,13 @@ export async function renderMovieAssets(
     ) {
       const { body: nextBody } = await getObjectBytes(nextClip.sourceKey);
       if (nextBody?.byteLength) {
-        const nextOriented = await sharp(nextBody).rotate().toBuffer();
-        const nextMeta = await sharp(nextOriented).metadata();
-        const nextSourceWidth = nextMeta.width ?? plan.width;
-        const nextSourceHeight = nextMeta.height ?? plan.height;
+        const preparedNext = await prepareOrientedPhotoSource(
+          nextBody,
+          plan.fast,
+        );
+        const nextOriented = preparedNext.oriented;
+        const nextSourceWidth = preparedNext.sourceWidth;
+        const nextSourceHeight = preparedNext.sourceHeight;
         let transitionFraming = nextClip.framing ?? centerFraming();
         if (
           transitionFraming.source !== "faces" ||
