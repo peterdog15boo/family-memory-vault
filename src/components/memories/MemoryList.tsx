@@ -76,6 +76,24 @@ export function MemoryList({
     });
   }
 
+  const confirming = memories.find((m) => m.id === confirmId) ?? null;
+  const confirmRef = useRef<HTMLDivElement>(null);
+  const dismissConfirm = useCallback(() => {
+    if (pending) return;
+    setConfirmId(null);
+    setError(null);
+  }, [pending]);
+
+  useOverlayA11y({
+    open: Boolean(confirming),
+    onClose: dismissConfirm,
+    containerRef: confirmRef,
+    lockScroll: false,
+    // Inline non-modal confirm — Escape + initial focus only; don't trap Tab.
+    trapFocus: false,
+    initialFocusSelector: "button",
+  });
+
   if (memories.length === 0) {
     const emptyCopy =
       emptyVariant === "first"
@@ -110,24 +128,6 @@ export function MemoryList({
       />
     );
   }
-
-  const confirming = memories.find((m) => m.id === confirmId) ?? null;
-  const confirmRef = useRef<HTMLDivElement>(null);
-  const dismissConfirm = useCallback(() => {
-    if (pending) return;
-    setConfirmId(null);
-    setError(null);
-  }, [pending]);
-
-  useOverlayA11y({
-    open: Boolean(confirming),
-    onClose: dismissConfirm,
-    containerRef: confirmRef,
-    lockScroll: false,
-    // Inline non-modal confirm — Escape + initial focus only; don't trap Tab.
-    trapFocus: false,
-    initialFocusSelector: "button",
-  });
 
   return (
     <div className={className}>
