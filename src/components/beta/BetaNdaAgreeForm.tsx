@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 import {
   BETA_NDA_CLOSING,
   BETA_NDA_INTRO,
@@ -26,6 +27,7 @@ export function BetaNdaAgreeForm({
   initialEmail,
   redirectTo,
 }: Props) {
+  const t = useTranslations();
   const router = useRouter();
   const [fullName, setFullName] = useState(initialFullName);
   const [email, setEmail] = useState(initialEmail);
@@ -64,13 +66,13 @@ export function BetaNdaAgreeForm({
           redirectTo?: string;
         };
         if (!res.ok) {
-          setError(data.error || "Could not save your agreement.");
+          setError(data.error || t("beta.errorSave"));
           return;
         }
         router.replace(data.redirectTo || redirectTo || "/dashboard");
         router.refresh();
       } catch {
-        setError("Network error. Please try again.");
+        setError(t("beta.errorNetwork"));
       }
     });
   }
@@ -78,16 +80,15 @@ export function BetaNdaAgreeForm({
   return (
     <div className="beta-nda-page">
       <header className="beta-nda-header">
-        <p className="beta-nda-eyebrow">Private beta</p>
-        <h1 className="beta-nda-title">Beta Tester Agreement</h1>
-        <p className="beta-nda-lead">
-          Please review and accept the Non-Disclosure Agreement before
-          continuing into Family Memory Vault.
+        <p className="beta-nda-eyebrow">{t("beta.eyebrow")}</p>
+        <h1 className="beta-nda-title">{t("beta.title")}</h1>
+        <p className="beta-nda-lead">{t("beta.lead")}</p>
+        <p className="beta-nda-version">
+          {t("beta.documentVersion", { version: BETA_NDA_VERSION })}
         </p>
-        <p className="beta-nda-version">Document version: {BETA_NDA_VERSION}</p>
       </header>
 
-      <article className="beta-nda-scroll" aria-label="Beta Tester NDA">
+      <article className="beta-nda-scroll" aria-label={t("beta.ndaAria")}>
         <h2 className="beta-nda-doc-title">{BETA_NDA_TITLE}</h2>
         {BETA_NDA_INTRO.map((p) => (
           <p key={p.slice(0, 48)} className="beta-nda-p">
@@ -121,7 +122,7 @@ export function BetaNdaAgreeForm({
 
       <form className="beta-nda-form" onSubmit={onSubmit} noValidate>
         <label className="beta-nda-field">
-          <span>Full Name</span>
+          <span>{t("beta.fullName")}</span>
           <input
             className="ui-input beta-nda-input"
             name="fullName"
@@ -133,7 +134,7 @@ export function BetaNdaAgreeForm({
           />
         </label>
         <label className="beta-nda-field">
-          <span>Email address</span>
+          <span>{t("beta.email")}</span>
           <input
             className="ui-input beta-nda-input"
             name="email"
@@ -155,9 +156,7 @@ export function BetaNdaAgreeForm({
             onChange={(e) => setAgreed(e.target.checked)}
             disabled={pending}
           />
-          <span>
-            I have read and agree to the Beta Tester Non-Disclosure Agreement
-          </span>
+          <span>{t("beta.agreeCheckbox")}</span>
         </label>
 
         {error ? (
@@ -171,7 +170,7 @@ export function BetaNdaAgreeForm({
           className="ui-btn ui-btn-primary beta-nda-submit"
           disabled={!canSubmit}
         >
-          {pending ? "Saving…" : "I Agree – Continue to Beta"}
+          {pending ? t("common.saving") : t("beta.submit")}
         </button>
       </form>
     </div>

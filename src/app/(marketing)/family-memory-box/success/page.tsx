@@ -1,14 +1,10 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { FamilyMemoryBoxConfirmation } from "@/components/marketing/FamilyMemoryBoxConfirmation";
 import { confirmMemoryBoxCheckoutSession } from "@/lib/memory-box/checkout";
 import { getMemoryBoxOrderById } from "@/lib/memory-box/orders";
 import { isStripeConfigured } from "@/lib/stripe";
-
-export const metadata = {
-  title: "Order confirmed — Family Memory Box",
-  description:
-    "Your Family Memory Box order confirmation and what happens next.",
-};
+import { getTranslations } from "@/lib/i18n/server";
 
 type PageProps = {
   searchParams?: Promise<{
@@ -17,12 +13,21 @@ type PageProps = {
   }>;
 };
 
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return {
+    title: t("memoryBox.successMetaTitle"),
+    description: t("memoryBox.successMetaDescription"),
+  };
+}
+
 /**
  * Dedicated confirmation after form submit or Stripe Checkout return.
  */
 export default async function FamilyMemoryBoxSuccessPage({
   searchParams,
 }: PageProps) {
+  const t = await getTranslations();
   const params = (await searchParams) ?? {};
   const orderId = params.order_id?.trim() || "";
   const sessionId = params.session_id?.trim() || "";
@@ -31,20 +36,21 @@ export default async function FamilyMemoryBoxSuccessPage({
     return (
       <div className="memory-box-confirm">
         <div className="memory-box-confirm-card memory-box-confirm-card--simple">
-          <h1 className="memory-box-confirm-title">Order not found</h1>
+          <h1 className="memory-box-confirm-title">
+            {t("memoryBox.orderNotFound")}
+          </h1>
           <p className="memory-box-confirm-lead">
-            We couldn’t find that confirmation link. If you just ordered, check
-            your email or return to the Memory Box page.
+            {t("memoryBox.orderNotFoundLead")}
           </p>
           <div className="memory-box-confirm-actions">
             <Link href="/dashboard" className="ui-btn ui-btn-primary ui-btn-lg">
-              Back to Dashboard
+              {t("memoryBox.backToDashboard")}
             </Link>
             <Link
               href="/family-memory-box"
               className="memory-box-confirm-secondary"
             >
-              Family Memory Box
+              {t("memoryBox.heroTitle")}
             </Link>
           </div>
         </div>
@@ -59,8 +65,7 @@ export default async function FamilyMemoryBoxSuccessPage({
       await confirmMemoryBoxCheckoutSession({ orderId, sessionId });
     } catch (err) {
       console.error("[memory-box.success] confirm failed", err);
-      paymentPendingNote =
-        "If you completed Checkout, your payment may still be confirming. Your order details are saved — you can refresh this page in a moment.";
+      paymentPendingNote = t("memoryBox.paymentPendingNote");
     }
   }
 
@@ -69,14 +74,15 @@ export default async function FamilyMemoryBoxSuccessPage({
     return (
       <div className="memory-box-confirm">
         <div className="memory-box-confirm-card memory-box-confirm-card--simple">
-          <h1 className="memory-box-confirm-title">Order not found</h1>
+          <h1 className="memory-box-confirm-title">
+            {t("memoryBox.orderNotFound")}
+          </h1>
           <p className="memory-box-confirm-lead">
-            We couldn’t load that order. If you just submitted a request, try
-            again from your confirmation email or contact us.
+            {t("memoryBox.orderNotFoundLeadLoad")}
           </p>
           <div className="memory-box-confirm-actions">
             <Link href="/dashboard" className="ui-btn ui-btn-primary ui-btn-lg">
-              Back to Dashboard
+              {t("memoryBox.backToDashboard")}
             </Link>
           </div>
         </div>

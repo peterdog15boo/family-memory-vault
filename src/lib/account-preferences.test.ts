@@ -10,6 +10,8 @@ describe("account preferences", () => {
     const prefs = resolveAccountPreferences({});
     expect(prefs.emailMovieReady).toBe(true);
     expect(prefs.inAppEmergencyAccess).toBe(true);
+    expect(prefs.celebrationSoundEnabled).toBe(false);
+    expect(prefs.emailMilestoneCelebrations).toBe(true);
     expect(prefs.productUpdatesEmail).toBe(false);
     expect(prefs).toMatchObject(DEFAULT_USER_ACCOUNT_PREFERENCES);
   });
@@ -27,5 +29,19 @@ describe("account preferences", () => {
     const pub = publicAccountPreferences(prefs);
     expect(pub.emailMovieReady).toBe(false);
     expect(pub).not.toHaveProperty("lastStorageWarningAt");
+    expect(pub.locale).toBe("en-US");
+  });
+
+  it("defaults locale to en-US and accepts a supported locale", () => {
+    expect(resolveAccountPreferences({}).locale).toBe("en-US");
+    expect(resolveAccountPreferences({ locale: "es" }).locale).toBe("es");
+    expect(resolveAccountPreferences({ locale: "not-a-locale" }).locale).toBe(
+      "en-US",
+    );
+
+    const pub = publicAccountPreferences(
+      resolveAccountPreferences({ locale: "pt-BR" }),
+    );
+    expect(pub.locale).toBe("pt-BR");
   });
 });

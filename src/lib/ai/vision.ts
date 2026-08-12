@@ -131,8 +131,11 @@ const REKOGNITION_LABEL_MAP: Record<string, string[]> = {
 export function normalizeVisionToken(raw: string): string {
   return raw
     .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/[_/]+/g, " ")
-    .replace(/[^a-z0-9\s-]/g, " ")
+    // Keep letters from any script (playa, 海滩, …) so multilingual queries expand.
+    .replace(/[^\p{L}\p{N}\s-]/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
 }

@@ -9,6 +9,7 @@ import {
   toAssistantTurnApiPayload,
 } from "@/lib/ai/http";
 import { ensureAppUser } from "@/lib/users";
+import { getLocale } from "@/lib/i18n/server";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -97,6 +98,7 @@ export async function POST(request: Request, context: RouteContext) {
 
   try {
     await ensureAppUser(userId);
+    const locale = await getLocale();
     const conversation = await getConversationForUser(conversationId, userId);
     if (!conversation) {
       return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
@@ -130,10 +132,11 @@ export async function POST(request: Request, context: RouteContext) {
         createAction: parsed.data.createMovieFromMediaIds?.length
           ? "create_movie"
           : "create_memory",
+        locale,
       });
 
       return NextResponse.json({
-        turn: toAssistantTurnApiPayload(turn),
+        turn: toAssistantTurnApiPayload(turn, locale),
       });
     }
 
@@ -142,10 +145,11 @@ export async function POST(request: Request, context: RouteContext) {
       conversationId,
       message: parsed.data.message!,
       autoExecuteCreates: false,
+      locale,
     });
 
     return NextResponse.json({
-      turn: toAssistantTurnApiPayload(turn),
+      turn: toAssistantTurnApiPayload(turn, locale),
     });
   } catch (error) {
     return assistantApiErrorResponse(error, "Assistant request failed");

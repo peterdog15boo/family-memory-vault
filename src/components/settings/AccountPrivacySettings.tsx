@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import Link from "next/link";
 import { useClerk, useUser } from "@clerk/nextjs";
 import {
@@ -10,15 +10,21 @@ import {
   Loader2,
   Mail,
   Shield,
+  Smartphone,
   UserRound,
 } from "lucide-react";
-import type { AccountPreferenceToggleKey } from "@/lib/account-preferences";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
+import { BrowserPushSettings } from "@/components/settings/BrowserPushSettings";
+import type {
+  AccountPreferenceToggleKey,
+  PublicAccountPreferences,
+} from "@/lib/account-preferences";
 import { cn } from "@/lib/utils";
 
-type Preferences = Record<AccountPreferenceToggleKey, boolean>;
+type Preferences = Omit<PublicAccountPreferences, "locale">;
 
 type AccountPrivacySettingsProps = {
-  initialPreferences: Preferences;
+  initialPreferences: PublicAccountPreferences;
 };
 
 type SaveState = "idle" | "saving" | "saved" | "error";
@@ -28,14 +34,24 @@ export function AccountPrivacySettings({
 }: AccountPrivacySettingsProps) {
   const { user, isLoaded } = useUser();
   const { openUserProfile } = useClerk();
+  const t = useTranslations();
 
   const [displayName, setDisplayName] = useState("");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [prefs, setPrefs] = useState<Preferences>(initialPreferences);
+  const [prefs, setPrefs] = useState<Preferences>(() => {
+    const { locale: _locale, ...toggles } = initialPreferences;
+    void _locale;
+    return toggles;
+  });
   const [profileState, setProfileState] = useState<SaveState>("idle");
   const [prefsState, setPrefsState] = useState<SaveState>("idle");
   const [profileError, setProfileError] = useState<string | null>(null);
   const [prefsError, setPrefsError] = useState<string | null>(null);
+  const displayNameId = useId();
+  const profileErrorId = useId();
+  const prefsErrorId = useId();
+  const emailId = useId();
+  const emailHelpId = useId();
 
   async function loadAppProfile() {
     try {
@@ -92,7 +108,7 @@ export function AccountPrivacySettings({
 
     const trimmed = displayName.trim();
     if (!trimmed) {
-      setProfileError("Display name is required.");
+      setProfileError(t("settings.displayNameRequired"));
       setProfileState("error");
       return;
     }
@@ -146,10 +162,21 @@ export function AccountPrivacySettings({
       if (!res.ok) {
         throw new Error(data.error || "Could not save preference.");
       }
-      if (data.preferences) setPrefs(data.preferences);
+      if (data.preferences) {
+        const { locale: _locale, ...toggles } = data.preferences as PublicAccountPreferences;
+        void _locale;
+        setPrefs(toggles);
+      }
       if (key === "notificationSoundEnabled") {
         window.dispatchEvent(
           new CustomEvent("fmv:notification-sound-pref", {
+            detail: { enabled: value },
+          }),
+        );
+      }
+      if (key === "celebrationSoundEnabled") {
+        window.dispatchEvent(
+          new CustomEvent("fmv:celebration-sound-pref", {
             detail: { enabled: value },
           }),
         );
@@ -169,11 +196,10 @@ export function AccountPrivacySettings({
     <div id="account-privacy" className="space-y-6">
       <div>
         <h2 className="font-display text-2xl tracking-tight text-ink">
-          Account &amp; privacy
+          {t("settings.accountPrivacyTitle")}
         </h2>
         <p className="page-lead mt-2 text-sm leading-relaxed text-ink-muted">
-          Manage your profile, alerts, and how Family Memory Vault uses your
-          account information.
+          {t("settings.accountPrivacyLead")}
         </p>
       </div>
 
@@ -185,11 +211,10 @@ export function AccountPrivacySettings({
           </span>
           <div className="min-w-0 flex-1">
             <h3 className="font-display text-lg tracking-tight text-ink">
-              Profile
+              {t("settings.profile")}
             </h3>
             <p className="mt-1 text-sm text-ink-muted">
-              Your name and photo are shared with Ava tips and your account
-              profile.
+              {t("settings.profileLead")}
             </p>
           </div>
         </div>
@@ -213,22 +238,30 @@ export function AccountPrivacySettings({
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm text-ink-muted">
-                Profile photo is managed in your account settings.
+                {t("settings.profilePhotoHelp")}
               </p>
               <button
                 type="button"
                 onClick={() => openUserProfile()}
                 className="ui-btn ui-btn-secondary ui-btn-sm mt-2"
               >
-                Manage photo &amp; security
+                {t("settings.managePhoto")}
                 <ExternalLink className="size-3.5 opacity-70" aria-hidden />
               </button>
             </div>
           </div>
 
-          <label className="block">
-            <span className="ui-label">Display name</span>
+          <label className="block" htmlFor={displayNameId}>
+            <span className="ui-label">
+              {t("settings.displayName")}
+              <span className="text-red-700" aria-hidden="true">
+                {" "}
+                *
+              </span>
+              <span className="sr-only"> ({t("common.required")})</span>
+            </span>
             <input
+              id={displayNameId}
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               maxLength={120}
@@ -236,20 +269,24 @@ export function AccountPrivacySettings({
               className="ui-input mt-1.5"
               autoComplete="name"
               required
+              aria-required="true"
+              aria-invalid={profileError ? true : undefined}
+              aria-describedby={profileError ? profileErrorId : undefined}
             />
           </label>
 
-          <label className="block">
-            <span className="ui-label">Email</span>
+          <label className="block" htmlFor={emailId}>
+            <span className="ui-label">{t("settings.email")}</span>
             <input
+              id={emailId}
               value={email}
               readOnly
               disabled
+              aria-describedby={emailHelpId}
               className="ui-input mt-1.5 opacity-80"
             />
-            <span className="mt-1.5 block text-xs text-ink-muted">
-              Email comes from your Clerk sign-in. Use Manage account to add or
-              change addresses.
+            <span id={emailHelpId} className="mt-1.5 block text-xs text-ink-muted">
+              {t("settings.emailHelp")}
             </span>
           </label>
 
@@ -262,21 +299,25 @@ export function AccountPrivacySettings({
               {profileState === "saving" ? (
                 <>
                   <Loader2 className="size-4 animate-spin" aria-hidden />
-                  Saving…
+                  {t("settings.saving")}
                 </>
               ) : (
-                "Save profile"
+                t("settings.saveProfile")
               )}
             </button>
             {profileState === "saved" ? (
               <span className="inline-flex items-center gap-1 text-sm text-[color:var(--accent-deep)]">
                 <Check className="size-4" aria-hidden />
-                Saved
+                {t("settings.saved")}
               </span>
             ) : null}
           </div>
           {profileError ? (
-            <p className="rounded-lg border border-red-800/15 bg-red-50 px-3 py-2 text-sm text-red-900">
+            <p
+              id={profileErrorId}
+              role="alert"
+              className="rounded-lg border border-red-800/15 bg-red-50 px-3 py-2 text-sm text-red-900"
+            >
               {profileError}
             </p>
           ) : null}
@@ -291,23 +332,22 @@ export function AccountPrivacySettings({
           </span>
           <div className="min-w-0 flex-1">
             <h3 className="font-display text-lg tracking-tight text-ink">
-              Notifications
+              {t("settings.notifications")}
             </h3>
             <p className="mt-1 text-sm text-ink-muted">
-              Choose which emails and in-app alerts you receive. Changes save
-              immediately.{" "}
+              {t("settings.notificationsLead")}{" "}
               <Link
                 href="/notifications"
                 className="font-medium text-[color:var(--accent-deep)] underline-offset-2 hover:underline"
               >
-                Open notification inbox
+                {t("settings.openInbox")}
               </Link>
             </p>
           </div>
           {prefsState === "saved" ? (
             <span className="inline-flex items-center gap-1 text-xs font-medium text-[color:var(--accent-deep)]">
               <Check className="size-3.5" aria-hidden />
-              Saved
+              {t("settings.saved")}
             </span>
           ) : prefsState === "saving" ? (
             <Loader2
@@ -319,80 +359,105 @@ export function AccountPrivacySettings({
 
         <div className="mt-6 space-y-6">
           <PreferenceGroup
-            title="Email"
+            title={t("settings.emailGroup")}
             icon={<Mail className="size-3.5" aria-hidden />}
           >
             <ToggleRow
-              label="Movie ready"
-              description="When a memory movie finishes rendering."
+              label={t("settings.movieReady")}
+              description={t("settings.movieReadyEmail")}
               checked={prefs.emailMovieReady}
               disabled={prefsState === "saving"}
               onChange={(v) => void savePreference("emailMovieReady", v)}
             />
             <ToggleRow
-              label="Family invitations"
-              description="When someone with an account invites you (new invitees always get the invite email)."
+              label={t("settings.familyInvites")}
+              description={t("settings.familyInvitesEmail")}
               checked={prefs.emailFamilyInvite}
               disabled={prefsState === "saving"}
               onChange={(v) => void savePreference("emailFamilyInvite", v)}
             />
             <ToggleRow
-              label="Storage warnings"
-              description="When your vault is nearly full or at capacity."
+              label={t("settings.storageWarnings")}
+              description={t("settings.storageWarningsEmail")}
               checked={prefs.emailStorageWarnings}
               disabled={prefsState === "saving"}
               onChange={(v) => void savePreference("emailStorageWarnings", v)}
             />
+            <ToggleRow
+              label={t("settings.milestoneEmails")}
+              description={t("settings.milestoneEmailsHelp")}
+              checked={prefs.emailMilestoneCelebrations}
+              disabled={prefsState === "saving"}
+              onChange={(v) => void savePreference("emailMilestoneCelebrations", v)}
+            />
           </PreferenceGroup>
 
           <PreferenceGroup
-            title="In-app"
+            title={t("settings.inAppGroup")}
             icon={<Bell className="size-3.5" aria-hidden />}
           >
             <ToggleRow
-              label="Movie ready"
+              label={t("settings.movieReady")}
               checked={prefs.inAppMovieReady}
               disabled={prefsState === "saving"}
               onChange={(v) => void savePreference("inAppMovieReady", v)}
             />
             <ToggleRow
-              label="Family invitations"
+              label={t("settings.familyInvites")}
               checked={prefs.inAppFamilyInvite}
               disabled={prefsState === "saving"}
               onChange={(v) => void savePreference("inAppFamilyInvite", v)}
             />
             <ToggleRow
-              label="Storage warnings"
+              label={t("settings.storageWarnings")}
               checked={prefs.inAppStorageWarnings}
               disabled={prefsState === "saving"}
               onChange={(v) => void savePreference("inAppStorageWarnings", v)}
             />
             <ToggleRow
-              label="Photos ready"
-              description="When an upload finishes moderation."
+              label={t("settings.mediaReady")}
+              description={t("settings.mediaReadyInApp")}
               checked={prefs.inAppMediaReady}
               disabled={prefsState === "saving"}
               onChange={(v) => void savePreference("inAppMediaReady", v)}
             />
             <ToggleRow
-              label="Emergency access"
-              description="Requests and decisions for Digital Legacy emergency access (in-app only)."
+              label={t("settings.emergencyAccessAlert")}
+              description={t("settings.emergencyAccessInApp")}
               checked={prefs.inAppEmergencyAccess}
               disabled={prefsState === "saving"}
               onChange={(v) => void savePreference("inAppEmergencyAccess", v)}
             />
             <ToggleRow
-              label="Play sound for new notifications"
-              description="A soft ding when something new arrives while you’re using the app."
+              label={t("settings.notificationSound")}
+              description={t("settings.notificationSoundHelp")}
               checked={prefs.notificationSoundEnabled}
               disabled={prefsState === "saving"}
               onChange={(v) => void savePreference("notificationSoundEnabled", v)}
             />
+            <ToggleRow
+              label={t("settings.celebrationSound")}
+              description={t("settings.celebrationSoundHelp")}
+              checked={prefs.celebrationSoundEnabled}
+              disabled={prefsState === "saving"}
+              onChange={(v) => void savePreference("celebrationSoundEnabled", v)}
+            />
+          </PreferenceGroup>
+
+          <PreferenceGroup
+            title={t("settings.browserPushGroup")}
+            icon={<Smartphone className="size-3.5" aria-hidden />}
+          >
+            <BrowserPushSettings />
           </PreferenceGroup>
         </div>
 
         {prefsError ? (
-          <p className="mt-4 rounded-lg border border-red-800/15 bg-red-50 px-3 py-2 text-sm text-red-900">
+          <p
+            id={prefsErrorId}
+            role="alert"
+            className="mt-4 rounded-lg border border-red-800/15 bg-red-50 px-3 py-2 text-sm text-red-900"
+          >
             {prefsError}
           </p>
         ) : null}
@@ -406,44 +471,46 @@ export function AccountPrivacySettings({
           </span>
           <div className="min-w-0 flex-1">
             <h3 className="font-display text-lg tracking-tight text-ink">
-              Privacy
+              {t("settings.privacySectionTitle")}
             </h3>
             <p className="mt-1 text-sm text-ink-muted">
-              Plain-language notes about how sharing works in this vault.
+              {t("settings.privacySectionLead")}
             </p>
           </div>
         </div>
 
         <ul className="mt-5 space-y-3 text-sm leading-relaxed text-ink-muted">
           <li className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--canvas-deep)]/35 px-4 py-3">
-            <strong className="font-medium text-ink">Family sharing.</strong>{" "}
-            Family members you invite can see memories and media you choose to
-            share. Private Documents and Digital Legacy stay owner-only unless
-            you grant emergency access.
+            <strong className="font-medium text-ink">
+              {t("settings.familySharingTitle")}
+            </strong>{" "}
+            {t("settings.familySharingBody")}
           </li>
           <li className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--canvas-deep)]/35 px-4 py-3">
-            <strong className="font-medium text-ink">No public profiles.</strong>{" "}
-            Family Memory Vault is not a social network. There is no public
-            presence or feed for other families to discover you.
+            <strong className="font-medium text-ink">
+              {t("settings.noPublicProfilesTitle")}
+            </strong>{" "}
+            {t("settings.noPublicProfilesBody")}
           </li>
           <li className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--canvas-deep)]/35 px-4 py-3">
-            <strong className="font-medium text-ink">Account security.</strong>{" "}
-            Password, email, and multi-factor authentication are managed in your
-            Clerk account.{" "}
+            <strong className="font-medium text-ink">
+              {t("settings.accountSecurityTitle")}
+            </strong>{" "}
+            {t("settings.accountSecurityBody")}{" "}
             <button
               type="button"
               onClick={() => openUserProfile()}
               className="font-medium text-[color:var(--accent-deep)] underline-offset-2 hover:underline"
             >
-              Open account settings
+              {t("settings.openAccountSettings")}
             </button>
           </li>
         </ul>
 
         <div className="mt-5 border-t border-[color:var(--border-subtle)] pt-5">
           <ToggleRow
-            label="Product update emails"
-            description="Occasional product news from Family Memory Vault. Off by default. Transactional emails (like welcome or storage alerts you enable above) are separate."
+            label={t("settings.productUpdates")}
+            description={t("settings.productUpdatesDescription")}
             checked={prefs.productUpdatesEmail}
             disabled={prefsState === "saving"}
             onChange={(v) => void savePreference("productUpdatesEmail", v)}
@@ -451,14 +518,35 @@ export function AccountPrivacySettings({
         </div>
 
         <p className="mt-5 text-sm text-ink-muted">
-          Read more in our{" "}
-          <Link
-            href="/privacy"
-            className="font-medium text-[color:var(--accent-deep)] underline-offset-2 hover:underline"
-          >
-            Privacy overview
-          </Link>
-          .
+          {t("settings.readMoreLegal")
+            .split(/\{terms\}|\{privacy\}/)
+            .map((part, i) => {
+              if (i === 0) return <span key="a">{part}</span>;
+              if (i === 1) {
+                return (
+                  <span key="b">
+                    <Link
+                      href="/terms"
+                      className="font-medium text-[color:var(--accent-deep)] underline-offset-2 hover:underline"
+                    >
+                      {t("settings.termsOfService")}
+                    </Link>
+                    {part}
+                  </span>
+                );
+              }
+              return (
+                <span key="c">
+                  <Link
+                    href="/privacy"
+                    className="font-medium text-[color:var(--accent-deep)] underline-offset-2 hover:underline"
+                  >
+                    {t("settings.privacyOverview")}
+                  </Link>
+                  {part}
+                </span>
+              );
+            })}
         </p>
       </section>
     </div>
@@ -517,7 +605,7 @@ function ToggleRow({
       </span>
       <input
         type="checkbox"
-        className="mt-1 size-4 shrink-0 accent-[color:var(--accent)]"
+        className="mt-1 size-4 shrink-0 accent-[color:var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         checked={checked}
         disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}

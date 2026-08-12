@@ -5,6 +5,7 @@ import { Heart, KeyRound, Users } from "lucide-react";
 import { AccountUsageOverview } from "@/components/billing/AccountUsageOverview";
 import { CurrentPlanBadge } from "@/components/billing/CurrentPlanBadge";
 import { UsageLimitBanner } from "@/components/billing/UsageLimitBanner";
+import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { AccountPrivacySettings } from "@/components/settings/AccountPrivacySettings";
 import { AvaSettingsCard } from "@/components/ava/AvaSettingsCard";
 import { ThemeSettingsSection } from "@/components/theme/ThemeSettingsSection";
@@ -14,6 +15,7 @@ import {
   publicAccountPreferences,
 } from "@/lib/account-preferences";
 import { getAccountUsageSummary } from "@/lib/billing/account-usage";
+import { getTranslations } from "@/lib/i18n/server";
 import { ensureFreeSubscription } from "@/lib/plans";
 import { isStripeConfigured } from "@/lib/stripe";
 import { ensureAppUser } from "@/lib/users";
@@ -30,9 +32,10 @@ export default async function SettingsPage() {
   await ensureAppUser(userId);
   await ensureFreeSubscription(userId);
 
-  const [summary, preferences] = await Promise.all([
+  const [summary, preferences, t] = await Promise.all([
     getAccountUsageSummary(userId),
     getAccountPreferences(userId),
+    getTranslations(),
   ]);
   const stripeConfigured = isStripeConfigured();
 
@@ -41,12 +44,14 @@ export default async function SettingsPage() {
       <AppPageIntro
         slot="settings"
         compact
-        title="Settings"
-        description="Manage how your vault works for you and your family."
+        title={t("settings.title")}
+        description={t("settings.description")}
       />
 
       <div className="app-page mx-auto max-w-3xl">
         <div className="app-stack space-y-6">
+          <LanguageSwitcher />
+
           <ThemeSettingsSection />
 
           <AvaSettingsCard />
@@ -64,14 +69,14 @@ export default async function SettingsPage() {
               stripeConfigured={stripeConfigured}
             />
             <p className="text-sm text-ink-muted">
-              View storage, movie limits, billing dates, and plan options on the{" "}
+              {t("settings.billingHelp").split("{billing}")[0]}
               <Link
                 href="/billing"
                 className="font-medium text-accent-deep hover:text-accent"
               >
-                billing page
+                {t("settings.billingLink")}
               </Link>
-              .
+              {t("settings.billingHelp").split("{billing}")[1] ?? ""}
             </p>
           </section>
 
@@ -83,7 +88,7 @@ export default async function SettingsPage() {
         <ul className="settings-link-list mt-6 space-y-3">
           <li>
             <Link
-              href="/documents/legacy"
+              href="/legacy"
               className="settings-link-card group flex items-start gap-4 rounded-2xl border border-ink/10 bg-canvas/80 px-5 py-4 transition hover:border-accent/35 hover:bg-accent/5"
             >
               <span className="settings-link-icon mt-0.5 rounded-md bg-accent/15 p-2 text-accent-deep">
@@ -91,11 +96,10 @@ export default async function SettingsPage() {
               </span>
               <span className="min-w-0">
                 <span className="block font-display text-lg tracking-tight text-ink group-hover:text-accent-deep">
-                  Digital Legacy
+                  {t("settings.digitalLegacy")}
                 </span>
                 <span className="mt-1 block text-sm leading-relaxed text-ink-muted">
-                  Leave thoughtful guidance for loved ones — contacts, instructions,
-                  and secure notes. Private to your account.
+                  {t("settings.digitalLegacyDescription")}
                 </span>
               </span>
             </Link>
@@ -110,11 +114,10 @@ export default async function SettingsPage() {
               </span>
               <span className="min-w-0">
                 <span className="block font-display text-lg tracking-tight text-ink group-hover:text-accent-deep">
-                  Emergency Access (incoming)
+                  {t("settings.emergencyAccess")}
                 </span>
                 <span className="mt-1 block text-sm leading-relaxed text-ink-muted">
-                  If someone named you as a trusted contact, request or view
-                  Digital Legacy emergency access here.
+                  {t("settings.emergencyAccessDescription")}
                 </span>
               </span>
             </Link>
@@ -129,10 +132,10 @@ export default async function SettingsPage() {
               </span>
               <span className="min-w-0">
                 <span className="block font-display text-lg tracking-tight text-ink group-hover:text-accent-deep">
-                  Family
+                  {t("settings.family")}
                 </span>
                 <span className="mt-1 block text-sm leading-relaxed text-ink-muted">
-                  Invite members, manage roles, and see pending invitations.
+                  {t("settings.familyDescription")}
                 </span>
               </span>
             </Link>

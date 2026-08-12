@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, EyeOff, Plus, Trash2 } from "lucide-react";
-import { COPY } from "@/lib/copy";
+import { useCopy } from "@/components/i18n/LocaleProvider";
 import type {
   SerializedLegacyDocumentOption,
   SerializedLegacySecureItem,
@@ -44,6 +44,7 @@ export function LegacySecureItemsPanel({
   documentOptions,
 }: LegacySecureItemsPanelProps) {
   const router = useRouter();
+  const copy = useCopy();
   const [items, setItems] = useState(initial);
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState<SecureDraft>(EMPTY_DRAFT);
@@ -64,7 +65,7 @@ export function LegacySecureItemsPanel({
       return;
     }
 
-    if (!window.confirm(COPY.legacy.secureRevealConfirm)) return;
+    if (!window.confirm(copy.legacy.secureRevealConfirm)) return;
 
     setBusyId(item.id);
     setError(null);
@@ -152,8 +153,8 @@ export function LegacySecureItemsPanel({
       >
         <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-800" aria-hidden />
         <div>
-          <p className="font-medium">{COPY.legacy.secureWarning}</p>
-          <p className="mt-1 text-amber-900/80">{COPY.legacy.secureWarningShort}</p>
+          <p className="font-medium">{copy.legacy.secureWarning}</p>
+          <p className="mt-1 text-amber-900/80">{copy.legacy.secureWarningShort}</p>
         </div>
       </div>
 

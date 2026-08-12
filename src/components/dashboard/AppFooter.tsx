@@ -3,16 +3,9 @@
 import Link from "next/link";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { CinematicBackdrop } from "@/components/cinematic/CinematicBackdrop";
+import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { APP_FOOTER_MEDIA } from "@/content/page-hero-media";
-
-const FOOTER_LINKS = [
-  { href: "/settings", label: "Settings" },
-  { href: "/family", label: "Family" },
-  { href: "/family-memory-box", label: "Digitize" },
-  { href: "/documents", label: "Documents" },
-  { href: "/memories", label: "Memories" },
-  { href: "/privacy", label: "Privacy" },
-] as const;
 
 /**
  * Modern app footer — restrained full-bleed cinematic close with brand,
@@ -20,9 +13,19 @@ const FOOTER_LINKS = [
  */
 export function AppFooter() {
   const year = new Date().getFullYear();
+  const t = useTranslations();
+  const footerLinks = [
+    { href: "/settings", label: t("nav.settings") },
+    { href: "/family", label: t("nav.family") },
+    { href: "/family-memory-box", label: t("nav.digitize") },
+    { href: "/documents", label: t("nav.documents") },
+    { href: "/memories", label: t("nav.memories") },
+    { href: "/privacy", label: t("nav.privacy") },
+    { href: "/terms", label: t("nav.terms") },
+  ] as const;
 
   return (
-    <footer className="app-footer w-full" aria-label="Site">
+    <footer className="app-footer w-full" aria-label={t("nav.footer")}>
       <div className="app-footer-stage">
         <CinematicBackdrop
           mediaType="image"
@@ -39,26 +42,27 @@ export function AppFooter() {
             <Link
               href="/dashboard"
               className="app-footer-logo"
-              aria-label="Family Memory Vault"
+              aria-label={t("meta.appName")}
             >
               <BrandLogo tone="color" size="lg" decorative />
             </Link>
             <p className="app-footer-tagline">
-              Kept private. Shared with care.
+              {t("meta.tagline")}
             </p>
           </div>
 
-          <nav className="app-footer-links" aria-label="Footer">
-            {FOOTER_LINKS.map((link) => (
+          <nav className="app-footer-links" aria-label={t("nav.footer")}>
+            {footerLinks.map((link) => (
               <Link key={link.href} href={link.href}>
                 {link.label}
               </Link>
             ))}
           </nav>
 
-          <p className="app-footer-meta">
-            © {year} Family Memory Vault
-          </p>
+          <div className="app-footer-meta flex flex-col items-end gap-2">
+            <LanguageSwitcher compact />
+            <p>{t("nav.copyright", { year })}</p>
+          </div>
         </div>
       </div>
     </footer>

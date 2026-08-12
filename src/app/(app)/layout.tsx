@@ -6,6 +6,7 @@ import { isUserSuspended } from "@/lib/admin/users";
 import { getAvaProgress } from "@/lib/ava";
 import { isAdmin } from "@/lib/auth/admin";
 import { shouldRedirectToBetaNda } from "@/lib/beta-nda/gate";
+import { shouldRedirectToTerms } from "@/lib/terms/gate";
 import { getUnreadCount } from "@/lib/notifications";
 import type { AvaProgress } from "@/lib/ava/types";
 import { ensureAppUser } from "@/lib/users";
@@ -102,10 +103,24 @@ export default async function AppLayout({
     const safe =
       path.startsWith("/") &&
       !path.startsWith("//") &&
-      !path.startsWith("/beta-agree")
+      !path.startsWith("/beta-agree") &&
+      !path.startsWith("/terms-agree")
         ? path
         : "/dashboard";
     redirect(`/beta-agree?redirect_url=${encodeURIComponent(safe)}`);
+  }
+
+  if (userId && (await shouldRedirectToTerms(userId))) {
+    const hdrs = await headers();
+    const path = hdrs.get("x-pathname")?.trim() || "/dashboard";
+    const safe =
+      path.startsWith("/") &&
+      !path.startsWith("//") &&
+      !path.startsWith("/terms-agree") &&
+      !path.startsWith("/beta-agree")
+        ? path
+        : "/dashboard";
+    redirect(`/terms-agree?redirect_url=${encodeURIComponent(safe)}`);
   }
 
   const [{ displayName, email }, unreadCount, admin, avaProgress] =

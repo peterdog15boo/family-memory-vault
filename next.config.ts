@@ -27,11 +27,27 @@ const nextConfig: NextConfig = {
   // Avoid picking a parent folder lockfile as the workspace root
   outputFileTracingRoot: path.join(__dirname),
   // Keep native/binary packages out of the webpack bundle so paths stay real.
-  serverExternalPackages: ["ffmpeg-static", "sharp"],
+  serverExternalPackages: ["ffmpeg-static", "sharp", "web-push"],
+  // Same-origin video PUTs (/api/upload/put) exceed the 10MB default and
+  // Next then routes the request to /undefined (404) — videos never complete.
+  experimental: {
+    middlewareClientMaxBodySize: "512mb",
+  },
   // Do not advertise the Next.js stack in responses.
   poweredByHeader: false,
   async headers() {
     return [
+      {
+        source: "/push-sw.js",
+        headers: [
+          ...securityHeaders,
+          {
+            key: "Cache-Control",
+            value: "no-cache, no-store, must-revalidate",
+          },
+          { key: "Service-Worker-Allowed", value: "/" },
+        ],
+      },
       {
         source: "/:path*",
         headers: securityHeaders,

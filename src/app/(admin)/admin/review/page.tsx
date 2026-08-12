@@ -22,8 +22,9 @@ export default async function AdminReviewPage() {
             Human review
           </h1>
           <p className="mt-2 max-w-2xl text-base leading-relaxed text-ink-muted">
-            Borderline automated scores. Decisions and notes are audited.
-            Family galleries never show these until marked clean.
+            Borderline scores, failed scans, and photos the scanner hid from
+            the family library. Approve as clean when it is a normal family
+            photo. Decisions are audited.
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">

@@ -3,6 +3,7 @@
  *
  * All writes are user-scoped. Admin tools can pass any userId; every
  * query uses userId as the first filter to prevent cross-user access.
+ * Titles/messages are written in the recipient’s preferred locale.
  */
 
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
@@ -14,6 +15,7 @@ import {
   type Notification,
   type NotificationType,
 } from "@/lib/db/schema";
+import { translatorForUserId } from "@/lib/i18n/user-locale";
 
 export { NOTIFICATION_TYPES };
 export type { Notification, NotificationType };
@@ -28,12 +30,25 @@ export type NotificationData = {
     filename?: string;
     /** Deep link inside the app */
     link?: string;
+    celebration?: import("@/lib/gamification/types").JourneyCelebrationPayload | null;
+    celebrationShown?: boolean;
   };
   movie_ready: {
     movieId: string;
     memoryId?: string;
     title?: string;
     link?: string;
+    celebration?: import("@/lib/gamification/types").JourneyCelebrationPayload | null;
+    celebrationShown?: boolean;
+  };
+  memory_created: {
+    memoryId?: string;
+    movieId?: string;
+    memoryKind?: import("@/lib/gamification/types").MemoryKind;
+    title?: string;
+    link?: string;
+    celebration?: import("@/lib/gamification/types").JourneyCelebrationPayload | null;
+    celebrationShown?: boolean;
   };
   family_invite: {
     familyId: string;
@@ -41,6 +56,21 @@ export type NotificationData = {
     inviterName?: string;
     role?: string;
     link?: string;
+  };
+  family_milestone: {
+    familyId: string;
+    memberId?: string;
+    kind: "invite_accepted" | "first_contribution";
+    link?: string;
+    celebration?: import("@/lib/gamification/types").JourneyCelebrationPayload | null;
+    celebrationShown?: boolean;
+  };
+  legacy_milestone: {
+    strengthPercent: number;
+    categoryId?: string;
+    link?: string;
+    celebration?: import("@/lib/gamification/types").JourneyCelebrationPayload | null;
+    celebrationShown?: boolean;
   };
   storage_warning: {
     usedBytes: number;
@@ -124,13 +154,16 @@ export async function notifyMediaReady(
   userId: string,
   data: NotificationData["media_ready"],
 ): Promise<Notification | null> {
+  const { t } = await translatorForUserId(userId);
   return createNotification({
     userId,
     type: "media_ready",
-    title: "Photo ready",
+    title: t("notifications.mediaReady.title"),
     message: data.filename
-      ? `"${data.filename}" has passed moderation and is ready in Photos.`
-      : "Your upload has passed moderation and is ready in Photos.",
+      ? t("notifications.mediaReady.messageWithFilename", {
+          filename: data.filename,
+        })
+      : t("notifications.mediaReady.message"),
     data: { ...data, link: data.link ?? "/media" },
   });
 }
@@ -139,15 +172,70 @@ export async function notifyMovieReady(
   userId: string,
   data: NotificationData["movie_ready"],
 ): Promise<Notification | null> {
+  const { t } = await translatorForUserId(userId);
   const movieLink = data.link ?? (data.movieId ? `/movies` : "/movies");
   return createNotification({
     userId,
     type: "movie_ready",
-    title: `Your movie is ready`,
+    title: t("notifications.movieReady.title"),
     message: data.title
-      ? `"${data.title}" has finished rendering and is ready to watch.`
-      : "Your memory movie has finished rendering and is ready to watch.",
+      ? t("notifications.movieReady.messageWithTitle", { title: data.title })
+      : t("notifications.movieReady.message"),
     data: { ...data, link: movieLink },
+  });
+}
+
+export async function notifyMemoryCreated(
+  userId: string,
+  data: NotificationData["memory_created"],
+): Promise<Notification | null> {
+  const { t } = await translatorForUserId(userId);
+  const link =
+    data.link ??
+    (data.memoryId ? `/memories/${data.memoryId}` : "/memories");
+  return createNotification({
+    userId,
+    type: "memory_created",
+    title: t("notifications.memoryCreated.title"),
+    message: data.title
+      ? t("notifications.memoryCreated.messageWithTitle", { title: data.title })
+      : t("notifications.memoryCreated.message"),
+    data: { ...data, link },
+  });
+}
+
+export async function notifyLegacyMilestone(
+  userId: string,
+  data: NotificationData["legacy_milestone"],
+): Promise<Notification | null> {
+  const { t } = await translatorForUserId(userId);
+  return createNotification({
+    userId,
+    type: "legacy_milestone",
+    title: t("notifications.legacyMilestone.title"),
+    message: t("notifications.legacyMilestone.message", {
+      percent: data.strengthPercent,
+    }),
+    data: { ...data, link: data.link ?? "/legacy" },
+  });
+}
+
+export async function notifyFamilyMilestone(
+  userId: string,
+  data: NotificationData["family_milestone"],
+): Promise<Notification | null> {
+  const { t } = await translatorForUserId(userId);
+  const accepted = data.kind === "invite_accepted";
+  return createNotification({
+    userId,
+    type: "family_milestone",
+    title: accepted
+      ? t("notifications.familyMilestone.acceptedTitle")
+      : t("notifications.familyMilestone.contributionTitle"),
+    message: accepted
+      ? t("notifications.familyMilestone.acceptedMessage")
+      : t("notifications.familyMilestone.contributionMessage"),
+    data: { ...data, link: data.link ?? "/family" },
   });
 }
 
@@ -155,13 +243,31 @@ export async function notifyFamilyInvite(
   userId: string,
   data: NotificationData["family_invite"],
 ): Promise<Notification | null> {
-  const inviterPart = data.inviterName ? ` from ${data.inviterName}` : "";
-  const familyPart = data.familyName ? ` to "${data.familyName}"` : "";
+  const { t } = await translatorForUserId(userId);
+  const hasInviter = Boolean(data.inviterName);
+  const hasFamily = Boolean(data.familyName);
+  let message: string;
+  if (hasInviter && hasFamily) {
+    message = t("notifications.familyInvite.messageFull", {
+      inviter: data.inviterName,
+      family: data.familyName,
+    });
+  } else if (hasInviter) {
+    message = t("notifications.familyInvite.messageWithInviter", {
+      inviter: data.inviterName,
+    });
+  } else if (hasFamily) {
+    message = t("notifications.familyInvite.messageWithFamily", {
+      family: data.familyName,
+    });
+  } else {
+    message = t("notifications.familyInvite.message");
+  }
   return createNotification({
     userId,
     type: "family_invite",
-    title: "Family invitation",
-    message: `You've received an invitation${inviterPart}${familyPart}. Accept to start sharing memories together.`,
+    title: t("notifications.familyInvite.title"),
+    message,
     data: { ...data, link: data.link ?? "/family" },
   });
 }
@@ -170,15 +276,18 @@ export async function notifyStorageWarning(
   userId: string,
   data: NotificationData["storage_warning"],
 ): Promise<Notification | null> {
+  const { t } = await translatorForUserId(userId);
   const pct = Math.round(data.percentUsed);
+  const full = pct >= 100;
   return createNotification({
     userId,
     type: "storage_warning",
-    title: pct >= 100 ? "Storage full" : "Storage is getting full",
-    message:
-      pct >= 100
-        ? "Your vault storage is full — new uploads are paused. Free up space or upgrade your plan."
-        : `You've used ${pct}% of your storage. Consider upgrading before you run out of room.`,
+    title: full
+      ? t("notifications.storageWarning.titleFull")
+      : t("notifications.storageWarning.titleNear"),
+    message: full
+      ? t("notifications.storageWarning.messageFull")
+      : t("notifications.storageWarning.messageNear", { percent: pct }),
     data: { ...data, link: data.link ?? "/billing" },
   });
 }
@@ -187,13 +296,16 @@ export async function notifyModerationAttention(
   userId: string,
   data: NotificationData["moderation_attention"],
 ): Promise<Notification | null> {
+  const { t } = await translatorForUserId(userId);
   return createNotification({
     userId,
     type: "moderation_attention",
-    title: "Upload needs attention",
+    title: t("notifications.moderationAttention.title"),
     message: data.reason
-      ? `An upload requires manual review: ${data.reason}.`
-      : "An upload has been flagged and requires review before it can appear in Photos.",
+      ? t("notifications.moderationAttention.messageWithReason", {
+          reason: data.reason,
+        })
+      : t("notifications.moderationAttention.message"),
     data: { ...data, link: data.link ?? "/media" },
   });
 }

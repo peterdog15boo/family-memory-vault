@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { Loader2, UserMinus, UserRound } from "lucide-react";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 import type {
   SerializedMediaFaceLabel,
   SerializedPersonListItem,
@@ -33,6 +34,7 @@ export function AssignMediaToPersonControl({
   onAssigned,
   onUnassigned,
 }: AssignMediaToPersonControlProps) {
+  const t = useTranslations();
   const [people, setPeople] = useState<SerializedPersonListItem[]>(
     peopleProp ?? [],
   );
@@ -51,7 +53,7 @@ export function AssignMediaToPersonControl({
       faces?: SerializedMediaFaceLabel[];
     };
     if (!res.ok) {
-      throw new Error(data.error || "Could not load people on this item.");
+      throw new Error(data.error || t("people.errorLoadPeopleOnItem"));
     }
     const byPerson = new Map<string, LinkedPerson>();
     for (const face of data.faces ?? []) {
@@ -59,11 +61,11 @@ export function AssignMediaToPersonControl({
       if (byPerson.has(face.personId)) continue;
       byPerson.set(face.personId, {
         personId: face.personId,
-        displayName: face.displayName || "Person",
+        displayName: face.displayName || t("people.personFallback"),
       });
     }
     setLinked([...byPerson.values()]);
-  }, [mediaId]);
+  }, [mediaId, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,7 +84,7 @@ export function AssignMediaToPersonControl({
                 people?: SerializedPersonListItem[];
               };
               if (!res.ok) {
-                throw new Error(data.error || "Could not load people.");
+                throw new Error(data.error || t("people.errorLoadPeople"));
               }
               return data.people ?? [];
             });
@@ -93,7 +95,7 @@ export function AssignMediaToPersonControl({
       } catch (err) {
         if (!cancelled) {
           setError(
-            err instanceof Error ? err.message : "Could not load people.",
+            err instanceof Error ? err.message : t("people.errorLoadPeople"),
           );
         }
       } finally {
@@ -105,7 +107,7 @@ export function AssignMediaToPersonControl({
     return () => {
       cancelled = true;
     };
-  }, [mediaId, peopleProp, refreshLinks]);
+  }, [mediaId, peopleProp, refreshLinks, t]);
 
   const linkedIds = useMemo(
     () => new Set(linked.map((p) => p.personId)),
@@ -135,24 +137,25 @@ export function AssignMediaToPersonControl({
           skipped?: { mediaId: string; reason: string }[];
         };
         if (!res.ok) {
-          throw new Error(data.error || "Could not add to person.");
+          throw new Error(data.error || t("people.errorAddToPerson"));
         }
         if (data.skipped?.[0]) {
           throw new Error(data.skipped[0].reason);
         }
         if ((data.alreadyAssigned?.length ?? 0) > 0) {
-          setNotice("Already on that person.");
+          setNotice(t("people.alreadyOnThatPerson"));
         } else {
           const name =
-            people.find((p) => p.id === personId)?.displayName ?? "person";
-          setNotice(`Added to ${name}.`);
+            people.find((p) => p.id === personId)?.displayName ??
+            t("people.personLowercase");
+          setNotice(t("people.addedToPerson", { name }));
         }
         setPersonId("");
         await refreshLinks();
         onAssigned?.();
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : "Could not add to person.",
+          err instanceof Error ? err.message : t("people.errorAddToPerson"),
         );
       }
     });
@@ -173,14 +176,16 @@ export function AssignMediaToPersonControl({
           error?: string;
         };
         if (!res.ok) {
-          throw new Error(data.error || "Could not remove from person.");
+          throw new Error(data.error || t("people.errorRemoveFromPerson"));
         }
-        setNotice(`Removed from ${displayName}.`);
+        setNotice(t("people.removedFromPerson", { name: displayName }));
         await refreshLinks();
         onUnassigned?.();
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : "Could not remove from person.",
+          err instanceof Error
+            ? err.message
+            : t("people.errorRemoveFromPerson"),
         );
       } finally {
         setBusyPersonId(null);
@@ -197,7 +202,7 @@ export function AssignMediaToPersonControl({
         )}
       >
         <Loader2 className="size-3.5 animate-spin" aria-hidden />
-        Loading people…
+        {t("people.loadingPeople")}
       </div>
     );
   }
@@ -205,8 +210,7 @@ export function AssignMediaToPersonControl({
   if (people.length === 0 && linked.length === 0) {
     return (
       <p className={cn("text-xs text-ink-muted", className)}>
-        No people yet — open People after faces are detected, or create one
-        there first.
+        {t("people.noPeopleYet")}
       </p>
     );
   }
@@ -223,21 +227,23 @@ export function AssignMediaToPersonControl({
                 className="flex items-center justify-between gap-2 rounded-md border border-ink/10 bg-canvas-deep/40 px-2.5 py-1.5"
               >
                 <span className="min-w-0 truncate text-sm text-ink">
-                  On {person.displayName}
+                  {t("people.onPerson", { name: person.displayName })}
                 </span>
                 <button
                   type="button"
                   disabled={pending}
                   onClick={() => unassign(person.personId, person.displayName)}
                   className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-red-800 transition hover:bg-red-50 disabled:opacity-60"
-                  aria-label={`Remove from ${person.displayName}`}
+                  aria-label={t("people.removeFromPersonAria", {
+                    name: person.displayName,
+                  })}
                 >
                   {busy ? (
                     <Loader2 className="size-3 animate-spin" aria-hidden />
                   ) : (
                     <UserMinus className="size-3" aria-hidden />
                   )}
-                  Remove
+                  {t("common.remove")}
                 </button>
               </li>
             );
@@ -248,7 +254,7 @@ export function AssignMediaToPersonControl({
       {addablePeople.length > 0 ? (
         <div className="flex flex-wrap items-center gap-2">
           <label className="sr-only" htmlFor={`assign-person-${mediaId}`}>
-            Add to person
+            {t("people.addToPerson")}
           </label>
           <select
             id={`assign-person-${mediaId}`}
@@ -257,7 +263,7 @@ export function AssignMediaToPersonControl({
             onChange={(e) => setPersonId(e.target.value)}
             className="min-w-[10rem] flex-1 rounded-md border border-ink/15 bg-canvas px-2.5 py-1.5 text-sm outline-none ring-accent/30 focus:ring-2 disabled:opacity-60"
           >
-            <option value="">Add to person…</option>
+            <option value="">{t("people.addToPersonEllipsis")}</option>
             {addablePeople.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.displayName}
@@ -275,12 +281,12 @@ export function AssignMediaToPersonControl({
             ) : (
               <UserRound className="size-3.5" aria-hidden />
             )}
-            Add
+            {t("people.add")}
           </button>
         </div>
       ) : people.length > 0 ? (
         <p className="text-xs text-ink-muted">
-          Already linked to everyone in your People list.
+          {t("people.alreadyLinkedEveryone")}
         </p>
       ) : null}
 

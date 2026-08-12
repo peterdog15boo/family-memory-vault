@@ -24,6 +24,7 @@ function safeRedirect(raw: string | undefined): string {
   if (!raw) return "/dashboard";
   if (!raw.startsWith("/") || raw.startsWith("//")) return "/dashboard";
   if (raw.startsWith("/beta-agree")) return "/dashboard";
+  // Allow /terms-agree so NDA → Terms chaining preserves the final destination.
   return raw;
 }
 

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { Loader2, Users } from "lucide-react";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 import {
   MEMORY_FAMILY_ACCESS_LEVELS,
   type MemoryFamilyAccess,
@@ -31,6 +32,7 @@ export function MemoryFamilyShareControls({
   onError,
   className,
 }: MemoryFamilyShareControlsProps) {
+  const t = useTranslations();
   const [pending, startTransition] = useTransition();
   const shared = memory.sharedWithFamily;
 
@@ -51,11 +53,15 @@ export function MemoryFamilyShareControls({
           memory?: SerializedMemoryWithMedia;
         };
         if (!response.ok || !data.memory) {
-          throw new Error(data.error || "Could not update sharing.");
+          throw new Error(data.error || t("memories.errorUpdateSharing"));
         }
         onUpdated(data.memory);
       } catch (err) {
-        onError(err instanceof Error ? err.message : "Sharing update failed.");
+        onError(
+          err instanceof Error
+            ? err.message
+            : t("memories.errorSharingFailed"),
+        );
       }
     });
   }
@@ -70,9 +76,12 @@ export function MemoryFamilyShareControls({
         )}
       >
         <Users className="size-3.5" aria-hidden />
-        Shared with family
+        {t("memories.sharedWithFamilyBadge")}
         <span className="text-accent-deep/70">
-          · {memory.familyAccess === "contribute" ? "Can contribute" : "View only"}
+          ·{" "}
+          {memory.familyAccess === "contribute"
+            ? t("memories.canContribute")
+            : t("memories.viewOnly")}
         </span>
       </div>
     );
@@ -87,9 +96,9 @@ export function MemoryFamilyShareControls({
         )}
       >
         <a href="/family" className="font-medium text-accent-deep underline-offset-2 hover:underline">
-          Create or join a family
+          {t("memories.createOrJoinFamily")}
         </a>{" "}
-        to share this memory.
+        {t("memories.toShareThisMemory")}
       </p>
     );
   }
@@ -112,20 +121,21 @@ export function MemoryFamilyShareControls({
               )}
               aria-hidden
             />
-            <p className="text-sm font-medium text-ink">Share with family</p>
+            <p className="text-sm font-medium text-ink">
+              {t("memories.shareWithFamily")}
+            </p>
             {shared ? (
               <span className="rounded bg-accent/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent-deep">
-                Shared
+                {t("memories.sharedBadge")}
               </span>
             ) : (
               <span className="rounded bg-ink/5 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-ink-muted">
-                Private
+                {t("memories.privateBadge")}
               </span>
             )}
           </div>
           <p className="mt-1 max-w-md text-xs leading-relaxed text-ink-muted">
-            When shared, family members can open this album and its clean photos.
-            Quarantined or pending media never appear.
+            {t("memories.shareHelp")}
           </p>
         </div>
 
@@ -153,7 +163,9 @@ export function MemoryFamilyShareControls({
             )}
           />
           <span className="sr-only">
-            {shared ? "Stop sharing with family" : "Share with family"}
+            {shared
+              ? t("memories.stopSharingWithFamily")
+              : t("memories.shareWithFamily")}
           </span>
         </button>
       </div>
@@ -164,7 +176,7 @@ export function MemoryFamilyShareControls({
             htmlFor={`family-access-${memory.id}`}
             className="text-xs font-medium text-ink-muted"
           >
-            Family can
+            {t("memories.familyCan")}
           </label>
           <select
             id={`family-access-${memory.id}`}
@@ -180,7 +192,9 @@ export function MemoryFamilyShareControls({
           >
             {MEMORY_FAMILY_ACCESS_LEVELS.map((level) => (
               <option key={level} value={level}>
-                {level === "view" ? "View only" : "View and contribute"}
+                {level === "view"
+                  ? t("memories.viewOnly")
+                  : t("memories.viewAndContribute")}
               </option>
             ))}
           </select>

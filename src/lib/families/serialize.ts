@@ -22,6 +22,7 @@ export type SerializedFamilyMember = {
   invitedByUserId: string | null;
   invitedAt: string;
   acceptedAt: string | null;
+  firstContributedAt: string | null;
   createdAt: string;
   updatedAt: string;
   displayName?: string | null;
@@ -67,6 +68,7 @@ export function serializeFamilyMember(
     invitedByUserId: member.invitedByUserId,
     invitedAt: member.invitedAt.toISOString(),
     acceptedAt: member.acceptedAt?.toISOString() ?? null,
+    firstContributedAt: member.firstContributedAt?.toISOString() ?? null,
     createdAt: member.createdAt.toISOString(),
     updatedAt: member.updatedAt.toISOString(),
     displayName: member.displayName ?? null,

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { NotificationsList } from "@/components/notifications/NotificationsList";
 import { AppPageIntro } from "@/components/ui/AppPageIntro";
 import { getUserNotifications, getUnreadCount } from "@/lib/notifications";
+import { getTranslations } from "@/lib/i18n/server";
 
 export default async function NotificationsPage() {
   const { userId, isAuthenticated } = await auth();
@@ -10,9 +11,10 @@ export default async function NotificationsPage() {
     redirect("/");
   }
 
-  const [rows, unreadCount] = await Promise.all([
+  const [rows, unreadCount, t] = await Promise.all([
     getUserNotifications(userId, { limit: 100 }),
     getUnreadCount(userId),
+    getTranslations(),
   ]);
 
   const items = rows.map((n) => ({
@@ -29,11 +31,15 @@ export default async function NotificationsPage() {
     <>
       <AppPageIntro
         slot="notifications"
-        title="Notifications"
+        title={t("notifications.ui.title")}
         description={
           unreadCount > 0
-            ? `${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}`
-            : "You're all caught up."
+            ? unreadCount === 1
+              ? t("notifications.ui.unreadDescription", { count: unreadCount })
+              : t("notifications.ui.unreadDescriptionPlural", {
+                  count: unreadCount,
+                })
+            : t("notifications.ui.caughtUp")
         }
       />
 

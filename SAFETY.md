@@ -122,11 +122,15 @@ Priority order is PhotoDNA → AI CSAM → violence → nudity → clean. Miscon
 
 ## Human review
 
-Borderline automated scores become `needs_human_review` (lifecycle stays `pending_moderation`). Those items:
+Borderline automated scores become `needs_human_review` (lifecycle stays `pending_moderation`). `/admin/review` also lists auto-`adult` and auto-`rejected` (non-CSAM) so a human can approve family-photo false positives. CSAM quarantine stays off this queue.
 
-- **Do not** appear in Dashboard / Memories
+- **Do not** appear in Dashboard / Memories until marked clean
 - **Do** appear in `/admin/review` (and are summarized on `/admin/safety`)
 - Are gated by `ADMIN_USER_IDS` (comma-separated Clerk user ids)
+
+Rekognition **swimwear / underwear / non-explicit nudity / partially exposed breast (bikini) / suggestive / barechested** labels do **not** count toward the auto-adult nudity score. `"non-explicit nudity"` must not match the `"explicit nudity"` hint. Only graphic/explicit sexual labels can auto-adult or auto-reject.
+
+If PhotoDNA / AI / R2 **throws** (timeout, credentials, decode), the worker retries the job. After max attempts it sets `needs_human_review` with label `processing_failed` — **not** `rejected`. Scanner failure is not a policy decision. Reviewers can approve as clean; Ops Retry re-scans. Never fail-open to `clean`. Never quarantine on processing failure alone.
 
 ### Reviewer actions (`applyHumanReviewDecision`)
 

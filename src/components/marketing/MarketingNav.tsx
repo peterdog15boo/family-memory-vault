@@ -5,23 +5,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Show, UserButton } from "@clerk/nextjs";
 import { BrandLogo } from "@/components/brand/BrandLogo";
+import { FeedbackButton } from "@/components/feedback/FeedbackButton";
+import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { isAppTheme, type AppTheme } from "@/lib/theme/types";
 import { cn } from "@/lib/utils";
-
-const MODERN_NAV_LINKS = [
-  { href: "/#promise", label: "Preserve" },
-  { href: "/#privacy", label: "Privacy" },
-  { href: "/#legacy", label: "Legacy" },
-  { href: "/family-memory-box", label: "Digitize" },
-] as const;
-
-const ORIGINAL_NAV_LINKS = [
-  { href: "/#privacy", label: "Privacy" },
-  { href: "/#how-it-works", label: "How it works" },
-  { href: "/family-memory-box", label: "Digitize" },
-  { href: "/pricing", label: "Pricing" },
-] as const;
 
 /**
  * Public marketing navigation — sticky, translucent over media, solid on scroll.
@@ -30,8 +19,21 @@ const ORIGINAL_NAV_LINKS = [
 export function MarketingNav() {
   const pathname = usePathname();
   const { theme, ready } = useTheme();
+  const t = useTranslations();
   const [domTheme, setDomTheme] = useState<AppTheme | null>(null);
   const [scrolled, setScrolled] = useState(false);
+  const modernNavLinks = [
+    { href: "/#promise", label: t("nav.preserve") },
+    { href: "/#privacy", label: t("nav.privacy") },
+    { href: "/#legacy", label: t("nav.legacy") },
+    { href: "/family-memory-box", label: t("nav.digitize") },
+  ] as const;
+  const originalNavLinks = [
+    { href: "/#privacy", label: t("nav.privacy") },
+    { href: "/#how-it-works", label: t("nav.howItWorks") },
+    { href: "/family-memory-box", label: t("nav.digitize") },
+    { href: "/pricing", label: t("nav.pricing") },
+  ] as const;
 
   useLayoutEffect(() => {
     const attr = document.documentElement.getAttribute("data-theme");
@@ -40,7 +42,7 @@ export function MarketingNav() {
 
   const effective: AppTheme = ready ? theme : (domTheme ?? "original");
   const modern = effective === "modern";
-  const navLinks = modern ? MODERN_NAV_LINKS : ORIGINAL_NAV_LINKS;
+  const navLinks = modern ? modernNavLinks : originalNavLinks;
   const isLanding = pathname === "/" || pathname === "";
   const overMedia = modern && isLanding && !scrolled;
 
@@ -63,7 +65,7 @@ export function MarketingNav() {
         <Link
           href="/"
           className="marketing-nav-brand"
-          aria-label="Family Memory Vault"
+          aria-label={t("meta.appName")}
         >
           {modern ? (
             <BrandLogo
@@ -73,11 +75,11 @@ export function MarketingNav() {
               decorative
             />
           ) : (
-            "Family Memory Vault"
+            t("meta.appName")
           )}
         </Link>
 
-        <nav className="marketing-nav-links" aria-label="Marketing">
+        <nav className="marketing-nav-links" aria-label={t("nav.marketing")}>
           {navLinks.map((link) => {
             const active =
               (link.href === "/pricing" && pathname.startsWith("/pricing")) ||
@@ -100,17 +102,25 @@ export function MarketingNav() {
         </nav>
 
         <div className="marketing-nav-actions">
+          <LanguageSwitcher compact />
           <Show when="signed-out">
             <Link href="/sign-in" className="marketing-nav-signin">
-              Sign in
+              {t("nav.signIn")}
             </Link>
             <Link href="/sign-up" className="marketing-nav-cta">
-              {modern ? "Begin your vault" : "Start preserving"}
+              {modern ? t("nav.beginVault") : t("nav.startPreserving")}
             </Link>
           </Show>
           <Show when="signed-in">
+            <FeedbackButton
+              placement="header"
+              className={cn(
+                "marketing-nav-feedback",
+                overMedia && "marketing-nav-feedback--on-dark",
+              )}
+            />
             <Link href="/dashboard" className="marketing-nav-signin">
-              {modern ? "Open vault" : "Go to vault"}
+              {modern ? t("nav.openVault") : t("nav.goToVault")}
             </Link>
             <UserButton
               appearance={{

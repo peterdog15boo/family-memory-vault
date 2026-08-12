@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import {
   ArrowLeft,
   BookImage,
   Check,
+  ChevronLeft,
+  ChevronRight,
   GitMerge,
   ImagePlus,
   Loader2,
@@ -24,6 +26,10 @@ import { FaceLabelEditor } from "@/components/people/FaceLabelEditor";
 import { AddPhotosToPersonSheet } from "@/components/people/AddPhotosToPersonSheet";
 import { MediaThumb } from "@/components/memories/MediaThumb";
 import { MediaViewerMedia } from "@/components/media/MediaViewerMedia";
+import { useFormat, useTranslations } from "@/components/i18n/LocaleProvider";
+import { useLightboxKeyboardNav } from "@/hooks/useLightboxKeyboardNav";
+import { useOverlayA11y } from "@/hooks/useOverlayA11y";
+import type { Formatters, TranslateFn } from "@/lib/i18n";
 import type {
   SerializedPersonDetail,
   SerializedPersonListItem,
@@ -38,19 +44,22 @@ type PersonDetailViewProps = {
   allPeople: SerializedPersonListItem[];
 };
 
-function mediaLabel(count: number) {
-  return `${count} item${count === 1 ? "" : "s"}`;
+function mediaLabel(t: TranslateFn, count: number) {
+  return count === 1
+    ? t("people.itemCount", { count })
+    : t("people.itemCountPlural", { count });
 }
 
-function gallerySectionTitle(photos: { type?: string }[]) {
+function gallerySectionTitle(t: TranslateFn, photos: { type?: string }[]) {
   const hasPhoto = photos.some((p) => p.type === "photo");
   const hasVideo = photos.some((p) => p.type === "video");
-  if (hasPhoto && hasVideo) return "Photos & videos";
-  if (hasVideo) return "Videos";
-  return "Photos";
+  if (hasPhoto && hasVideo) return t("people.photosAndVideos");
+  if (hasVideo) return t("people.videos");
+  return t("people.photos");
 }
 
 function formatDateRange(
+  format: Formatters,
   fromIso: string | null,
   toIso: string | null,
 ): string | null {
@@ -63,16 +72,16 @@ function formatDateRange(
     year: "numeric",
   };
   if (from.toDateString() === to.toDateString()) {
-    return from.toLocaleDateString(undefined, opts);
+    return format.date(from, opts);
   }
   const sameYear = from.getFullYear() === to.getFullYear();
   if (sameYear) {
-    return `${from.toLocaleDateString(undefined, {
+    return `${format.date(from, {
       month: "short",
       day: "numeric",
-    })} – ${to.toLocaleDateString(undefined, opts)}`;
+    })} – ${format.date(to, opts)}`;
   }
-  return `${from.toLocaleDateString(undefined, opts)} – ${to.toLocaleDateString(undefined, opts)}`;
+  return `${format.date(from, opts)} – ${format.date(to, opts)}`;
 }
 
 export function PersonDetailView({
@@ -81,6 +90,8 @@ export function PersonDetailView({
   allPeople,
 }: PersonDetailViewProps) {
   const router = useRouter();
+  const format = useFormat();
+  const t = useTranslations();
   const [person, setPerson] = useState(initialPerson);
   const [candidates, setCandidates] = useState(mergeCandidates);
   const [editing, setEditing] = useState(false);
@@ -102,30 +113,41 @@ export function PersonDetailView({
     () => person.photos.find((p) => p.id === lightboxId) ?? null,
     [person.photos, lightboxId],
   );
+  const lightboxRef = useRef<HTMLDivElement>(null);
+  const closeLightbox = useCallback(() => setLightboxId(null), []);
 
   useEffect(() => {
     setViewerMounted(true);
   }, []);
 
-  useEffect(() => {
-    if (!lightbox) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setLightboxId(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [lightbox]);
+  useOverlayA11y({
+    open: Boolean(lightbox),
+    onClose: closeLightbox,
+    containerRef: lightboxRef,
+  });
 
-  useEffect(() => {
-    if (!lightbox) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [lightbox]);
+  const personPhotoIds = useMemo(
+    () => person.photos.map((p) => p.id),
+    [person.photos],
+  );
+  const {
+    canNavigate: lightboxCanNav,
+    index: lightboxIndex,
+    count: lightboxCount,
+    goPrev: lightboxPrev,
+    goNext: lightboxNext,
+  } = useLightboxKeyboardNav({
+    open: Boolean(lightbox),
+    itemIds: personPhotoIds,
+    activeId: lightboxId,
+    onActiveIdChange: setLightboxId,
+  });
 
-  const dateRange = formatDateRange(person.photoDateFrom, person.photoDateTo);
+  const dateRange = formatDateRange(
+    format,
+    person.photoDateFrom,
+    person.photoDateTo,
+  );
   const createMemoryHref = `/memories/new?fromPerson=${encodeURIComponent(person.id)}`;
 
   function applyPerson(next: SerializedPersonDetail) {
@@ -144,7 +166,7 @@ export function PersonDetailView({
       person?: SerializedPersonDetail;
     };
     if (!response.ok || !data.person) {
-      throw new Error(data.error || "Could not update person.");
+      throw new Error(data.error || t("people.errorUpdate"));
     }
     applyPerson(data.person);
     return data.person;
@@ -154,7 +176,7 @@ export function PersonDetailView({
     setError(null);
     const trimmed = name.trim();
     if (!trimmed) {
-      setError("Name cannot be empty.");
+      setError(t("people.errorNameEmpty"));
       return;
     }
 
@@ -162,9 +184,9 @@ export function PersonDetailView({
       try {
         await patchPerson({ name: trimmed });
         setEditing(false);
-        setNotice("Name saved.");
+        setNotice(t("people.nameSaved"));
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Rename failed.");
+        setError(err instanceof Error ? err.message : t("people.errorRename"));
       }
     });
   }
@@ -176,9 +198,9 @@ export function PersonDetailView({
     startTransition(async () => {
       try {
         await patchPerson({ coverFaceId: faceId });
-        setNotice("Cover updated.");
+        setNotice(t("people.coverUpdated"));
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not set cover.");
+        setError(err instanceof Error ? err.message : t("people.errorSetCover"));
       } finally {
         setBusyFaceId(null);
       }
@@ -189,7 +211,7 @@ export function PersonDetailView({
     setError(null);
     setNotice(null);
     setBusyFaceId(faceId);
-    const kind = mediaType === "video" ? "Video" : "Photo";
+    const isVideo = mediaType === "video";
     startTransition(async () => {
       try {
         const response = await fetch(`/api/faces/${faceId}`, {
@@ -201,7 +223,10 @@ export function PersonDetailView({
           error?: string;
         };
         if (!response.ok) {
-          throw new Error(data.error || `Could not remove ${kind.toLowerCase()}.`);
+          throw new Error(
+            data.error ||
+              (isVideo ? t("people.errorRemoveVideo") : t("people.errorRemovePhoto")),
+          );
         }
         setPerson((prev) => ({
           ...prev,
@@ -210,15 +235,15 @@ export function PersonDetailView({
           cover: prev.cover?.faceId === faceId ? null : prev.cover,
         }));
         if (lightboxId === mediaId) setLightboxId(null);
-        setNotice(
-          `${kind} removed from this person. It stays in your library.`,
-        );
+        setNotice(isVideo ? t("people.videoRemoved") : t("people.photoRemoved"));
         router.refresh();
       } catch (err) {
         setError(
           err instanceof Error
             ? err.message
-            : `Could not remove ${kind.toLowerCase()}.`,
+            : isVideo
+              ? t("people.errorRemoveVideo")
+              : t("people.errorRemovePhoto"),
         );
       } finally {
         setBusyFaceId(null);
@@ -228,7 +253,7 @@ export function PersonDetailView({
 
   function confirmMerge() {
     if (!targetPersonId) {
-      setError("Choose who to merge this person into.");
+      setError(t("people.errorChooseMergeTarget"));
       return;
     }
     setError(null);
@@ -248,20 +273,20 @@ export function PersonDetailView({
           person?: SerializedPersonDetail;
         };
         if (!response.ok || !data.person) {
-          throw new Error(data.error || "Could not merge people.");
+          throw new Error(data.error || t("people.errorMerge"));
         }
         setMergeOpen(false);
         setTargetPersonId("");
         setCandidates((prev) => prev.filter((c) => c.id !== sourceId));
         setNotice(
           target
-            ? `Merged into ${target.displayName}. Keeping their name and cover.`
-            : "People merged.",
+            ? t("people.mergedInto", { name: target.displayName })
+            : t("people.peopleMerged"),
         );
         router.replace(`/people/${data.person.id}`);
         router.refresh();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Merge failed.");
+        setError(err instanceof Error ? err.message : t("people.errorMergeFailed"));
       }
     });
   }
@@ -277,12 +302,12 @@ export function PersonDetailView({
           error?: string;
         };
         if (!response.ok) {
-          throw new Error(data.error || "Could not delete person.");
+          throw new Error(data.error || t("people.errorDelete"));
         }
         router.replace("/people");
         router.refresh();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Delete failed.");
+        setError(err instanceof Error ? err.message : t("people.errorDeleteFailed"));
         setDeleteOpen(false);
       }
     });
@@ -295,7 +320,7 @@ export function PersonDetailView({
         className="inline-flex items-center gap-1.5 text-sm text-ink-muted transition hover:text-ink"
       >
         <ArrowLeft className="size-3.5" aria-hidden />
-        All people
+        {t("people.allPeople")}
       </Link>
 
       <header className="mt-6 flex flex-col items-center gap-6 sm:flex-row sm:items-end sm:gap-8">
@@ -315,12 +340,18 @@ export function PersonDetailView({
         <div className="min-w-0 flex-1 text-center sm:pb-1 sm:text-left">
           {editing ? (
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <label htmlFor="person-rename" className="sr-only">
+                {t("people.nameLabel")}
+              </label>
               <input
+                id="person-rename"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Their name"
+                placeholder={t("people.namePlaceholder")}
                 maxLength={120}
                 autoFocus
+                required
+                aria-required="true"
                 className="w-full rounded-md border border-ink/15 bg-canvas px-3 py-2 font-display text-2xl tracking-tight text-ink outline-none ring-accent/30 focus:ring-2 sm:max-w-md"
               />
               <div className="flex justify-center gap-2 sm:justify-start">
@@ -335,7 +366,7 @@ export function PersonDetailView({
                   ) : (
                     <Check className="size-3.5" aria-hidden />
                   )}
-                  Save
+                  {t("common.save")}
                 </button>
                 <button
                   type="button"
@@ -352,7 +383,7 @@ export function PersonDetailView({
                   className="inline-flex items-center gap-1.5 rounded-md border border-ink/10 px-3 py-2 text-sm text-ink hover:bg-canvas-deep"
                 >
                   <X className="size-3.5" aria-hidden />
-                  Cancel
+                  {t("common.cancel")}
                 </button>
               </div>
             </div>
@@ -372,11 +403,11 @@ export function PersonDetailView({
                   className="inline-flex items-center gap-1.5 rounded-md border border-ink/10 bg-canvas px-2.5 py-1.5 text-xs font-medium text-ink transition hover:border-accent/35 hover:bg-canvas-deep"
                 >
                   <Pencil className="size-3" aria-hidden />
-                  Rename
+                  {t("people.rename")}
                 </button>
               </div>
               <p className="text-sm text-ink-muted">
-                {mediaLabel(person.photoCount)}
+                {mediaLabel(t, person.photoCount)}
                 {dateRange ? (
                   <>
                     <span aria-hidden> · </span>
@@ -400,7 +431,7 @@ export function PersonDetailView({
               aria-disabled={person.photos.length === 0}
             >
               <BookImage className="size-3.5" aria-hidden />
-              Create memory
+              {t("memories.createMemory")}
             </Link>
             <button
               type="button"
@@ -411,13 +442,15 @@ export function PersonDetailView({
                 setNotice(null);
               }}
               disabled={candidates.length === 0}
+              aria-expanded={mergeOpen}
+              aria-controls="person-merge-panel"
               className={cn(
                 "inline-flex items-center gap-2 rounded-md border border-ink/10 bg-canvas px-3 py-2 text-sm font-medium text-ink transition hover:border-accent/35 hover:bg-canvas-deep",
                 candidates.length === 0 && "cursor-not-allowed opacity-50",
               )}
             >
               <GitMerge className="size-3.5" aria-hidden />
-              Merge people
+              {t("people.mergePeople")}
             </button>
             <button
               type="button"
@@ -427,10 +460,12 @@ export function PersonDetailView({
                 setError(null);
                 setNotice(null);
               }}
+              aria-expanded={deleteOpen}
+              aria-controls="person-delete-panel"
               className="inline-flex items-center gap-2 rounded-md border border-red-200 bg-red-50/80 px-3 py-2 text-sm font-medium text-red-800 transition hover:bg-red-100"
             >
               <Trash2 className="size-3.5" aria-hidden />
-              Delete
+              {t("common.delete")}
             </button>
           </div>
         </div>
@@ -450,7 +485,7 @@ export function PersonDetailView({
           }}
           onSaved={(next) => {
             setPerson((prev) => ({ ...prev, ...next }));
-            setNotice("Avatar framing saved.");
+            setNotice(t("people.avatarFramingSaved"));
             setError(null);
           }}
           onError={(message) => {
@@ -461,27 +496,32 @@ export function PersonDetailView({
       ) : null}
 
       {mergeOpen ? (
-        <div className="mt-6 rounded-xl border border-ink/10 bg-canvas-deep/40 px-4 py-4 sm:px-5">
-          <p className="font-display text-lg text-ink">Merge into another person</p>
+        <div
+          id="person-merge-panel"
+          className="mt-6 rounded-xl border border-ink/10 bg-canvas-deep/40 px-4 py-4 sm:px-5"
+          role="region"
+          aria-labelledby="person-merge-title"
+        >
+          <p id="person-merge-title" className="font-display text-lg text-ink">
+            {t("people.mergeIntoTitle")}
+          </p>
           <p className="mt-1 text-sm leading-relaxed text-ink-muted">
-            Media from <span className="font-medium text-ink">{person.displayName}</span>{" "}
-            will move to the person you choose. That person keeps their name and
-            cover photo. This can&apos;t be undone easily.
+            {t("people.mergeIntoBody", { name: person.displayName })}
           </p>
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
             <label className="flex-1 text-left text-sm text-ink">
               <span className="mb-1.5 block text-xs font-medium text-ink-muted">
-                Merge into
+                {t("people.mergeIntoLabel")}
               </span>
               <select
                 value={targetPersonId}
                 onChange={(e) => setTargetPersonId(e.target.value)}
                 className="w-full rounded-md border border-ink/15 bg-canvas px-3 py-2 text-sm outline-none ring-accent/30 focus:ring-2"
               >
-                <option value="">Select who to keep…</option>
+                <option value="">{t("people.mergeSelectKeeper")}</option>
                 {candidates.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.displayName} ({mediaLabel(c.photoCount)})
+                    {c.displayName} ({mediaLabel(t, c.photoCount)})
                   </option>
                 ))}
               </select>
@@ -497,19 +537,24 @@ export function PersonDetailView({
               ) : (
                 <GitMerge className="size-3.5" aria-hidden />
               )}
-              Confirm merge
+              {t("people.confirmMerge")}
             </button>
           </div>
         </div>
       ) : null}
 
       {deleteOpen ? (
-        <div className="mt-6 rounded-xl border border-red-200 bg-red-50/60 px-4 py-4 sm:px-5">
-          <p className="font-display text-lg text-ink">Delete this person?</p>
+        <div
+          id="person-delete-panel"
+          className="mt-6 rounded-xl border border-red-200 bg-red-50/60 px-4 py-4 sm:px-5"
+          role="region"
+          aria-labelledby="person-delete-title"
+        >
+          <p id="person-delete-title" className="font-display text-lg text-ink">
+            {t("people.deletePersonTitle")}
+          </p>
           <p className="mt-1 text-sm leading-relaxed text-ink-muted">
-            Removes <span className="font-medium text-ink">{person.displayName}</span>{" "}
-            from People. Your photos stay saved; only this person card is
-            removed. This can&apos;t be undone.
+            {t("people.deletePersonBody", { name: person.displayName })}
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <button
@@ -523,7 +568,7 @@ export function PersonDetailView({
               ) : (
                 <Trash2 className="size-3.5" aria-hidden />
               )}
-              Delete person
+              {t("people.deletePerson")}
             </button>
             <button
               type="button"
@@ -531,14 +576,17 @@ export function PersonDetailView({
               disabled={pending}
               className="inline-flex items-center gap-2 rounded-md border border-ink/10 bg-canvas px-4 py-2.5 text-sm text-ink hover:bg-canvas-deep disabled:opacity-60"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
           </div>
         </div>
       ) : null}
 
       {error ? (
-        <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+        <p
+          role="alert"
+          className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+        >
           {error}
         </p>
       ) : null}
@@ -552,18 +600,16 @@ export function PersonDetailView({
         <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="font-display text-xl tracking-tight text-ink">
-              {gallerySectionTitle(person.photos)}
+              {gallerySectionTitle(t, person.photos)}
             </h2>
             <p className="mt-1 text-sm text-ink-muted">
-              Clean photos and videos linked to this person. Add items manually
-              if face recognition missed them, open one to fix labels, or remove
-              one that doesn&apos;t belong here.
+              {t("people.galleryLead")}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {person.photos.length > 0 ? (
               <p className="text-xs text-ink-muted">
-                {mediaLabel(person.photos.length)}
+                {mediaLabel(t, person.photos.length)}
                 {dateRange ? ` · ${dateRange}` : ""}
               </p>
             ) : null}
@@ -573,17 +619,18 @@ export function PersonDetailView({
               className="inline-flex items-center gap-1.5 rounded-md border border-ink/10 bg-canvas px-3 py-1.5 text-sm font-medium text-ink transition hover:border-accent/40 hover:bg-canvas-deep"
             >
               <ImagePlus className="size-3.5" aria-hidden />
-              Add photos / videos
+              {t("people.addPhotosVideos")}
             </button>
           </div>
         </div>
 
         {person.photos.length === 0 ? (
           <div className="rounded-xl border border-dashed border-ink/15 bg-canvas-deep/30 px-6 py-12 text-center">
-            <p className="font-display text-lg text-ink">No media to show</p>
+            <p className="font-display text-lg text-ink">
+              {t("people.emptyMediaTitle")}
+            </p>
             <p className="mx-auto mt-2 max-w-sm text-sm text-ink-muted">
-              Face detection may still be running — or add photos and videos
-              yourself if recognition missed them.
+              {t("people.emptyMediaBody")}
             </p>
             <button
               type="button"
@@ -591,7 +638,7 @@ export function PersonDetailView({
               className="ui-btn ui-btn-primary mt-5"
             >
               <ImagePlus className="size-4" aria-hidden />
-              Add photos / videos
+              {t("people.addPhotosVideos")}
             </button>
           </div>
         ) : (
@@ -606,12 +653,16 @@ export function PersonDetailView({
                     <button
                       type="button"
                       onClick={() => setLightboxId(photo.id)}
-                      className="absolute inset-0 w-full"
-                      aria-label={`View ${photo.type === "video" ? "video" : "photo"} of ${person.displayName}`}
+                      className="absolute inset-0 w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40"
+                      aria-label={
+                        photo.type === "video"
+                          ? t("people.viewVideoOf", { name: person.displayName })
+                          : t("people.viewPhotoOf", { name: person.displayName })
+                      }
                     >
                       <MediaThumb
                         item={photo}
-                        alt={`${person.displayName} in a family photo`}
+                        alt={t("people.photoAlt", { name: person.displayName })}
                       />
                     </button>
 
@@ -629,7 +680,9 @@ export function PersonDetailView({
                           : "bg-canvas/90 text-ink-muted opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-canvas hover:text-ink",
                       )}
                       aria-label={
-                        isCover ? "Current cover face" : "Set as cover face"
+                        isCover
+                          ? t("people.currentCoverFace")
+                          : t("people.setAsCoverFace")
                       }
                     >
                       {coverBusy ? (
@@ -640,7 +693,7 @@ export function PersonDetailView({
                           aria-hidden
                         />
                       )}
-                      {isCover ? "Cover" : "Set cover"}
+                      {isCover ? t("memories.cover") : t("people.setCover")}
                     </button>
 
                     <button
@@ -651,14 +704,22 @@ export function PersonDetailView({
                       }}
                       disabled={pending && busyFaceId === photo.faceId}
                       className="absolute bottom-2 left-2 z-10 inline-flex items-center gap-1 rounded-md bg-canvas/90 px-2 py-1 text-[11px] font-medium text-ink-muted shadow-sm backdrop-blur-sm transition opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-red-50 hover:text-red-800"
-                      aria-label={`Remove this ${photo.type === "video" ? "video" : "photo"} from ${person.displayName}`}
+                      aria-label={
+                        photo.type === "video"
+                          ? t("people.removeVideoFrom", {
+                              name: person.displayName,
+                            })
+                          : t("people.removePhotoFrom", {
+                              name: person.displayName,
+                            })
+                      }
                     >
                       {pending && busyFaceId === photo.faceId ? (
                         <Loader2 className="size-3 animate-spin" aria-hidden />
                       ) : (
                         <UserMinus className="size-3" aria-hidden />
                       )}
-                      Remove
+                      {t("common.remove")}
                     </button>
                   </div>
                 </li>
@@ -675,7 +736,7 @@ export function PersonDetailView({
             className="inline-flex items-center gap-2 rounded-md border border-accent/25 bg-accent/5 px-4 py-2.5 text-sm font-medium text-accent-deep transition hover:bg-accent/10"
           >
             <BookImage className="size-4" aria-hidden />
-            Start a memory with these {person.photos.length} items
+            {t("people.startMemoryWithItems", { count: person.photos.length })}
           </Link>
         </div>
       ) : null}
@@ -693,18 +754,18 @@ export function PersonDetailView({
           const parts: string[] = [];
           if (assignedCount > 0) {
             parts.push(
-              `Added ${assignedCount} item${assignedCount === 1 ? "" : "s"}.`,
+              assignedCount === 1
+                ? t("people.addedItems", { count: assignedCount })
+                : t("people.addedItemsPlural", { count: assignedCount }),
             );
           }
           if (alreadyCount > 0) {
-            parts.push(
-              `${alreadyCount} already on this person.`,
-            );
+            parts.push(t("people.alreadyOnPerson", { count: alreadyCount }));
           }
           if (skippedCount > 0) {
-            parts.push(`${skippedCount} couldn't be added.`);
+            parts.push(t("people.couldntAdd", { count: skippedCount }));
           }
-          setNotice(parts.join(" ") || "Library updated.");
+          setNotice(parts.join(" ") || t("people.libraryUpdated"));
           setError(null);
           router.refresh();
         }}
@@ -713,24 +774,69 @@ export function PersonDetailView({
       {lightbox && viewerMounted
         ? createPortal(
             <div
+              ref={lightboxRef}
               className="fixed inset-0 z-[100] flex items-center justify-center bg-ink/70 p-4 backdrop-blur-sm"
               role="dialog"
               aria-modal="true"
-              aria-label="Photo preview"
+              aria-labelledby="person-lightbox-title"
+              tabIndex={-1}
               onClick={() => setLightboxId(null)}
             >
               <button
                 type="button"
-                className="absolute right-4 top-4 rounded-full bg-canvas/90 p-2 text-ink shadow"
+                className="absolute right-4 top-4 z-10 rounded-full bg-canvas/90 p-2 text-ink shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                 onClick={() => setLightboxId(null)}
-                aria-label="Close"
+                aria-label={t("common.close")}
               >
-                <X className="size-4" />
+                <X className="size-4" aria-hidden />
               </button>
+              {lightboxCanNav ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      lightboxPrev();
+                    }}
+                    className="absolute left-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-canvas/90 p-2 text-ink shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 sm:left-4"
+                    aria-label={t("common.previous")}
+                  >
+                    <ChevronLeft className="size-5" aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      lightboxNext();
+                    }}
+                    className="absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-canvas/90 p-2 text-ink shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 sm:right-4"
+                    aria-label={t("common.next")}
+                  >
+                    <ChevronRight className="size-5" aria-hidden />
+                  </button>
+                </>
+              ) : null}
               <div
                 className="relative max-h-[85vh] max-w-4xl overflow-hidden rounded-xl bg-canvas shadow-2xl"
                 onClick={(e) => e.stopPropagation()}
               >
+                <p id="person-lightbox-title" className="sr-only">
+                  {lightbox.originalFilename ||
+                    (lightbox.type === "video"
+                      ? t("people.videoOf", { name: person.displayName })
+                      : t("people.photoOf", { name: person.displayName }))}
+                  {lightboxCanNav
+                    ? ` ${t("people.ofCount", {
+                        index: lightboxIndex + 1,
+                        count: lightboxCount,
+                      })}`
+                    : ""}
+                </p>
+                {lightboxCanNav ? (
+                  <p className="sr-only" aria-live="polite">
+                    {lightboxIndex + 1} of {lightboxCount}
+                  </p>
+                ) : null}
                 {lightbox.type === "photo" || lightbox.type === "video" ? (
                   <MediaViewerMedia
                     mediaId={lightbox.id}
@@ -739,14 +845,14 @@ export function PersonDetailView({
                   />
                 ) : (
                   <div className="flex min-h-64 min-w-80 flex-col items-center justify-center gap-3 p-10 text-ink-muted">
-                    Preview unavailable
+                    {t("people.previewUnavailable")}
                   </div>
                 )}
                 <div className="flex items-center justify-between gap-3 border-t border-ink/8 px-4 py-3">
                   <p className="text-sm text-ink-muted">
                     {person.cover?.faceId === lightbox.faceId
-                      ? "Current cover"
-                      : "Use this face as cover?"}
+                      ? t("memories.currentCover")
+                      : t("people.useFaceAsCover")}
                   </p>
                   <div className="flex flex-wrap items-center gap-2">
                     <button
@@ -762,7 +868,9 @@ export function PersonDetailView({
                       className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-800 hover:bg-red-100 disabled:opacity-60"
                     >
                       <UserMinus className="size-3" aria-hidden />
-                      Remove from {person.displayName}
+                      {t("people.removeFromPerson", {
+                        name: person.displayName,
+                      })}
                     </button>
                     {person.cover?.faceId !== lightbox.faceId ? (
                       <button
@@ -772,7 +880,7 @@ export function PersonDetailView({
                         className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground hover:bg-accent-deep disabled:opacity-60"
                       >
                         <Star className="size-3" aria-hidden />
-                        Set cover
+                        {t("people.setCover")}
                       </button>
                     ) : null}
                   </div>
@@ -781,7 +889,7 @@ export function PersonDetailView({
                   mediaId={lightbox.id}
                   people={allPeople}
                   onChanged={() => {
-                    setNotice("Face labels updated.");
+                    setNotice(t("people.faceLabelsUpdated"));
                     router.refresh();
                   }}
                 />

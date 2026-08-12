@@ -29,10 +29,18 @@ export {
 export {
   applyHumanReviewDecision,
   countMediaNeedingHumanReview,
+  isHumanReviewQueueStatus,
   listMediaNeedingHumanReview,
+  HUMAN_REVIEW_QUEUE_STATUSES,
   type HumanReviewAction,
   type HumanReviewQueueItem,
 } from "@/lib/moderation/review";
+export {
+  hasProcessingFailedLabel,
+  processingFailedModerationResult,
+  PROCESSING_FAILED_LABEL,
+} from "@/lib/moderation/processing-failed";
+export { shouldSkipModerationRescan } from "@/lib/moderation/job-gate";
 export {
   getSafetyStatusCounts,
   listRecentNcmecReports,
@@ -77,6 +85,7 @@ export {
   moderateWithAi,
   moderateWithAiMock,
   resolveAiProviderName,
+  scoreFromRekognitionLabels,
   AiModerationError,
   AI_MODERATION_PROVIDERS,
   type AiModerationInput,

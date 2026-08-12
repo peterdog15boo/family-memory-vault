@@ -4,6 +4,7 @@ import { AdminShell } from "@/components/admin/AdminShell";
 import { isUserSuspended } from "@/lib/admin/users";
 import { requireAdmin } from "@/lib/auth/admin";
 import { shouldRedirectToBetaNda } from "@/lib/beta-nda/gate";
+import { shouldRedirectToTerms } from "@/lib/terms/gate";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,9 @@ export default async function AdminLayout({
   }
   if (await shouldRedirectToBetaNda(userId)) {
     redirect(`/beta-agree?redirect_url=${encodeURIComponent("/admin")}`);
+  }
+  if (await shouldRedirectToTerms(userId)) {
+    redirect(`/terms-agree?redirect_url=${encodeURIComponent("/admin")}`);
   }
 
   let displayName = "Admin";

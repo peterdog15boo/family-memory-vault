@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState, useTransition } from "react";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { LibrarySection } from "@/components/library/LibrarySection";
 import { MemoryList } from "@/components/memories/MemoryList";
 import type { SerializedMemoryListItem } from "@/lib/memories/types";
@@ -19,9 +20,13 @@ type PaginatedMemoryLibraryProps = {
 function LoadMoreButton({
   onClick,
   pending,
+  loadingLabel,
+  loadMoreLabel,
 }: {
   onClick: () => void;
   pending: boolean;
+  loadingLabel: string;
+  loadMoreLabel: string;
 }) {
   return (
     <div className="mt-6 flex justify-center">
@@ -31,7 +36,7 @@ function LoadMoreButton({
         disabled={pending}
         className="rounded-md border border-ink/15 bg-canvas px-4 py-2 text-sm font-medium text-ink transition hover:border-accent/40 hover:bg-canvas-deep disabled:cursor-wait disabled:opacity-60"
       >
-        {pending ? "Loading…" : "Load more"}
+        {pending ? loadingLabel : loadMoreLabel}
       </button>
     </div>
   );
@@ -46,6 +51,7 @@ export function PaginatedMemoryLibrary({
   pageSize = 48,
   initialNotice = null,
 }: PaginatedMemoryLibraryProps) {
+  const t = useTranslations();
   const [own, setOwn] = useState(initialOwn);
   const [shared, setShared] = useState(initialShared);
   const [ownHasMore, setOwnHasMore] = useState(initialOwnHasMore);
@@ -91,9 +97,7 @@ export function PaginatedMemoryLibrary({
 
   function handleOwnDeleted(memoryId: string) {
     setOwn((prev) => prev.filter((m) => m.id !== memoryId));
-    setNotice(
-      "Album deleted. Your photos are still saved.",
-    );
+    setNotice(t("memories.deletedNotice"));
     setError(null);
   }
 
@@ -115,8 +119,8 @@ export function PaginatedMemoryLibrary({
       ) : null}
 
       <LibrarySection
-        title="Your albums"
-        description="Stories you’ve been gathering."
+        title={t("memories.yourAlbums")}
+        description={t("dashboard.recentMemoriesLead")}
         count={own.length}
         className="mt-10"
       >
@@ -130,27 +134,27 @@ export function PaginatedMemoryLibrary({
           <LoadMoreButton
             onClick={() => loadMore("own")}
             pending={ownPending}
+            loadingLabel={t("common.loading")}
+            loadMoreLabel={t("common.loadMore")}
           />
         ) : null}
       </LibrarySection>
 
       {hasFamilySharing || shared.length > 0 ? (
         <LibrarySection
-          title="From your family"
-          description="Albums shared with you."
+          title={t("memories.sharedAlbums")}
+          description={t("memories.sharedAlbumsLead")}
           count={shared.length}
           variant="shared"
           className="mt-12"
         >
-          <MemoryList
-            memories={shared}
-            emptyVariant="shared"
-            showActions
-          />
+          <MemoryList memories={shared} emptyVariant="shared" showActions />
           {sharedHasMore ? (
             <LoadMoreButton
               onClick={() => loadMore("shared")}
               pending={sharedPending}
+              loadingLabel={t("common.loading")}
+              loadMoreLabel={t("common.loadMore")}
             />
           ) : null}
         </LibrarySection>

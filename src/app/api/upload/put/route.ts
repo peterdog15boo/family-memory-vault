@@ -13,6 +13,7 @@ import {
 } from "@/lib/upload/constants";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 /**
  * PUT /api/upload/put?key=temp/{userId}/…

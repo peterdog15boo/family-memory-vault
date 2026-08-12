@@ -47,6 +47,7 @@ export const THEME_EVALUATION_PAGES = [
   { href: "/movies", label: "Movies" },
   { href: "/assistant", label: "Ask AI" },
   { href: "/documents", label: "Documents" },
+  { href: "/legacy", label: "Legacy Plan" },
   { href: "/documents/legacy", label: "Digital Legacy" },
 ] as const;
 

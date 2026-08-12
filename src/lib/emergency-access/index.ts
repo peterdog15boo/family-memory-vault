@@ -90,11 +90,15 @@ async function applyTransitionIfNeeded(
 async function notifyOwnerAccessRequested(
   row: EmergencyAccessDesignation,
 ): Promise<void> {
+  const { translatorForUserId } = await import("@/lib/i18n/user-locale");
+  const { t } = await translatorForUserId(row.ownerUserId);
   await createNotification({
     userId: row.ownerUserId,
     type: "emergency_access",
-    title: "Emergency access requested",
-    message: `${row.designateeName} has requested access to your Digital Legacy vault.`,
+    title: t("notifications.emergencyAccess.requestedTitle"),
+    message: t("notifications.emergencyAccess.requestedMessage", {
+      name: row.designateeName,
+    }),
     data: {
       designationId: row.id,
       action: "requested",
@@ -108,15 +112,19 @@ async function notifyDesignateeGranted(
   row: EmergencyAccessDesignation,
 ): Promise<void> {
   if (!row.designateeUserId) return;
+  const { translatorForUserId } = await import("@/lib/i18n/user-locale");
+  const { t } = await translatorForUserId(row.designateeUserId);
   const accessPhrase =
     row.accessType === "permanent"
-      ? "permanent access (until the owner revokes it)"
-      : "temporary access";
+      ? t("notifications.emergencyAccess.accessPermanent")
+      : t("notifications.emergencyAccess.accessTemporary");
   await createNotification({
     userId: row.designateeUserId,
     type: "emergency_access",
-    title: "Emergency access granted",
-    message: `You now have ${accessPhrase} to a Digital Legacy vault.`,
+    title: t("notifications.emergencyAccess.grantedTitle"),
+    message: t("notifications.emergencyAccess.grantedMessage", {
+      access: accessPhrase,
+    }),
     data: {
       designationId: row.id,
       action: "granted",
@@ -130,11 +138,13 @@ async function notifyDesignateeDenied(
   row: EmergencyAccessDesignation,
 ): Promise<void> {
   if (!row.designateeUserId) return;
+  const { translatorForUserId } = await import("@/lib/i18n/user-locale");
+  const { t } = await translatorForUserId(row.designateeUserId);
   await createNotification({
     userId: row.designateeUserId,
     type: "emergency_access",
-    title: "Emergency access denied",
-    message: `Your request for Digital Legacy access was declined.`,
+    title: t("notifications.emergencyAccess.deniedTitle"),
+    message: t("notifications.emergencyAccess.deniedMessage"),
     data: {
       designationId: row.id,
       action: "denied",
@@ -430,11 +440,13 @@ export async function createEmergencyDesignation(
     }
 
     if (row.designateeUserId) {
+      const { translatorForUserId } = await import("@/lib/i18n/user-locale");
+      const { t } = await translatorForUserId(row.designateeUserId);
       await createNotification({
         userId: row.designateeUserId,
         type: "emergency_access",
-        title: "You've been named an emergency contact",
-        message: `Someone trusts you with emergency access to their Digital Legacy vault.`,
+        title: t("notifications.emergencyAccess.designatedTitle"),
+        message: t("notifications.emergencyAccess.designatedMessage"),
         data: {
           designationId: row.id,
           action: "designated",
@@ -601,11 +613,13 @@ export async function updateEmergencyDesignation(
       row.designateeUserId &&
       row.designateeUserId !== existing.designateeUserId
     ) {
+      const { translatorForUserId } = await import("@/lib/i18n/user-locale");
+      const { t } = await translatorForUserId(row.designateeUserId);
       await createNotification({
         userId: row.designateeUserId,
         type: "emergency_access",
-        title: "You've been named an emergency contact",
-        message: `Someone trusts you with emergency access to their Digital Legacy vault.`,
+        title: t("notifications.emergencyAccess.designatedTitle"),
+        message: t("notifications.emergencyAccess.designatedMessage"),
         data: {
           designationId: row.id,
           action: "designated",

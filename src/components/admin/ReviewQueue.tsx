@@ -7,6 +7,7 @@ import { Film, ImageIcon, ShieldAlert } from "lucide-react";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { confirmAdminAction } from "@/lib/admin/confirm";
 import { cn } from "@/lib/utils";
+import { hasProcessingFailedLabel } from "@/lib/moderation/processing-failed";
 import type { HumanReviewAction, HumanReviewQueueItem } from "@/lib/moderation/review";
 
 type ReviewQueueProps = {
@@ -104,7 +105,7 @@ export function ReviewQueue({ items: initialItems }: ReviewQueueProps) {
       <AdminEmptyState
         icon={ShieldAlert}
         title="Queue empty"
-        description="No media is waiting for human review right now. Borderline items will appear here after automated moderation."
+        description="No media is waiting for human review right now. Borderline scores and failed scans appear here after automated moderation."
         actionHref="/admin/safety?status=needs_review"
         actionLabel="Open safety filter →"
       />
@@ -228,6 +229,21 @@ export function ReviewQueue({ items: initialItems }: ReviewQueueProps) {
                       </dd>
                     </div>
                   </dl>
+
+                  {hasProcessingFailedLabel(item.moderationLabels) ? (
+                    <p className="rounded-md border border-amber-800/20 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                      Automated scan failed (timeout or vendor error) — not a
+                      policy hit. Approve as clean if the photo looks
+                      appropriate, or retry the job from Ops.
+                    </p>
+                  ) : item.moderationStatus === "adult" ||
+                    item.moderationStatus === "rejected" ? (
+                    <p className="rounded-md border border-amber-800/20 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                      The scanner hid this from Photos. Beach, swimwear, or
+                      similar family photos are often false positives — approve
+                      as clean if it looks appropriate.
+                    </p>
+                  ) : null}
 
                   {item.moderationLabels?.labels?.length ? (
                     <p className="text-xs text-ink-muted">

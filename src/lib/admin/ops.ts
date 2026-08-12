@@ -12,6 +12,7 @@ import {
   processingJobs,
   type ProcessingJob,
 } from "@/lib/db/schema";
+import { hasProcessingFailedLabel } from "@/lib/moderation/processing-failed";
 import {
   FACE_DETECTION_JOB_TYPES,
   MODERATION_JOB_TYPES,
@@ -480,6 +481,29 @@ export async function retryProcessingJob(
     throw new Error(
       `Only failed or stuck processing jobs can be retried (status=${job.status}).`,
     );
+  }
+
+  if (job.type === "moderation" && job.mediaId) {
+    const [row] = await db
+      .select()
+      .from(media)
+      .where(eq(media.id, job.mediaId))
+      .limit(1);
+    if (
+      row &&
+      row.moderationStatus !== "csam_quarantined" &&
+      hasProcessingFailedLabel(row.moderationLabels)
+    ) {
+      const { updateMediaModerationStatus } = await import(
+        "@/lib/moderation/db"
+      );
+      await updateMediaModerationStatus(row.id, "pending", {
+        photodnaMatch: row.photodnaMatch,
+        provider: "admin.ops",
+        notes: "Reset to pending for Ops retry after scanner/processing failure.",
+        labels: row.moderationLabels,
+      });
+    }
   }
 
   const [updated] = await db

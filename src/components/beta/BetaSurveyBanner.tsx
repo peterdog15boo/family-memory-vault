@@ -1,22 +1,27 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MessageCircleHeart, X } from "lucide-react";
+import { ClipboardList, ExternalLink, MessageCircleHeart, X } from "lucide-react";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 import {
   BETA_SURVEY_DISMISS_KEY,
   getBetaSurveyUrl,
 } from "@/lib/beta-survey";
+import { isBetaFeedbackEnabled } from "@/lib/feedback/flags";
+import { openFeedback } from "@/lib/feedback/open";
 
 /**
- * Soft, dismissible beta survey prompt for the Dashboard.
- * Remembers dismissal in localStorage. Hidden when survey URL is unset.
+ * Soft, dismissible beta feedback prompt for the Dashboard.
+ * Opens the in-app feedback modal and optionally links to the longer survey.
  */
 export function BetaSurveyBanner() {
-  const surveyUrl = getBetaSurveyUrl();
+  const t = useTranslations();
   const [visible, setVisible] = useState(false);
+  const enabled = isBetaFeedbackEnabled();
+  const surveyUrl = getBetaSurveyUrl();
 
   useEffect(() => {
-    if (!surveyUrl) return;
+    if (!enabled) return;
     try {
       if (window.localStorage.getItem(BETA_SURVEY_DISMISS_KEY) === "1") {
         return;
@@ -25,9 +30,9 @@ export function BetaSurveyBanner() {
       // private mode / blocked storage — still show once this session
     }
     setVisible(true);
-  }, [surveyUrl]);
+  }, [enabled]);
 
-  if (!surveyUrl || !visible) return null;
+  if (!enabled || !visible) return null;
 
   function dismiss() {
     setVisible(false);
@@ -41,7 +46,7 @@ export function BetaSurveyBanner() {
   return (
     <aside
       className="app-banner flex flex-col gap-3 rounded-xl border border-accent/20 bg-accent/5 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
-      aria-label="Beta feedback"
+      aria-label={t("feedback.bannerAria")}
     >
       <div className="flex min-w-0 items-start gap-3">
         <MessageCircleHeart
@@ -50,37 +55,50 @@ export function BetaSurveyBanner() {
         />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-ink">
-            Enjoying the beta? Tell us what you think.
+            {t("feedback.bannerTitle")}
           </p>
           <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">
-            A short survey helps us make Family Memory Vault kinder for families
-            like yours. Thank you.
+            {surveyUrl
+              ? t("feedback.bannerBodyWithSurvey")
+              : t("feedback.bannerBody")}
           </p>
         </div>
         <button
           type="button"
           onClick={dismiss}
-          className="shrink-0 rounded-md p-1.5 text-ink-muted transition hover:bg-ink/5 hover:text-ink sm:hidden"
-          aria-label="Dismiss feedback banner"
+          className="shrink-0 rounded-md p-1.5 text-ink-muted transition hover:bg-ink/5 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:hidden"
+          aria-label={t("feedback.dismissAria")}
         >
           <X className="size-4" aria-hidden />
         </button>
       </div>
 
-      <div className="flex shrink-0 items-center gap-2 pl-7 sm:pl-0">
-        <a
-          href={surveyUrl}
-          target="_blank"
-          rel="noopener noreferrer"
+      <div className="flex shrink-0 flex-wrap items-center gap-2 pl-7 sm:pl-0">
+        <button
+          type="button"
+          onClick={() => openFeedback()}
           className="ui-btn ui-btn-secondary ui-btn-sm inline-flex flex-1 justify-center sm:flex-none"
         >
-          Take the survey
-        </a>
+          {t("feedback.bannerCta")}
+        </button>
+        {surveyUrl ? (
+          <a
+            href={surveyUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ui-btn ui-btn-ghost ui-btn-sm inline-flex flex-1 items-center justify-center gap-1.5 sm:flex-none"
+          >
+            <ClipboardList className="size-3.5" aria-hidden />
+            {t("feedback.surveyCta")}
+            <ExternalLink className="size-3 opacity-70" aria-hidden />
+            <span className="sr-only">{t("feedback.surveyOpensNew")}</span>
+          </a>
+        ) : null}
         <button
           type="button"
           onClick={dismiss}
-          className="hidden rounded-md p-1.5 text-ink-muted transition hover:bg-ink/5 hover:text-ink sm:inline-flex"
-          aria-label="Dismiss feedback banner"
+          className="hidden rounded-md p-1.5 text-ink-muted transition hover:bg-ink/5 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:inline-flex"
+          aria-label={t("feedback.dismissAria")}
         >
           <X className="size-4" aria-hidden />
         </button>

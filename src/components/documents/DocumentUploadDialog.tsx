@@ -1,18 +1,19 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Lock, Upload, X } from "lucide-react";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 import {
   PRIVATE_DOCUMENT_ALLOWED_CONTENT_TYPES,
   PRIVATE_DOCUMENT_MAX_BYTES,
 } from "@/lib/documents/constants";
 import type { SerializedDocumentCategory } from "@/lib/documents/serialize";
 import {
-  DOCUMENT_REMINDER_KIND_LABELS,
   DOCUMENT_REMINDER_KINDS,
   type DocumentReminderKind,
 } from "@/lib/documents/types";
 import { formatBytes } from "@/lib/billing/quotas";
+import { useOverlayA11y } from "@/hooks/useOverlayA11y";
 import { cn } from "@/lib/utils";
 
 type DocumentUploadDialogProps = {
@@ -43,6 +44,14 @@ const ACCEPT = [
 
 const ALLOWED = new Set<string>(PRIVATE_DOCUMENT_ALLOWED_CONTENT_TYPES);
 
+const REMINDER_LABEL_KEYS: Record<DocumentReminderKind, string> = {
+  renewal: "documents.reminderRenewal",
+  contract_end: "documents.reminderContractEnd",
+  expiration: "documents.reminderExpiration",
+  review: "documents.reminderReview",
+  other: "documents.reminderOther",
+};
+
 function guessContentType(file: File): string {
   if (file.type && ALLOWED.has(file.type)) return file.type;
   const ext = file.name.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1];
@@ -71,6 +80,7 @@ export function DocumentUploadDialog({
   defaultCategoryId,
   onUploaded,
 }: DocumentUploadDialogProps) {
+  const t = useTranslations();
   const titleId = useId();
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
@@ -104,20 +114,19 @@ export function DocumentUploadDialog({
     setError(null);
   }, [open, defaultCategoryId, categories]);
 
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape" && phase === "form") onClose();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, phase, onClose]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useOverlayA11y({
+    open,
+    onClose,
+    containerRef: dialogRef,
+    escapeEnabled: phase === "form",
+  });
 
   const tags = useMemo(
     () =>
       tagsRaw
         .split(/[,#]/)
-        .map((t) => t.trim().toLowerCase())
+        .map((tag) => tag.trim().toLowerCase())
         .filter(Boolean)
         .slice(0, 32),
     [tagsRaw],
@@ -128,28 +137,28 @@ export function DocumentUploadDialog({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!file) {
-      setError("Choose a file to upload.");
+      setError(t("documents.errorChooseFile"));
       return;
     }
     const contentType = guessContentType(file);
     if (!ALLOWED.has(contentType)) {
-      setError(
-        "That file type isn’t supported. Use PDF, JPEG, PNG, WebP, or common Office formats.",
-      );
+      setError(t("documents.errorFileType"));
       return;
     }
     if (file.size > PRIVATE_DOCUMENT_MAX_BYTES) {
       setError(
-        `File is too large (max ${formatBytes(PRIVATE_DOCUMENT_MAX_BYTES)}).`,
+        t("documents.errorFileTooLarge", {
+          max: formatBytes(PRIVATE_DOCUMENT_MAX_BYTES),
+        }),
       );
       return;
     }
     if (!title.trim()) {
-      setError("Add a title for this document.");
+      setError(t("documents.errorTitle"));
       return;
     }
     if (!categoryId) {
-      setError("Choose a category.");
+      setError(t("documents.errorCategory"));
       return;
     }
 
@@ -169,7 +178,7 @@ export function DocumentUploadDialog({
       });
       const presign = await presignRes.json();
       if (!presignRes.ok) {
-        throw new Error(presign.error || "Could not prepare upload.");
+        throw new Error(presign.error || t("documents.errorPrepare"));
       }
 
       await new Promise<void>((resolve, reject) => {
@@ -183,9 +192,9 @@ export function DocumentUploadDialog({
         };
         xhr.onload = () => {
           if (xhr.status >= 200 && xhr.status < 300) resolve();
-          else reject(new Error("Upload to storage failed."));
+          else reject(new Error(t("documents.errorStorage")));
         };
-        xhr.onerror = () => reject(new Error("Upload to storage failed."));
+        xhr.onerror = () => reject(new Error(t("documents.errorStorage")));
         xhr.send(file);
       });
 
@@ -211,30 +220,32 @@ export function DocumentUploadDialog({
       });
       const complete = await completeRes.json();
       if (!completeRes.ok) {
-        throw new Error(complete.error || "Could not save document.");
+        throw new Error(complete.error || t("documents.errorSave"));
       }
 
       onUploaded(complete.document.id as string);
     } catch (err) {
       setPhase("error");
-      setError(err instanceof Error ? err.message : "Upload failed.");
+      setError(err instanceof Error ? err.message : t("documents.errorUpload"));
     }
   }
 
   const busy = phase === "uploading" || phase === "saving";
+  const maxBytesLabel = formatBytes(PRIVATE_DOCUMENT_MAX_BYTES);
 
   return (
     <div
+      ref={dialogRef}
       className="fixed inset-0 z-50 flex items-end justify-center bg-[color:var(--doc-ink)]/40 p-4 sm:items-center"
-      role="presentation"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      tabIndex={-1}
       onClick={() => {
         if (!busy) onClose();
       }}
     >
       <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
         className={cn(
           "documents-vault max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[color:var(--doc-line)] bg-[color:var(--doc-panel)] shadow-xl",
           "documents-vault-in",
@@ -245,13 +256,13 @@ export function DocumentUploadDialog({
           <div>
             <p className="inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.12em] text-[color:var(--doc-muted)]">
               <Lock className="size-3" aria-hidden />
-              Encrypted in transit · short-lived links
+              {t("documents.uploadEyebrow")}
             </p>
             <h2
               id={titleId}
               className="mt-1 font-display text-xl tracking-tight text-[color:var(--doc-ink)]"
             >
-              Upload private document
+              {t("documents.uploadTitle")}
             </h2>
           </div>
           <button
@@ -259,7 +270,7 @@ export function DocumentUploadDialog({
             onClick={onClose}
             disabled={busy}
             className="rounded-md p-1.5 text-[color:var(--doc-muted)] hover:bg-black/5 hover:text-[color:var(--doc-ink)] disabled:opacity-40"
-            aria-label="Close"
+            aria-label={t("common.close")}
           >
             <X className="size-4" />
           </button>
@@ -268,7 +279,7 @@ export function DocumentUploadDialog({
         <form onSubmit={handleSubmit} className="space-y-4 px-5 py-4">
           <label className="block">
             <span className="text-xs font-medium text-[color:var(--doc-muted)]">
-              File
+              {t("documents.file")}
             </span>
             <input
               type="file"
@@ -284,14 +295,13 @@ export function DocumentUploadDialog({
               className="mt-1.5 block w-full text-sm text-[color:var(--doc-ink)] file:mr-3 file:rounded-md file:border-0 file:bg-[color:var(--doc-accent-soft)] file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-[color:var(--doc-accent-deep)]"
             />
             <span className="mt-1 block text-xs text-[color:var(--doc-muted)]">
-              PDF, images, and Office files up to{" "}
-              {formatBytes(PRIVATE_DOCUMENT_MAX_BYTES)}.
+              {t("documents.fileHelp", { max: maxBytesLabel })}
             </span>
           </label>
 
           <label className="block">
             <span className="text-xs font-medium text-[color:var(--doc-muted)]">
-              Title
+              {t("documents.fieldTitle")}
             </span>
             <input
               value={title}
@@ -305,7 +315,7 @@ export function DocumentUploadDialog({
 
           <label className="block">
             <span className="text-xs font-medium text-[color:var(--doc-muted)]">
-              Category
+              {t("documents.fieldCategory")}
             </span>
             <select
               value={categoryId}
@@ -323,8 +333,10 @@ export function DocumentUploadDialog({
 
           <label className="block">
             <span className="text-xs font-medium text-[color:var(--doc-muted)]">
-              Description{" "}
-              <span className="font-normal opacity-70">(optional)</span>
+              {t("documents.fieldDescription")}{" "}
+              <span className="font-normal opacity-70">
+                ({t("common.optional")})
+              </span>
             </span>
             <textarea
               value={description}
@@ -338,8 +350,10 @@ export function DocumentUploadDialog({
 
           <label className="block">
             <span className="text-xs font-medium text-[color:var(--doc-muted)]">
-              Notes{" "}
-              <span className="font-normal opacity-70">(optional)</span>
+              {t("documents.fieldNotes")}{" "}
+              <span className="font-normal opacity-70">
+                ({t("common.optional")})
+              </span>
             </span>
             <textarea
               value={notes}
@@ -347,7 +361,7 @@ export function DocumentUploadDialog({
               disabled={busy}
               rows={3}
               maxLength={20000}
-              placeholder="Private notes — policy numbers, contacts, renewal details…"
+              placeholder={t("documents.notesPlaceholder")}
               className="mt-1.5 w-full rounded-lg border border-[color:var(--doc-line)] bg-white/70 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[color:var(--doc-accent)]"
             />
           </label>
@@ -355,7 +369,7 @@ export function DocumentUploadDialog({
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
               <span className="text-xs font-medium text-[color:var(--doc-muted)]">
-                Document date
+                {t("documents.documentDate")}
               </span>
               <input
                 type="date"
@@ -367,7 +381,7 @@ export function DocumentUploadDialog({
             </label>
             <label className="block">
               <span className="text-xs font-medium text-[color:var(--doc-muted)]">
-                Reminder date
+                {t("documents.reminderDate")}
               </span>
               <input
                 type="date"
@@ -381,7 +395,7 @@ export function DocumentUploadDialog({
 
           <label className="block">
             <span className="text-xs font-medium text-[color:var(--doc-muted)]">
-              Reminder type
+              {t("documents.reminderType")}
             </span>
             <select
               value={reminderKind}
@@ -393,26 +407,27 @@ export function DocumentUploadDialog({
             >
               {DOCUMENT_REMINDER_KINDS.map((kind) => (
                 <option key={kind} value={kind}>
-                  {DOCUMENT_REMINDER_KIND_LABELS[kind]}
+                  {t(REMINDER_LABEL_KEYS[kind])}
                 </option>
               ))}
             </select>
             <span className="mt-1 block text-xs text-[color:var(--doc-muted)]">
-              Choose a date first — useful for renewals, contract end dates, and
-              expirations.
+              {t("documents.reminderHelp")}
             </span>
           </label>
 
           <label className="block">
             <span className="text-xs font-medium text-[color:var(--doc-muted)]">
-              Tags{" "}
-              <span className="font-normal opacity-70">(comma-separated)</span>
+              {t("documents.fieldTags")}{" "}
+              <span className="font-normal opacity-70">
+                ({t("documents.tagsHint")})
+              </span>
             </span>
             <input
               value={tagsRaw}
               onChange={(e) => setTagsRaw(e.target.value)}
               disabled={busy}
-              placeholder="e.g. 2024, homeowners, renewal"
+              placeholder={t("documents.tagsPlaceholder")}
               className="mt-1.5 w-full rounded-lg border border-[color:var(--doc-line)] bg-white/70 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[color:var(--doc-accent)]"
             />
           </label>
@@ -425,15 +440,15 @@ export function DocumentUploadDialog({
               disabled={busy}
               className="size-4 rounded border-[color:var(--doc-line)]"
             />
-            Mark as important
+            {t("documents.markImportant")}
           </label>
 
           {busy ? (
             <div className="rounded-lg border border-[color:var(--doc-line)] bg-[color:var(--doc-surface)] px-3 py-2">
               <p className="text-sm text-[color:var(--doc-muted)]">
                 {phase === "uploading"
-                  ? `Uploading securely… ${progress}%`
-                  : "Saving to your private vault…"}
+                  ? t("documents.uploadingProgress", { progress })
+                  : t("documents.savingVault")}
               </p>
               <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/5">
                 <div
@@ -459,7 +474,7 @@ export function DocumentUploadDialog({
               disabled={busy}
               className="rounded-md px-3 py-2 text-sm font-medium text-[color:var(--doc-muted)] hover:bg-black/5 disabled:opacity-40"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               type="submit"
@@ -467,7 +482,7 @@ export function DocumentUploadDialog({
               className="inline-flex items-center gap-2 rounded-md bg-[color:var(--doc-accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[color:var(--doc-accent-deep)] disabled:opacity-50"
             >
               <Upload className="size-4" aria-hidden />
-              {busy ? "Working…" : "Upload"}
+              {busy ? t("common.working") : t("common.upload")}
             </button>
           </div>
         </form>

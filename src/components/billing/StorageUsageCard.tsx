@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { HardDrive } from "lucide-react";
+import { useFormat } from "@/components/i18n/LocaleProvider";
 import {
   formatBytes,
   type StorageQuotaSnapshot,
@@ -25,11 +28,17 @@ export function StorageUsageCard({
   variant = "full",
   className,
 }: StorageUsageCardProps) {
+  const format = useFormat();
   const pct = snapshot.percentUsed;
   const level = getUsageLevel(pct);
   const nearLimit = level === "warning";
   const atLimit = level === "critical";
   const barWidth = pct == null ? 0 : Math.min(100, Math.max(0, pct));
+
+  function formatRemaining(s: StorageQuotaSnapshot): string {
+    if (s.remainingBytes == null) return "unlimited";
+    return formatBytes(s.remainingBytes, 1, format.locale);
+  }
 
   if (variant === "compact") {
     return (
@@ -152,9 +161,4 @@ export function StorageUsageCard({
       </div>
     </section>
   );
-}
-
-function formatRemaining(snapshot: StorageQuotaSnapshot): string {
-  if (snapshot.remainingBytes == null) return "unlimited";
-  return formatBytes(snapshot.remainingBytes, 1);
 }

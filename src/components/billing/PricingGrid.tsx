@@ -11,6 +11,7 @@ import {
   planFeatureBullets,
   RECOMMENDED_PLAN_SLUG,
 } from "@/lib/plans/pricing-display";
+import { useFormat } from "@/components/i18n/LocaleProvider";
 import { cn } from "@/lib/utils";
 
 type PricingGridProps = {
@@ -34,6 +35,7 @@ export function PricingGrid({
   variant = "page",
   className,
 }: PricingGridProps) {
+  const format = useFormat();
   const [interval, setInterval] = useState<BillingInterval>("monthly");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -177,7 +179,7 @@ export function PricingGrid({
 
               <p className="mt-6 flex items-baseline gap-1">
                 <span className="font-display text-4xl tracking-tight text-ink">
-                  {formatCents(priceCents)}
+                  {formatCents(priceCents, format.locale)}
                 </span>
                 {priceCents > 0 ? (
                   <span className="text-sm text-ink-muted">

@@ -6,6 +6,7 @@ import { UsageLimitBanner } from "@/components/billing/UsageLimitBanner";
 import { MediaUploader } from "@/components/upload/MediaUploader";
 import { AppPageIntro } from "@/components/ui/AppPageIntro";
 import { getAccountUsageSummary } from "@/lib/billing/account-usage";
+import { getTranslations } from "@/lib/i18n/server";
 
 export default async function UploadPage() {
   const { userId, isAuthenticated } = await auth();
@@ -13,17 +14,20 @@ export default async function UploadPage() {
     redirect("/");
   }
 
-  const usage = await getAccountUsageSummary(userId);
+  const [usage, t] = await Promise.all([
+    getAccountUsageSummary(userId),
+    getTranslations(),
+  ]);
   const storageBlocked = usage.storageMeter.level === "critical";
 
   return (
     <>
       <AppPageIntro
         slot="upload"
-        eyebrow="Add to your vault"
+        eyebrow={t("uploadPage.eyebrow")}
         compact
-        title="Upload"
-        description="Add photos and videos from your phone or computer. We’ll keep them private until they’re ready."
+        title={t("uploadPage.title")}
+        description={t("uploadPage.description")}
       />
 
       <div className="app-page mx-auto max-w-3xl">
@@ -36,9 +40,9 @@ export default async function UploadPage() {
           <div className="mt-6">
             <UpgradePrompt
               variant="blocked"
-              message={`Your ${usage.planName} plan storage is full. Remove older photos from Photos, or upgrade for more space.`}
-              hint="Your existing memories are safe — only new uploads are paused."
-              ctaLabel="Upgrade for more storage"
+              message={t("uploadPage.storageFull", { plan: usage.planName })}
+              hint={t("uploadPage.storageFullHint")}
+              ctaLabel={t("uploadPage.upgradeStorage")}
             />
           </div>
         ) : null}

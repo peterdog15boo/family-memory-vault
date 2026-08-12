@@ -6,12 +6,15 @@ import { AskAiFab } from "@/components/assistant/AskAiFab";
 import { AskAiPanel } from "@/components/assistant/AskAiPanel";
 import { AskAiProvider, useAskAi } from "@/components/assistant/AskAiContext";
 import { AvaHelper } from "@/components/ava/AvaHelper";
-import { BetaFeedbackLink } from "@/components/beta/BetaFeedbackLink";
+import { FeedbackButton } from "@/components/feedback/FeedbackButton";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { AppFooter } from "@/components/dashboard/AppFooter";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
 import { DashboardUserMenu } from "@/components/dashboard/DashboardUserMenu";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
+import { CelebrationHost } from "@/components/celebrations/CelebrationHost";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { PushSubscriptionSync } from "@/components/notifications/PushSubscriptionSync";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import type { AvaProgress } from "@/lib/ava/types";
 import { cn } from "@/lib/utils";
@@ -46,6 +49,7 @@ function DashboardShellInner({
   children,
 }: DashboardShellProps) {
   const { isModern } = useTheme();
+  const t = useTranslations();
   const { open, openAskAi } = useAskAi();
 
   return (
@@ -65,7 +69,7 @@ function DashboardShellInner({
           <div className="dashboard-shell-brand-cluster min-w-0">
             <BrandLogo tone="color" size="lg" priority decorative />
             <p className="dashboard-shell-greeting truncate text-sm text-ink-muted lg:text-[0.95rem]">
-              Welcome back
+              {t("nav.welcomeBack")}
             </p>
           </div>
         ) : (
@@ -75,12 +79,12 @@ function DashboardShellInner({
               aria-hidden
             />
             <p className="page-lead text-xs leading-relaxed text-ink-muted">
-              Family-safe — photos are looked over before sharing.
+              {t("nav.familySafeNote")}
             </p>
           </div>
         )}
         <div className="dashboard-shell-toolbar ml-auto flex items-center gap-2 sm:gap-3">
-          <BetaFeedbackLink />
+          <FeedbackButton placement="header" />
           <button
             type="button"
             onClick={() => openAskAi()}
@@ -88,12 +92,14 @@ function DashboardShellInner({
               "dashboard-icon-btn relative inline-flex items-center justify-center gap-1.5 rounded-md border border-ink/10 bg-canvas px-2.5 py-2 text-ink-muted transition-colors hover:border-ink/20 hover:text-ink sm:px-3",
               open && "border-accent/30 text-accent-deep",
             )}
-            aria-label="Ask AI"
+            aria-label={t("nav.askAi")}
             aria-expanded={open}
             aria-haspopup="dialog"
           >
             <Sparkles className="size-4" aria-hidden />
-            <span className="hidden text-xs font-medium sm:inline">Ask AI</span>
+            <span className="hidden text-xs font-medium sm:inline">
+              {t("nav.askAi")}
+            </span>
           </button>
           <span id="ava-header-slot" className="inline-flex items-center" />
           <NotificationBell initialUnreadCount={initialUnreadCount} />
@@ -111,6 +117,8 @@ function DashboardShellInner({
       {isModern ? <AppFooter /> : null}
 
       <AvaHelper initialProgress={initialAvaProgress} />
+      <CelebrationHost />
+      <PushSubscriptionSync />
       <AskAiFab />
       <AskAiPanel />
     </div>

@@ -47,6 +47,8 @@ import {
 } from "@/lib/ai/safety";
 import { executePrivateVaultIntent } from "@/lib/ai/private-vault";
 import { answerProductHelp, formatSecondaryHelpTip } from "@/lib/ai/help";
+import type { AppLocale, TranslateFn } from "@/lib/i18n";
+import { DEFAULT_LOCALE, createTranslator } from "@/lib/i18n";
 import type { MovieStyle } from "@/lib/db/schema";
 import { createMemory, addMediaToMemory } from "@/lib/memories";
 import { createMovieJob } from "@/lib/movies/lifecycle";
@@ -90,6 +92,8 @@ export type ExecuteAssistantActionInput = {
   minMediaForMovie?: number;
   /** Persist an assistant reply message summarizing the outcome (default true). */
   writeAssistantReply?: boolean;
+  locale?: AppLocale;
+  t?: TranslateFn;
 };
 
 export type ExecuteAssistantActionOutcome = {
@@ -351,7 +355,12 @@ function executeClarify(
 async function executeAnswerHelp(
   input: ExecuteAssistantActionInput,
 ): Promise<Omit<ExecuteAssistantActionOutcome, "actionId">> {
-  const answer = await answerProductHelp(input.userId, input.intent.raw_prompt);
+  const locale = input.locale ?? DEFAULT_LOCALE;
+  const t = input.t ?? createTranslator(locale);
+  const answer = await answerProductHelp(input.userId, input.intent.raw_prompt, {
+    locale,
+    t,
+  });
   return {
     status: "succeeded",
     result: {
@@ -384,7 +393,7 @@ function executeSearch(
     count: media.totalCount,
   };
 
-  const helpAside = formatSecondaryHelpTip(intent.raw_prompt) ?? "";
+  const helpAside = formatSecondaryHelpTip(intent.raw_prompt, input.t) ?? "";
 
   if (media.totalCount === 0) {
     return {

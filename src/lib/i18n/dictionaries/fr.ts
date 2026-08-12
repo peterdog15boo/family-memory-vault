@@ -1,0 +1,926 @@
+import type { MessageTree } from "@/lib/i18n/types";
+import { enUS } from "@/lib/i18n/dictionaries/en-US";
+
+export const fr = {
+  ...enUS,
+  meta: {
+    appName: "Family Memory Vault",
+    tagline: "Privé. Partagé avec soin.",
+    defaultTitle: "Family Memory Vault",
+    defaultDescription:
+      "Préservez les souvenirs les plus importants de votre famille — en privé et en toute sécurité.",
+  },
+  language: {
+    label: "Langue",
+    title: "Langue",
+    description:
+      "Choisissez la langue de Family Memory Vault. Elle s’applique dans l’app sur cet appareil et est enregistrée sur votre compte lorsque vous êtes connecté.",
+    current: "Langue actuelle",
+    saved: "Enregistré",
+    saving: "Enregistrement…",
+    error: "Impossible d’enregistrer la langue. Réessayez.",
+    aria: "Choisir la langue",
+  },
+  nav: {
+    home: "Accueil",
+    memories: "Souvenirs",
+    movies: "Films",
+    photos: "Photos",
+    upload: "Importer",
+    people: "Personnes",
+    askAi: "Demander à l’IA",
+    documents: "Documents",
+    legacy: "Héritage",
+    family: "Famille",
+    digitize: "Numériser",
+    billing: "Facturation",
+    plan: "Offre",
+    settings: "Réglages",
+    admin: "Admin",
+    keepSafe: "Garder en sécurité",
+    account: "Compte",
+    app: "App",
+    marketing: "Marketing",
+    footer: "Pied de page",
+    preserve: "Préserver",
+    privacy: "Confidentialité",
+    howItWorks: "Comment ça marche",
+    pricing: "Tarifs",
+    signIn: "Connexion",
+    signOut: "Déconnexion",
+    beginVault: "Commencer votre coffre",
+    startPreserving: "Commencer à préserver",
+    openVault: "Ouvrir le coffre",
+    goToVault: "Aller au coffre",
+    welcomeBack: "Bon retour",
+    familySafeNote:
+      "Espace familial — les photos sont examinées avant d’être partagées.",
+    sidebarWhisper: "Privé. Partagé avec soin.",
+    sidebarSafety:
+      "Un espace sûr pour la famille. Photos et vidéos sont examinées avant de pouvoir être partagées.",
+    copyright: "© {year} Family Memory Vault",
+    copyrightYear: "© {year}",
+  },
+  settings: {
+    title: "Réglages",
+    description: "Choisissez comment votre coffre fonctionne pour vous et votre famille.",
+    billingHelp:
+      "Consultez le stockage, les limites de films, les dates de facturation et les offres sur la page {billing}.",
+    billingLink: "facturation",
+    digitalLegacy: "Héritage numérique",
+    digitalLegacyDescription:
+      "Laissez des indications pour vos proches — contacts, consignes et notes sécurisées. Privé à votre compte.",
+    emergencyAccess: "Accès d’urgence (entrant)",
+    emergencyAccessDescription:
+      "Si quelqu’un vous a désigné comme contact de confiance, demandez ou consultez l’accès d’urgence ici.",
+    family: "Famille",
+    familyDescription: "Invitez des personnes de confiance et gérez le partage.",
+    appearanceTitle: "Apparence",
+    appearanceLead:
+      "Modern est l’apparence par défaut. Vous pouvez revenir à Original à tout moment — cela ne change que le visuel sur cet appareil.",
+    appearanceModernActive: "Modern (par défaut) est actif",
+    appearanceOriginalActive: "Original est actif sur cet appareil",
+    useModern: "Utiliser Modern (par défaut)",
+    compareLooks: "Comparer les apparences sur",
+    activeTheme: "Thème actif : {theme}.",
+    brandMoment:
+      "L’apparence Modern de Family Memory Vault — calme, photographique et privée par conception.",
+    accountPrivacyTitle: "Compte et confidentialité",
+    accountPrivacyLead:
+      "Gérez votre profil, vos alertes et la façon dont Family Memory Vault utilise les informations de votre compte.",
+    profile: "Profil",
+    profileLead:
+      "Votre nom et votre photo sont utilisés avec Ava et sur le profil de votre compte.",
+    profilePhotoHelp:
+      "La photo de profil se gère dans les réglages de votre compte.",
+    managePhoto: "Gérer la photo et la sécurité",
+    displayName: "Nom affiché",
+    email: "E-mail",
+    emailHelp:
+      "L’e-mail vient de votre connexion. Utilisez Gérer le compte pour ajouter ou modifier des adresses.",
+    saveProfile: "Enregistrer le profil",
+    saving: "Enregistrement…",
+    saved: "Enregistré",
+    displayNameRequired: "Le nom affiché est obligatoire.",
+    notifications: "Notifications",
+    notificationsLead:
+      "Choisissez les e-mails et alertes dans l’app. Les changements sont enregistrés immédiatement.",
+    openInbox: "Ouvrir la boîte de notifications",
+    emailGroup: "E-mail",
+    inAppGroup: "Dans l’app",
+    movieReady: "Film prêt",
+    movieReadyEmail: "Lorsqu’un film de souvenir a fini d’être créé.",
+    familyInvites: "Invitations familiales",
+    familyInvitesEmail:
+      "Lorsqu’une personne avec un compte vous invite (les nouveaux invités reçoivent toujours l’e-mail).",
+    storageWarnings: "Alertes de stockage",
+    storageWarningsEmail: "Lorsque votre coffre est presque plein ou saturé.",
+    mediaReady: "Photos prêtes",
+    mediaReadyInApp: "Lorsqu’un import termine son contrôle de sécurité.",
+    emergencyAccessAlert: "Accès d’urgence",
+    emergencyAccessInApp:
+      "Lorsqu’un contact de confiance demande l’accès à l’héritage numérique.",
+    notificationSound: "Son de notification",
+    notificationSoundHelp: "Un signal doux lorsqu’une alerte arrive dans l’app.",
+    productUpdates: "Nouvelles du produit",
+    productUpdatesHelp:
+      "Des nouvelles occasionnelles sur Family Memory Vault. Uniquement sur inscription.",
+    productUpdatesDescription:
+      "Nouvelles occasionnelles de Family Memory Vault. Désactivé par défaut. Les e-mails transactionnels (comme la bienvenue ou les alertes de stockage que vous activez ci-dessus) sont distincts.",
+    privacySectionTitle: "Confidentialité",
+    privacySectionLead:
+      "Des notes en langage simple sur le fonctionnement du partage dans ce coffre.",
+    familySharingTitle: "Partage familial.",
+    familySharingBody:
+      "Les membres de famille que vous invitez peuvent voir les souvenirs et médias que vous choisissez de partager. Les Documents privés et l’Héritage numérique restent réservés au propriétaire, sauf si vous accordez un accès d’urgence.",
+    noPublicProfilesTitle: "Pas de profils publics.",
+    noPublicProfilesBody:
+      "Family Memory Vault n’est pas un réseau social. Il n’y a pas de présence publique ni de fil où d’autres familles pourraient vous découvrir.",
+    accountSecurityTitle: "Sécurité du compte.",
+    accountSecurityBody:
+      "Le mot de passe, l’e-mail et l’authentification multifacteur se gèrent dans votre compte Clerk.",
+    openAccountSettings: "Ouvrir les réglages du compte",
+    privacyOverview: "Aperçu de la confidentialité",
+    readMorePrivacy: "En savoir plus dans notre {privacy}.",
+  },
+  pages: {
+    landing: "Accueil",
+    dashboard: "Tableau de bord",
+    backToVault: "Retour au coffre",
+    backToHome: "Retour à l’accueil",
+    browseMemories: "Parcourir les souvenirs",
+    browseOtherMemories: "Parcourir d’autres souvenirs",
+    mediaEyebrow: "Vos photos",
+    mediaTitle: "Vos photos",
+    mediaDescription:
+      "Parcourez les photos et vidéos enregistrées — prêtes pour les albums et les films.",
+    mediaAdd: "Ajouter des photos",
+    mediaReadiness: "À propos des photos prêtes",
+    moviesEyebrow: "Courts-métrages",
+    moviesTitle: "Films",
+    moviesDescription:
+      "Regardez les films créés à partir de vos souvenirs — ou ouvrez un album pour en créer un nouveau.",
+    moviesMake: "Créer un film",
+    moviesBrowse: "Parcourir les souvenirs",
+    peopleEyebrow: "Visages de famille",
+    peopleTitle: "Personnes",
+    peopleDescription:
+      "Les visages de vos photos, rassemblés avec soin pour que vous puissiez les nommer.",
+    peopleAbout: "À propos de Personnes",
+    familyTitle: "Famille",
+    familyDescription:
+      "Invitez des personnes de confiance. Les photos peuvent être partagées ; les souvenirs restent privés jusqu’à ce que vous choisissiez.",
+    familyAbout: "À propos du partage familial",
+    documentsEyebrow: "Coffre privé",
+    documentsTitle: "Documents",
+    documentsAbout: "À propos des documents privés",
+    documentsDescription:
+      "Organisez polices, pièces d’identité et papiers avec catégories, tags et rappels — visibles uniquement par vous.",
+    documentsCategories: "Catégories",
+    legacyAbout: "À propos de l’héritage numérique",
+    legacyBack: "Retour aux documents",
+    legacySections: "Sections",
+    legacyNavAria: "Sections de l’héritage numérique",
+    createMovie: "Créer un film",
+    aboutMovies: "À propos des films",
+    close: "Fermer",
+    viewPhotos: "Voir les photos",
+    uploadPhotos: "Importer des photos",
+    createMemory: "Créer un souvenir",
+    manageFamily: "Gérer le partage familial",
+    uploadPhotosFirst: "Ou importez d’abord des photos",
+    digitizeOld: "Ou numérisez d’anciennes photos et cassettes",
+  },
+  upload: {
+    dropTitle: "Déposez des photos ou des vidéos ici",
+    dropBody:
+      "Nous les gardons privées et les examinons avant qu’elles n’apparaissent pour votre famille.",
+    chooseFiles: "Choisir des fichiers",
+    safetyNote:
+      "Chaque import reste privé pendant l’analyse. Les photos prêtes apparaissent automatiquement dans Photos.",
+    safetyFirst: "La sécurité d’abord : {note}",
+    received:
+      "Reçu — contrôle de sécurité en cours. Il apparaîtra dans Photos lorsqu’il sera prêt.",
+    statusQueued: "En attente de démarrage…",
+    statusRequesting: "Préparation…",
+    statusUploading: "Importation… {pct} %",
+    statusFinalizing: "Enregistrement de votre fichier…",
+    statusDone:
+      "C’est noté — nous jetons un œil rapidement, puis cela apparaîtra dans vos photos.",
+    statusError: "Un problème est survenu. Réessayez.",
+  },
+  review: {
+    pendingOne: "Une photo est encore en cours de vérification. Elle apparaîtra quand elle sera prête.",
+    pendingMany:
+      "{n} photos sont encore en cours de vérification. Elles apparaîtront quand elles seront prêtes.",
+    attention:
+      "Quelques imports nécessitent un regard plus attentif et ne sont pas encore dans vos photos. Le reste est prêt à parcourir.",
+    mixed:
+      "Certains imports sont encore en cours de vérification. Vos photos n’affichent que ce qui est prêt.",
+  },
+  movie: {
+    statusQueued: "En attente…",
+    statusProcessing: "Création de votre film…",
+    statusFailed: "Impossible de terminer",
+    statusReady: "Prêt",
+    craftingTitle: "Création de votre film",
+    craftingBody: "Nous rassemblons vos moments préférés en un court film.",
+    craftingHint:
+      "La plupart des films prennent quelques minutes. Vous pouvez laisser cette page ouverte — nous continuons.",
+    waiting: "En attente de démarrage…",
+    rendering: "Assemblage…",
+    preparing: "Presque prêt…",
+    readyTitle: "Votre film est prêt",
+    failedTitle: "Nous n’avons pas pu terminer ce film",
+    failedRetry: "Réessayer",
+    emptyMedia:
+      "Ajoutez d’abord quelques photos à ce souvenir, puis revenez créer un film.",
+  },
+  empty: {
+    memoriesFirstTitle: "Créez votre premier souvenir",
+    memoriesFirstDescription:
+      "Rassemblez des photos dans un album chaleureux que votre famille pourra revoir ensemble.",
+    memoriesDefaultTitle: "Pas encore de souvenirs",
+    memoriesDefaultDescription:
+      "Créez un album pour un anniversaire, une fête ou un mardi ordinaire — ce qui compte.",
+    memoriesSharedTitle: "Rien de partagé avec la famille pour l’instant",
+    memoriesSharedDescription:
+      "Lorsqu’on partagera un album avec vous, il apparaîtra ici.",
+    mediaOwnTitle: "Ajoutez vos premières photos",
+    mediaOwnDescription:
+      "Importez-en quelques-unes depuis votre téléphone ou ordinateur. Elles restent privées jusqu’à ce qu’elles soient prêtes.",
+    mediaSharedTitle: "Pas encore de photos partagées",
+    mediaSharedDescription:
+      "Lorsque la famille partagera des photos, elles apparaîtront ici.",
+    peopleTitle: "Les visages se rassembleront ici",
+    peopleDescription:
+      "Importez des photos des personnes que vous aimez. Nous regroupons les visages avec soin pour que vous puissiez les nommer — privé pour vous.",
+    moviesTitle: "Pas encore de films",
+    moviesDescription:
+      "Ouvrez un souvenir et touchez Créer un film — nous en ferons un court-métrage.",
+    moviesMemoryTitle: "Pas encore de film pour ce souvenir",
+    moviesMemoryDescription:
+      "Choisissez un thème et nous ferons un court film avec ces photos — agréable à partager en famille.",
+    familyMembersTitle: "Pour l’instant, juste vous",
+    familyMembersDescription:
+      "Invitez quelqu’un de confiance quand vous serez prêt. Les souvenirs partagés restent dans la famille.",
+    notificationsTitle: "Vous êtes à jour",
+    notificationsDescription:
+      "Nous vous préviendrons quand des photos seront prêtes, qu’un film sera terminé, que l’espace manquera ou que quelqu’un vous invitera.",
+    createMemoryNoMediaTitle: "Pas encore de photos prêtes",
+    createMemoryNoMediaDescription:
+      "Importez d’abord quelques photos. Quand elles seront prêtes, revenez composer votre album.",
+    documentsCategoryTitle: "Rien ici pour le moment",
+    documentsCategoryDescription:
+      "Ajoutez une police, un relevé ou une pièce d’identité à ce dossier. Ces fichiers restent privés — jamais partagés avec la famille.",
+    documentsSearchTitle: "Aucun document correspondant",
+    documentsSearchDescription:
+      "Essayez un autre titre ou tag, ou effacez la recherche pour tout voir dans ce dossier.",
+    documentsFolderEmpty: "Aucun fichier dans {name} pour l’instant. {description}",
+  },
+  tips: {
+    moderation:
+      "Nous examinons chaque import pour la sécurité. Seules les photos prêtes apparaissent dans Souvenirs, Films et le partage familial.",
+    createMovie:
+      "Les films utilisent les photos déjà dans ce souvenir. Les nouveaux imports s’ajoutent une fois prêts.",
+    peopleFaces:
+      "Nous ne regroupons que les visages des photos prêtes, et cela reste privé à votre compte.",
+    familyShare:
+      "Partager un souvenir permet à la famille de le voir. L’accès « contribuer » leur permet aussi d’ajouter des photos.",
+    storageQuota:
+      "Le stockage compte les fichiers importés. Libérer de l’espace ou passer à une offre supérieure donne plus de place.",
+    privateDocuments:
+      "Les documents privés sont uniquement pour vous. Ils n’apparaissent jamais dans Souvenirs, Films ni le partage familial.",
+    digitalLegacy:
+      "L’héritage numérique est un cadeau privé de clarté — vous seul le voyez jusqu’à ce que vous en décidiez autrement. Il n’apparaît jamais dans le partage familial.",
+  },
+  legacy: {
+    title: "Héritage numérique",
+    subtitle: "Si je ne suis plus là",
+    overviewLead:
+      "Un lieu calme pour laisser des indications aux personnes que vous aimez — contacts, consignes et notes d’accès qui peuvent alléger leur charge dans un moment difficile.",
+    overviewPrivacy:
+      "Tout ici reste privé à votre compte. Vous ne préparez pas le pire ; vous offrez de la clarté comme un geste d’attention.",
+    secureWarning:
+      "Ces notes peuvent contenir des mots de passe ou des accès sensibles. Tenez cette section à jour et ne partagez l’accès qu’avec une personne en qui vous avez pleinement confiance.",
+    secureWarningShort:
+      "Traitez ceci comme un tiroir fermé à clé — visible uniquement par vous dans ce coffre.",
+    secureRevealConfirm:
+      "Révéler du contenu sensible ? Vous devrez peut-être confirmer votre connexion. Cette consultation est enregistrée pour votre sécurité.",
+    documentDownloadConfirm:
+      "Télécharger ce document privé ? L’accès est de courte durée et enregistré pour votre sécurité.",
+    documentViewConfirm:
+      "Consulter ce document privé dans le coffre ? L’accès est enregistré pour votre sécurité.",
+    navOverview: "Aperçu",
+    navMessage: "Message aux proches",
+    navContacts: "Contacts clés",
+    navBusiness: "Continuité de l’activité",
+    navPractical: "Consignes pratiques",
+    navSecure: "Éléments sécurisés",
+    navEmergency: "Accès d’urgence",
+    progressMessage: "Un message pour vos proches",
+    progressContacts: "Contacts clés qui peuvent aider",
+    progressPrimary: "Un contact principal identifié",
+    progressBusiness: "Consignes de continuité de l’activité",
+    progressPractical: "Instructions pratiques pour la maison et les finances",
+    progressSecure: "Notes sécurisées sur les comptes et accès",
+    progressDocuments: "Documents privés liés aux éléments sécurisés",
+    yourProgress: "Votre progression",
+    progressLead:
+      "Avancez à votre rythme. Chaque étape complétée est un cadeau attentionné pour ceux qui en auront peut-être besoin un jour.",
+    areasStarted: "{completed} sur {total} domaines commencés",
+    readinessLabel: "Préparation de l’héritage : {label}",
+    readinessStrong: "Base solide",
+    readinessGood: "Bon élan",
+    readinessStarted: "En cours",
+    readinessBeginning: "Tout juste commencé",
+    progressAria: "Progression de l’héritage numérique",
+    startedReview: "Commencé — touchez pour revoir",
+    tapToAdd: "Touchez pour ajouter quelque chose",
+    whereToBegin: "Par où commencer",
+    whereToBeginLead:
+      "Beaucoup commencent par un court message et un contact de confiance. Vous pourrez revenir quand vous voulez pour ajouter des notes professionnelles, des détails pratiques ou des informations d’accès sécurisées.",
+    writeMessage: "Écrire un message",
+    addContact: "Ajouter un contact",
+    whereThingsAre: "Où se trouvent les choses",
+    businessPacket: "Dossier professionnel",
+  },
+  common: {
+    save: "Enregistrer",
+    saving: "Enregistrement…",
+    saved: "Enregistré",
+    cancel: "Annuler",
+    close: "Fermer",
+    continue: "Continuer",
+    delete: "Supprimer",
+    deleting: "Suppression…",
+    remove: "Retirer",
+    upload: "Importer",
+    uploading: "Importation…",
+    create: "Créer",
+    loading: "Chargement…",
+    loadMore: "Charger plus",
+    tryAgain: "Réessayer",
+    working: "En cours…",
+    starting: "Démarrage…",
+    yes: "Oui",
+    viewAll: "Tout voir",
+    back: "Retour",
+    done: "Terminé",
+    copy: "Copier",
+    copied: "Copié",
+    errorGeneric: "Un problème est survenu. Veuillez réessayer.",
+  },
+  dashboard: {
+    eyebrow: "Votre coffre",
+    welcomeName: "Bon retour, {name}",
+    heroDescription:
+      "Photos et histoires que votre famille aime déjà — calmes et proches.",
+    recentMemories: "Souvenirs récents",
+    recentMemoriesLead: "Les albums que vous avez rassemblés.",
+    allMemories: "Tous les souvenirs",
+    noAlbumsYet: "Pas encore d’albums",
+    noAlbumsYetBody:
+      "Créez un souvenir pour rassembler des photos dans une histoire que votre famille pourra revoir.",
+    sharedWithFamily: "Partagé avec la famille",
+    sharedAlbumsLead: "Albums de personnes en qui vous avez confiance.",
+    viewShared: "Voir les partagés",
+    recentPhotos: "Photos récentes",
+    recentPhotosLead: "Prêtes pour les albums et les films.",
+    allPhotos: "Toutes les photos",
+    familyPhotos: "Photos de famille",
+    familyPhotosLead: "De personnes en qui vous avez confiance.",
+    planStorage: "Offre et stockage",
+    myMemories: "Mes souvenirs",
+    originalTitle: "Votre coffre",
+    originalDescription:
+      "Un lieu calme pour les photos, les histoires et les personnes que vous aimez.",
+  },
+  memories: {
+    eyebrow: "Albums et histoires",
+    title: "Souvenirs",
+    description:
+      "Rassemblez des photos en albums que vous pourrez revoir et partager en famille.",
+    deletedNotice: "Album supprimé. Vos photos restent enregistrées.",
+    safetyNote:
+      "Seuls les médias propres et approuvés peuvent apparaître dans un souvenir. Importez de nouvelles photos depuis la page Importer quand vous le souhaitez.",
+    yourAlbums: "Vos albums",
+    sharedAlbums: "Partagé avec la famille",
+    sharedAlbumsLead: "Albums de personnes de votre famille.",
+    backToMemories: "Retour aux souvenirs",
+    saveMemory: "Enregistrer le souvenir",
+    shareWithFamily: "Partager avec la famille",
+    stopSharing: "Arrêter le partage",
+    viewOnly: "Lecture seule",
+    canContribute: "Peut contribuer",
+    setCover: "Définir la couverture",
+    addPhotos: "Ajouter des photos",
+    story: "Histoire",
+    familyAlbum: "Album familial",
+  },
+  uploadPage: {
+    eyebrow: "Ajouter à votre coffre",
+    title: "Importer",
+    description:
+      "Ajoutez des photos et vidéos depuis votre téléphone ou ordinateur. Nous les gardons privées jusqu’à ce qu’elles soient prêtes.",
+    storageFull:
+      "Le stockage de votre offre {plan} est plein. Supprimez d’anciennes photos dans Photos, ou passez à une offre supérieure pour plus d’espace.",
+    storageFullHint:
+      "Vos souvenirs existants sont en sécurité — seuls les nouveaux imports sont en pause.",
+    upgradeStorage: "Passer à une offre avec plus de stockage",
+  },
+  assistant: {
+    eyebrow: "Là pour vous aider",
+    title: "Demander à l’IA",
+    description:
+      "Dites-moi en mots simples ce que vous cherchez. Je vous aide à trouver des photos et à en faire un souvenir ou un film.",
+    subtitle: "Photos, souvenirs et guides",
+    opening: "Ouverture de Demander à l’IA…",
+    openingHint:
+      "Vous pouvez aussi utiliser Demander à l’IA depuis l’en-tête, la barre latérale ou le bouton flottant.",
+    close: "Fermer Demander à l’IA",
+    newChat: "Nouvelle conversation",
+    newChatAria: "Démarrer une nouvelle conversation Demander à l’IA",
+    minimize: "Réduire",
+    restore: "Restaurer Demander à l’IA",
+    openBadge: "Ouvrir",
+    placeholder: "Demandez des photos, des souvenirs ou votre coffre…",
+    placeholderPanel: "Demandez des photos ou comment utiliser le coffre…",
+    placeholderPage: "Demandez une personne, un voyage ou comment utiliser le coffre…",
+    placeholderEdit: "Dites-moi quoi modifier — personnes, dates, ton…",
+    createMemory: "Créer un souvenir",
+    createMovie: "Créer un film",
+    viewLibrary: "Voir la bibliothèque",
+    chatSubtitle:
+      "Trouvez des photos, créez un souvenir ou lancez un film — avec vos propres mots.",
+    loading: "Chargement de la conversation…",
+    thinking: "Réflexion…",
+    send: "Envoyer le message",
+    composerHint: "Entrée pour envoyer · Maj+Entrée pour une nouvelle ligne",
+    composerHintEsc: " · Échap pour fermer",
+    emptyTitle: "Que souhaitez-vous trouver ?",
+    emptyCopy: "Demandez des photos, créez un souvenir ou obtenez un guide rapide.",
+    examplesAria: "Exemples de questions",
+    confirm: "Confirmer",
+    edit: "Modifier",
+    cancel: "Annuler",
+    notNow: "Pas maintenant",
+    understanding: "Compréhension",
+    lookingFor: "recherche : {query}",
+    objects: "objets : {list}",
+    scenes: "scènes : {list}",
+    toneBit: "ton {tone}",
+    themeBit: "thème {theme}",
+    categoryBit: "catégorie : {name}",
+    documentBit: "document : {name}",
+    contactBit: "contact : {name}",
+    draftBit: "brouillon : {title}",
+    workingTitle: "Titre provisoire : « {title} »",
+    selected: "sélectionnés",
+    removed: "{count} retirés",
+    ofMatches: "sur {count} correspondances",
+    restoreAll: "Tout restaurer",
+    removeFromResults: "Retirer des résultats",
+    removeMismatchHint:
+      "Retirez les éléments incorrects avec × avant de créer un souvenir ou un film.",
+    viewAll: "Tout voir",
+    open: "Ouvrir",
+    emptySelection: "Aucune photo sélectionnée — restaurez tout pour continuer.",
+    allRemoved: "Tous les éléments ont été retirés.",
+    searchAgainPick: "Recherchez à nouveau pour choisir un autre ensemble.",
+    previewsNotReady: "Les aperçus ne sont pas encore prêts —",
+    openPersonsPhotos: "ouvrez les photos de {name}",
+    toViewThem: "pour les voir.",
+    previewsWhenReady: "Les aperçus apparaîtront ici lorsque les miniatures seront prêtes.",
+    openMediaLibrary: "Ouvrir la bibliothèque média",
+    photo: "Photo",
+    video: "Vidéo",
+    removeMediaAria: "Retirer {kind} des résultats",
+    createFromSearchMemory: "Créer un souvenir à partir de ces éléments",
+    createFromSearchMovie: "Créer un film à partir de ces éléments",
+    somethingWrong: "Une erreur s’est produite",
+    couldNotStartMemory: "Impossible de créer un souvenir à partir de ces éléments",
+    couldNotStartMovie: "Impossible de créer un film à partir de ces éléments",
+    yes: "Oui",
+    of: "sur",
+    items: "{count} élément",
+    itemsPlural: "{count} éléments",
+    examples: {
+      beach: "Montrez-moi des photos de plage",
+      invite: "Comment inviter des membres de la famille ?",
+      cake: "Photos avec un gâteau d’anniversaire",
+      createMemory: "Où créer un souvenir ?",
+      slideshow: "Créer un diaporama de photos d’été",
+      moreMovies: "Comment faire plus de films ce mois-ci ?",
+    },
+    actions: {
+      createSlideshow: "Créer un diaporama",
+      createMemory: "Créer un souvenir",
+      createCategory: "Créer une catégorie",
+      fileDocument: "Classer le document",
+      addContact: "Ajouter un contact",
+      saveDraft: "Enregistrer le brouillon",
+      confirm: "Confirmer",
+      notNow: "Pas maintenant",
+      viewMemory: "Voir le souvenir",
+      viewMovie: "Voir le film",
+      createMemoryFromSearch: "Créer un souvenir",
+      createMovieFromSearch: "Créer un film",
+      viewLibrary: "Voir la bibliothèque",
+      openDocuments: "Ouvrir les documents",
+      openLegacy: "Ouvrir l’Héritage numérique",
+      memory: "Souvenir",
+      movies: "Films",
+      privateDocuments: "Documents privés",
+      digitalLegacy: "Héritage numérique",
+      photos: "Photos",
+      settings: "Réglages",
+      billing: "Facturation",
+      askAiTips: "Conseils Demander à l’IA",
+      openLegacyContacts: "Ouvrir les contacts de l’héritage",
+      openBusiness: "Ouvrir les instructions professionnelles",
+      openLegacyOverview: "Ouvrir l’aperçu de l’Héritage numérique",
+      viewPersonsMedia: "Voir les médias de {name}",
+      viewPerson: "Voir {name}",
+      goFamily: "Aller à Famille",
+      upgradeBilling: "Améliorer / Facturation",
+      goMemories: "Aller à Souvenirs",
+      goMovies: "Aller à Films",
+      openSettings: "Ouvrir les Réglages",
+      goDocuments: "Aller à Documents",
+      goUpload: "Aller à Importer",
+      goPeople: "Aller à Personnes",
+    },
+    reply: {
+      emptyPrompt: "Dites-moi ce que vous aimeriez trouver ou créer dans votre coffre.",
+      emptyPromptQuestion:
+        "Que souhaitez-vous faire — chercher des photos, créer un album de souvenirs ou faire un diaporama/film ?",
+      clarifyFocus:
+        "Sur qui cela doit-il se concentrer, y a-t-il une année ou une saison, ou quel objet/scène inclure (par exemple château gonflable ou gâteau d’anniversaire) ?",
+      clarifySearch:
+        "Qui dois-je chercher, quelle année ou saison, ou quel objet/scène rechercher (par exemple château gonflable, gâteau d’anniversaire ou plage) ?",
+      clarifyFocusWho: "Sur qui cela doit-il se concentrer avant que je crée quoi que ce soit ?",
+      clarifyIntro: "Avec plaisir — j’ai juste besoin d’un peu plus de précision :",
+      clarifyIntroMemorial:
+        "Je veux traiter cela avec soin. Avant de rassembler des photos, pourriez-vous m’aider avec quelques détails ?",
+      sparseIntro: "J’ai trouvé moins de photos qu’il m’en faudrait pour bien faire.",
+      sparseIntroMemorial:
+        "J’ai trouvé moins de photos que je le souhaiterais pour un hommage significatif, et je ne veux pas précipiter quelque chose d’aussi important.",
+      yourFamily: "votre famille",
+      featuring: " avec {who}",
+      fromWhen: " de {label}",
+      moreNote: " (en utilisant {used} sur {matched} correspondances)",
+      foundVisual:
+        "Trouvé {countLabel} liés à {visual}{featuring}{when}{moreNote}.",
+      foundPeople: "J’ai trouvé {countLabel} de {who}{when}{moreNote}.",
+      qualitiesNote: " Je garderai {qualities} à l’esprit.",
+      memorialPreview:
+        "Si cela vous convient, je peux créer un hommage cinématographique intitulé « {title} ».{qualities}",
+      moviePreview:
+        "Je peux faire un diaporama {theme} intitulé « {title} ».{qualities}",
+      memoryPreview:
+        "Je peux les rassembler dans un album de souvenirs intitulé « {title} ».{qualities}",
+      replyYesBegin: "Répondez oui pour commencer, ou dites-moi quoi ajuster.",
+      replyYesCreate: "Est-ce que cela vous convient ? Répondez oui pour le créer.",
+      replyYesOrChange: "Répondez oui pour le créer, ou dites-moi quoi modifier.",
+      searchEmptyMemorial:
+        "Je n’ai pas encore trouvé de photos ou vidéos correspondantes. Quand vous serez prêt, nous pourrons élargir la recherche ensemble.",
+      searchFoundVisual: "Trouvé {countLabel} liés à {visual}.",
+      searchFoundVisualSparse:
+        "Trouvé {countLabel} liés à {visual}. Vous pouvez les parcourir, créer un souvenir ou essayer un terme plus large.",
+      searchFoundVisualFull:
+        "Trouvé {countLabel} liés à {visual}. J’ai affiché quelques aperçus — parcourez les résultats ou créez un Souvenir / Film à partir d’eux.",
+      searchFoundSparse:
+        "Je n’ai trouvé que {countLabel}. Vous pouvez les parcourir, ou indiquez-moi une année plus large ou une autre personne à inclure.",
+      searchFound: "Voici {countLabel}. J’ai affiché quelques aperçus pour vous.",
+      createdMemory:
+        "C’est fait — j’ai créé « {title} » avec {count} élément{plural}.",
+      startedTribute:
+        "J’ai lancé un film hommage intitulé « {title} ». Je vous préviendrai quand le rendu sera prêt — prenez votre temps pour le regarder.",
+      startedSlideshow:
+        "J’ai lancé votre diaporama « {title} ». Je vous préviendrai quand il sera prêt.",
+      defaultMemoryTitle: "votre souvenir",
+      defaultTributeTitle: "En mémoire",
+      defaultMovieTitle: "Film de famille",
+      createdCategory: "J’ai créé la catégorie de documents privés « {name} ».",
+      filedDocument: "J’ai classé « {document} » dans « {category} ».",
+      addedContact: "J’ai ajouté {name} à vos contacts de l’Héritage numérique.",
+      savedBusinessDraft:
+        "J’ai enregistré un brouillon de transition professionnelle dans vos instructions de l’Héritage numérique.",
+      checklistComplete: "Votre liste de l’Héritage numérique semble complète.",
+      checklistProgress:
+        "Votre liste de l’Héritage numérique est à {completed} sur {total}. J’ai indiqué ce qui manque encore.",
+      errorMemorial:
+        "J’ai rencontré un problème et me suis arrêté pour qu’aucun élément incomplet ne soit créé. {safe}",
+      privateCategoryPreview:
+        "Je suis prêt à créer la catégorie de documents privés « {name} ». Je ne téléverserai aucun fichier depuis le chat. Confirmez quand vous voulez que je la crée.",
+      privateFilePreview:
+        "Je suis prêt à classer « {document} » dans « {category} ». Confirmez et je mettrai à jour uniquement ce document privé.",
+      privateContactPreview:
+        "Je suis prêt à ajouter {name} à vos contacts de l’Héritage numérique{asCategory}. Confirmez avant que je l’enregistre.",
+      privateContactAs: " en tant que {category}",
+      privateBusinessPreview:
+        "J’ai rédigé une note de transition professionnelle pour votre section Héritage numérique. Confirmez si vous voulez que je l’enregistre, ou dites-moi quoi ajuster d’abord.",
+      privateReadyDefault: "Je suis prêt à faire ce changement. Confirmez si cela vous convient.",
+      cancelled: "D’accord — j’ai annulé. Que souhaitez-vous faire à la place ?",
+      cancelledGentle:
+        "D’accord — j’ai annulé. Quand vous serez prêt, nous pourrons réessayer en douceur.",
+      createFromPhotosMemory: "Créer un souvenir à partir de ces photos",
+      createFromPhotosMovie: "Créer un film à partir de ces photos",
+      needMoreFromSearch:
+        "Il me faut au moins {min} photo(s) pour créer un {kind}.",
+      unavailableFromSearch:
+        "Je n’ai pas pu utiliser ces photos pour un {kind} — elles ne sont peut-être plus disponibles. Essayez de rechercher à nouveau.",
+      searchAgainHint:
+        "Recherchez à nouveau, ou choisissez une personne / période / objet pour que je puisse rassembler plus de photos.",
+      kindMemory: "souvenir",
+      kindMovie: "film",
+      kindSlideshow: "diaporama",
+      helpPlanHeader: "Votre forfait actuel :",
+      helpFallback: "Je peux vous aider à utiliser Family Memory Vault.",
+      helpTryAsking: "Essayez de demander des choses comme :",
+      helpOrSearch:
+        "Ou demandez-moi de trouver des photos — par exemple, « Montrez-moi des photos de plage ».",
+      helpNote: "Note : {note}",
+      alsoTip: "Aussi — {summary}",
+      openRoute: "Ouvrez {label} ({href}) quand vous serez prêt.",
+    },
+  },
+  family: {
+    inviteSent: "Invitation envoyée.",
+    copyLink: "Copier le lien",
+    copied: "Copié",
+    cancelInvite: "Annuler l’invitation",
+    removeMember: "Retirer",
+    members: "Membres",
+    leaveFamily: "Quitter la famille",
+  },
+  toasts: {
+    saved: "Enregistré",
+    deleted: "Supprimé",
+    uploaded: "Importé",
+    inviteCopied: "Lien d’invitation copié",
+    nameSaved: "Nom enregistré.",
+    somethingWrong: "Un problème est survenu. Veuillez réessayer.",
+  },
+  ava: {
+    name: "Ava",
+    open: "Ouvrir Ava",
+    openWithTip: "Ouvrir Ava — elle a un prochain conseil pour vous",
+    closeForNow: "Fermer Ava pour l’instant",
+    optional: "Facultatif",
+    examplesAria: "Exemples de recherche",
+    niceWork: "Beau travail",
+    niceWorkName: "Beau travail, {name}",
+    idleTip: "Je suis dans l’en-tête si vous voulez un conseil.",
+    notNow: "Pas maintenant",
+    maybeLater: "Peut-être plus tard",
+    continue: "Continuer",
+    close: "Fermer",
+    gotIt: "Compris",
+    viewPhotos: "Voir les photos",
+    viewMemories: "Voir les souvenirs",
+    createMemory: "Créer un souvenir",
+    screenNameLabel: "Nom affiché",
+    screenNamePlaceholder: "p. ex. Jeff",
+    screenNameHint: "{min}–{max} caractères",
+    friendlyPresets: "Avatars amicaux",
+    usePresetAvatar: "Utiliser l’avatar {label}",
+    uploadPhoto: "Importer une photo",
+    moderationBrowse:
+      "Continuez à parcourir — je vous préviendrai quand Photos sera prêt.",
+    couldNotUpdate: "Impossible de mettre à jour Ava.",
+    couldNotUseImage: "Impossible d’utiliser cette image.",
+    somethingWrong: "Un problème est survenu.",
+    updateFailed: "Échec de la mise à jour.",
+    presets: {
+      sun: "Ensoleillé",
+      leaf: "Feuille",
+      heart: "Cœur",
+      star: "Étoile",
+      wave: "Vague",
+      bloom: "Floraison",
+    },
+    errors: {
+      tooShort: "Utilisez au moins {min} caractères.",
+      tooLong: "Restez en dessous de {max} caractères.",
+      urlNotAllowed: "Utilisez un nom, pas une adresse web.",
+      invalidChars:
+        "Utilisez des lettres, chiffres, espaces ou un simple trait d’union/apostrophe.",
+      chooseImageType: "Choisissez une image JPG, PNG ou WebP.",
+      photoTooLarge:
+        "Cette photo est un peu grande — essayez-en une plus petite.",
+      chooseImageFile: "Choisissez un fichier image.",
+      photoUnder8Mb:
+        "Cette photo est un peu grande — essayez-en une de moins de 8 Mo.",
+      couldNotPrepare: "Impossible de préparer cette image.",
+    },
+    steps: {
+      welcomeTitle: "Bienvenue sur Family Memory Vault",
+      welcomeDescription:
+        "Je suis Ava — je vous guide pas à pas pour que l’installation soit facile.",
+      welcomeCta: "Commencer",
+      screenNameTitle: "Comment devons-nous vous appeler ?",
+      screenNameDescription:
+        "Choisissez un nom d’affichage amical pour les salutations dans le coffre.",
+      screenNameCta: "Continuer",
+      avatarTitle: "Choisissez votre photo de profil",
+      avatarDescription:
+        "Une photo simple ou un avatar aide la famille à vous reconnaître.",
+      avatarCta: "Continuer",
+      uploadTitle: "Ajoutez une photo de famille",
+      uploadDescription:
+        "Nous ferons une vérification de sécurité rapide avant que les photos n’apparaissent pour la famille — généralement juste un court délai.",
+      uploadCta: "Importer des photos",
+      moderationTitle: "Vérification rapide en cours",
+      moderationDescription:
+        "Je vous préviendrai quand votre photo sera prête dans Photos.",
+      moderationCta: "Compris",
+      photosReadyTitle: "Vos photos sont prêtes",
+      photosReadyDescription:
+        "Elles ont passé la vérification rapide et sont sûres pour la famille.",
+      photosReadyCta: "Voir les photos",
+      encourageMemoryTitle: "Prêt pour un souvenir ?",
+      encourageMemoryDescription:
+        "Un souvenir est une simple collection de photos qui raconte une histoire.",
+      encourageMemoryCta: "Créer un souvenir",
+      createMemoryTitle: "Créez votre premier souvenir",
+      createMemoryDescription:
+        "Rassemblez quelques photos en un endroit que vous pourrez revisiter.",
+      createMemoryCta: "Créer un souvenir",
+      peopleTitle: "Découvrez Personnes",
+      peopleDescription:
+        "Les visages peuvent se regrouper en Personnes avec le temps — ou ajoutez quelqu’un à la main si nous le manquons.",
+      peopleCta: "Ouvrir Personnes",
+      createMovieTitle: "Créez un court film",
+      createMovieDescription:
+        "Transformez un souvenir en un petit film souvenir pour la famille.",
+      createMovieCta: "Créer un film",
+      askAiTitle: "Essayez Demander à l’IA",
+      askAiDescription: "Cherchez vos photos avec des mots du quotidien.",
+      askAiCta: "Demander à l’IA",
+      inviteTitle: "Invitez la famille",
+      inviteDescription:
+        "Partagez le coffre avec votre conjoint ou un membre de la famille quand vous serez prêt.",
+      inviteCta: "Ouvrir Famille",
+      documentsTitle: "Documents et Héritage numérique",
+      documentsDescription: "Outils avancés pour plus tard — pas de précipitation.",
+      documentsCta: "Jeter un coup d’œil",
+      completeTitle: "Vous êtes prêt",
+      completeDescription:
+        "Je resterai à proximité si vous avez besoin d’un petit coup de pouce.",
+      completeCta: "Merci, Ava",
+    },
+    examples: {
+      birthday: "montre-moi des photos d’anniversaire",
+      beach: "trouve des photos de plage",
+    },
+    settings: {
+      title: "Guide Ava",
+      description:
+        "Des conseils doux pendant que vous vous installez. Ava reste silencieuse si vous annulez, et ne bloque jamais l’import ou la consultation des photos.",
+      showTips: "Afficher les conseils d’Ava",
+      tipsOn: "Conseils et jalons discrets activés",
+      tipsOff: "Conseils désactivés — l’icône de l’en-tête est masquée",
+      statusCompleted: "Visite principale terminée",
+      statusPaused: "En pause — cliquez sur Ava dans l’en-tête pour continuer",
+      statusReady: "Prête quand vous avez besoin d’un coup de pouce",
+      statusOff: "Désactivé dans les réglages",
+      percentTouched: "{percent} % des étapes touchées",
+    },
+  },
+  notifications: {
+    mediaReady: {
+      title: "Photo prête",
+      message: "Votre import a passé la modération et est prêt dans Photos.",
+      messageWithFilename:
+        "« {filename} » a passé la modération et est prêt dans Photos.",
+    },
+    movieReady: {
+      title: "Votre film est prêt",
+      message: "Votre film souvenir a fini d’être rendu et est prêt à regarder.",
+      messageWithTitle:
+        "« {title} » a fini d’être rendu et est prêt à regarder.",
+    },
+    memoryCreated: {
+      title: "Souvenir enregistré",
+      message: "Votre souvenir est dans le coffre.",
+      messageWithTitle: "« {title} » est enregistré dans votre coffre.",
+    },
+    familyInvite: {
+      title: "Invitation familiale",
+      message:
+        "Vous avez reçu une invitation. Acceptez-la pour commencer à partager des souvenirs ensemble.",
+      messageWithInviter:
+        "Vous avez reçu une invitation de {inviter}. Acceptez-la pour commencer à partager des souvenirs ensemble.",
+      messageWithFamily:
+        "Vous avez reçu une invitation à « {family} ». Acceptez-la pour commencer à partager des souvenirs ensemble.",
+      messageFull:
+        "Vous avez reçu une invitation de {inviter} à « {family} ». Acceptez-la pour commencer à partager des souvenirs ensemble.",
+    },
+    storageWarning: {
+      titleNear: "Le stockage se remplit",
+      titleFull: "Stockage plein",
+      messageNear:
+        "Vous avez utilisé {percent} % de votre stockage. Pensez à passer à un forfait supérieur avant de manquer de place.",
+      messageFull:
+        "Le stockage de votre coffre est plein — les nouveaux imports sont en pause. Libérez de l’espace ou changez de forfait.",
+    },
+    moderationAttention: {
+      title: "L’import nécessite votre attention",
+      message:
+        "Un import a été signalé et doit être examiné avant d’apparaître dans Photos.",
+      messageWithReason: "Un import nécessite une vérification manuelle : {reason}.",
+    },
+    emergencyAccess: {
+      requestedTitle: "Accès d’urgence demandé",
+      requestedMessage:
+        "{name} a demandé l’accès à votre coffre Héritage numérique.",
+      grantedTitle: "Accès d’urgence accordé",
+      grantedMessage: "Vous avez maintenant {access} à un coffre Héritage numérique.",
+      accessPermanent: "un accès permanent (jusqu’à révocation par le titulaire)",
+      accessTemporary: "un accès temporaire",
+      deniedTitle: "Accès d’urgence refusé",
+      deniedMessage: "Votre demande d’accès à l’Héritage numérique a été refusée.",
+      designatedTitle: "Vous avez été désigné contact d’urgence",
+      designatedMessage:
+        "Quelqu’un vous confie l’accès d’urgence à son coffre Héritage numérique.",
+    },
+    ui: {
+      title: "Notifications",
+      markAllRead: "Tout marquer comme lu",
+      markAllAsRead: "Tout marquer comme lu",
+      empty: "Pas encore de notifications",
+      emptyHint: "Les nouveautés sur les photos, les films et les invitations familiales apparaîtront ici.",
+      viewAll: "Voir toutes les notifications",
+      close: "Fermer les notifications",
+      unreadCount: "{count} non lues",
+      unreadDescription: "{count} notification non lue",
+      unreadDescriptionPlural: "{count} notifications non lues",
+      caughtUp: "Vous êtes à jour.",
+      justNow: "à l’instant",
+      minutesAgo: "il y a {count} min",
+      hoursAgo: "il y a {count} h",
+      daysAgo: "il y a {count} j",
+      ariaLabel: "Notifications",
+      ariaLabelUnread: "Notifications ({count} non lues)",
+      ariaLabelNew: "Notifications — nouvelles",
+      ariaLabelUnreadNew: "Notifications ({count} non lues) — nouvelles",
+      unreadAria: "Non lu",
+    },
+  },
+  emails: {
+    invite: {
+      subject: "{inviter} vous a invité à {family}",
+      greeting: "Bonjour {name},",
+      greetingFallback: "bonjour",
+      body1:
+        "{inviter} vous a invité à rejoindre « {family} » sur Family Memory Vault{rolePart}.",
+      rolePart: " en tant que {role}",
+      body2:
+        "Family Memory Vault est un lieu privé pour que votre famille garde photos, vidéos et souvenirs partagés — en toute sécurité, et seulement avec les personnes que vous invitez.",
+      body3:
+        "Rejoignez pour voir les souvenirs partagés et aider à préserver les photos de votre famille ensemble.",
+      acceptLabel: "Acceptez l’invitation :",
+      pasteHint:
+        "Si le bouton ne fonctionne pas, collez le lien ci-dessus dans votre navigateur.",
+      preview: "{inviter} vous a invité à partager des souvenirs en famille.",
+      heading: "Vous êtes invité",
+      cta: "Accepter l’invitation",
+      footer:
+        "Cette invitation a été envoyée par {inviter} via Family Memory Vault. Si vous ne l’attendiez pas, vous pouvez ignorer cet e-mail.",
+    },
+  },
+  feedback: {
+    linkLabel: "Commentaires",
+    linkAria: "Donner votre avis (ouvre l’enquête dans un nouvel onglet)",
+    bannerAria: "Commentaires bêta",
+    bannerTitle: "Vous appréciez la bêta ? Dites-nous ce que vous en pensez.",
+    bannerBody:
+      "Un court questionnaire nous aide à rendre Family Memory Vault plus accueillant pour des familles comme la vôtre. Merci.",
+    surveyCta: "Répondre au questionnaire",
+    dismissAria: "Fermer la bannière de commentaires",
+  },
+  journey: {
+    photosTrackAria: "Progression du parcours photos",
+    photosProgress: "Photos : {current} / {next}",
+    photosComplete: "Photos : {current}",
+    memoriesTrackAria: "Progression du parcours souvenirs",
+    memoriesProgress: "Souvenirs : {current} / {next}",
+    memoriesComplete: "Souvenirs : {current}",
+    nextBadge: "Suivant : {name} (+{lp} LP)",
+    allCaughtUp: "Tous les badges de ce parcours sont débloqués — magnifique travail.",
+    photosBadgeFallback: "prochain badge photo",
+    memoriesBadgeFallback: "prochain badge souvenir",
+    lpEarned: "+{lp} LP",
+    badgeUnlocked: "Badge débloqué",
+    levelUp: "Niveau supérieur",
+    levelUpBody: "Votre coffre s’est un peu renforcé. Continuez.",
+    keepGoing: "Continuer",
+    close: "Fermer",
+    toastUnlocked: "{name} débloqué · +{lp} LP",
+    toastPhotoReady: "Photo prête · +{lp} LP",
+    toastMemoryReady: "Souvenir enregistré · +{lp} LP",
+    celebrationAria: "Nouveau jalon du parcours",
+  },
+} satisfies MessageTree;

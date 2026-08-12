@@ -3,6 +3,7 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { cn } from "@/lib/utils";
 
 type FieldErrors = Record<string, string[] | undefined>;
@@ -48,6 +49,25 @@ function fieldError(errors: FieldErrors | null, key: string): string | null {
   return list?.[0] ?? null;
 }
 
+function HighlightPlaceholder({
+  template,
+  placeholder,
+  highlight,
+}: {
+  template: string;
+  placeholder: string;
+  highlight: ReactNode;
+}) {
+  const parts = template.split(placeholder);
+  return (
+    <>
+      {parts[0]}
+      {highlight}
+      {parts.slice(1).join(placeholder)}
+    </>
+  );
+}
+
 /**
  * Public intake form for Family Memory Box orders.
  * Stripe Checkout when configured; otherwise clear unpaid request intake.
@@ -65,6 +85,7 @@ export function FamilyMemoryBoxOrderForm({
     email?: string;
   } | null;
 }) {
+  const t = useTranslations();
   const router = useRouter();
   const [form, setForm] = useState<FormState>(() => ({
     ...INITIAL,
@@ -137,7 +158,7 @@ export function FamilyMemoryBoxOrderForm({
 
       if (!response.ok) {
         setFieldErrors(data.details?.fieldErrors ?? null);
-        setError(data.error || "Could not submit your order.");
+        setError(data.error || t("memoryBox.errorSubmit"));
         return;
       }
 
@@ -153,9 +174,9 @@ export function FamilyMemoryBoxOrderForm({
         return;
       }
 
-      setError("Order was saved, but we couldn’t open the confirmation page.");
+      setError(t("memoryBox.errorConfirmMissing"));
     } catch {
-      setError("Could not submit your order. Check your connection and try again.");
+      setError(t("memoryBox.errorNetwork"));
     } finally {
       setBusy(false);
     }
@@ -165,34 +186,34 @@ export function FamilyMemoryBoxOrderForm({
     <form className="memory-box-form" onSubmit={onSubmit} noValidate>
       {stripeCheckoutEnabled ? (
         <p className="memory-box-account-note">
-          After you submit, you’ll pay <strong>$199</strong> securely via Stripe
-          Checkout. Your box request is saved first — payment is confirmed only
-          after Checkout succeeds.
+          <HighlightPlaceholder
+            template={t("memoryBox.stripeCheckoutNote")}
+            placeholder="{price}"
+            highlight={<strong>$199</strong>}
+          />
         </p>
       ) : (
         <p className="memory-box-account-note">
-          This form submits an <strong>order request</strong> (not an online
-          payment). We’ll email you to collect the $199 fee before shipping.
+          <HighlightPlaceholder
+            template={t("memoryBox.requestNote")}
+            placeholder="{orderRequest}"
+            highlight={<strong>{t("memoryBox.orderRequest")}</strong>}
+          />
         </p>
       )}
 
       {isSignedIn ? (
-        <p className="memory-box-hint">
-          Signed in — this order will be linked to your account so completed
-          uploads can appear in your Photos page.
-        </p>
+        <p className="memory-box-hint">{t("memoryBox.signedInHint")}</p>
       ) : (
-        <p className="memory-box-hint">
-          Not signed in? Please use a name, email, and phone we can reach — we
-          need them to match your order when digitized files are ready.
-        </p>
+        <p className="memory-box-hint">{t("memoryBox.guestHint")}</p>
       )}
 
       <div className="memory-box-form-grid">
         <Field
           id="mb-full-name"
-          label="Full name"
+          label={t("memoryBox.fullName")}
           required
+          optionalLabel={t("common.optional")}
           error={fieldError(fieldErrors, "fullName")}
         >
           <input
@@ -208,8 +229,9 @@ export function FamilyMemoryBoxOrderForm({
 
         <Field
           id="mb-email"
-          label="Email"
+          label={t("memoryBox.email")}
           required
+          optionalLabel={t("common.optional")}
           error={fieldError(fieldErrors, "email")}
         >
           <input
@@ -227,8 +249,9 @@ export function FamilyMemoryBoxOrderForm({
 
         <Field
           id="mb-phone"
-          label="Phone"
+          label={t("memoryBox.phone")}
           required
+          optionalLabel={t("common.optional")}
           error={fieldError(fieldErrors, "phone")}
         >
           <input
@@ -246,12 +269,15 @@ export function FamilyMemoryBoxOrderForm({
       </div>
 
       <fieldset className="memory-box-fieldset">
-        <legend className="memory-box-legend">Mailing address</legend>
+        <legend className="memory-box-legend">
+          {t("memoryBox.mailingAddress")}
+        </legend>
         <div className="memory-box-form-grid">
           <Field
             id="mb-line1"
-            label="Address line 1"
+            label={t("memoryBox.addressLine1")}
             required
+            optionalLabel={t("common.optional")}
             className="memory-box-span-2"
             error={fieldError(fieldErrors, "addressLine1")}
           >
@@ -268,8 +294,9 @@ export function FamilyMemoryBoxOrderForm({
 
           <Field
             id="mb-line2"
-            label="Address line 2"
+            label={t("memoryBox.addressLine2")}
             optional
+            optionalLabel={t("common.optional")}
             className="memory-box-span-2"
             error={fieldError(fieldErrors, "addressLine2")}
           >
@@ -285,8 +312,9 @@ export function FamilyMemoryBoxOrderForm({
 
           <Field
             id="mb-city"
-            label="City"
+            label={t("memoryBox.city")}
             required
+            optionalLabel={t("common.optional")}
             error={fieldError(fieldErrors, "city")}
           >
             <input
@@ -302,8 +330,9 @@ export function FamilyMemoryBoxOrderForm({
 
           <Field
             id="mb-state"
-            label="State"
+            label={t("memoryBox.state")}
             required
+            optionalLabel={t("common.optional")}
             error={fieldError(fieldErrors, "state")}
           >
             <input
@@ -319,8 +348,9 @@ export function FamilyMemoryBoxOrderForm({
 
           <Field
             id="mb-postal"
-            label="Postal code"
+            label={t("memoryBox.postalCode")}
             required
+            optionalLabel={t("common.optional")}
             error={fieldError(fieldErrors, "postalCode")}
           >
             <input
@@ -336,8 +366,9 @@ export function FamilyMemoryBoxOrderForm({
 
           <Field
             id="mb-country"
-            label="Country"
+            label={t("memoryBox.country")}
             required
+            optionalLabel={t("common.optional")}
             error={fieldError(fieldErrors, "country")}
           >
             <input
@@ -354,14 +385,15 @@ export function FamilyMemoryBoxOrderForm({
       </fieldset>
 
       <fieldset className="memory-box-fieldset">
-        <legend className="memory-box-legend">Estimated contents</legend>
-        <p className="memory-box-hint">
-          Best guesses are fine — we’ll confirm once your box arrives.
-        </p>
+        <legend className="memory-box-legend">
+          {t("memoryBox.estimatedContents")}
+        </legend>
+        <p className="memory-box-hint">{t("memoryBox.estimatesHint")}</p>
         <div className="memory-box-form-grid memory-box-counts">
           <Field
             id="mb-photos"
-            label="Photos"
+            label={t("memoryBox.photos")}
+            optionalLabel={t("common.optional")}
             error={fieldError(fieldErrors, "estimatedPhotos")}
           >
             <input
@@ -379,7 +411,8 @@ export function FamilyMemoryBoxOrderForm({
           </Field>
           <Field
             id="mb-tapes"
-            label="Video tapes"
+            label={t("memoryBox.videoTapes")}
+            optionalLabel={t("common.optional")}
             error={fieldError(fieldErrors, "estimatedVideoTapes")}
           >
             <input
@@ -397,7 +430,8 @@ export function FamilyMemoryBoxOrderForm({
           </Field>
           <Field
             id="mb-reels"
-            label="Film reels"
+            label={t("memoryBox.filmReels")}
+            optionalLabel={t("common.optional")}
             error={fieldError(fieldErrors, "estimatedFilmReels")}
           >
             <input
@@ -415,8 +449,9 @@ export function FamilyMemoryBoxOrderForm({
           </Field>
           <Field
             id="mb-other"
-            label="Other items"
+            label={t("memoryBox.otherItems")}
             optional
+            optionalLabel={t("common.optional")}
             className="memory-box-span-2"
             error={fieldError(fieldErrors, "otherItemsNotes")}
           >
@@ -426,7 +461,7 @@ export function FamilyMemoryBoxOrderForm({
               value={form.otherItemsNotes}
               onChange={(e) => update("otherItemsNotes", e.target.value)}
               className="memory-box-input"
-              placeholder="Slides, CDs, mixed boxes…"
+              placeholder={t("memoryBox.otherItemsPlaceholder")}
             />
           </Field>
         </div>
@@ -434,8 +469,9 @@ export function FamilyMemoryBoxOrderForm({
 
       <Field
         id="mb-notes"
-        label="Special instructions"
+        label={t("memoryBox.specialInstructions")}
         optional
+        optionalLabel={t("common.optional")}
         error={fieldError(fieldErrors, "specialInstructions")}
       >
         <textarea
@@ -445,7 +481,7 @@ export function FamilyMemoryBoxOrderForm({
           value={form.specialInstructions}
           onChange={(e) => update("specialInstructions", e.target.value)}
           className="memory-box-input memory-box-textarea"
-          placeholder="Fragile albums, labeling preferences, anything we should know…"
+          placeholder={t("memoryBox.specialInstructionsPlaceholder")}
         />
       </Field>
 
@@ -462,11 +498,7 @@ export function FamilyMemoryBoxOrderForm({
           onChange={(e) => update("estimatesAcknowledged", e.target.checked)}
           required
         />
-        <span>
-          I understand these counts are approximate, processing takes about 5–8
-          weeks after you receive my filled box, and digitized media will appear
-          automatically in Photos when ready.
-        </span>
+        <span>{t("memoryBox.estimatesAck")}</span>
       </label>
       {fieldError(fieldErrors, "estimatesAcknowledged") ? (
         <p className="memory-box-field-error" role="alert">
@@ -488,11 +520,11 @@ export function FamilyMemoryBoxOrderForm({
         {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
         {busy
           ? stripeCheckoutEnabled
-            ? "Redirecting to payment…"
-            : "Sending…"
+            ? t("memoryBox.submittingPayment")
+            : t("memoryBox.submitting")
           : stripeCheckoutEnabled
-            ? "Pay $199 & order"
-            : "Request Family Memory Box"}
+            ? t("memoryBox.submitPay")
+            : t("memoryBox.submitRequest")}
       </button>
     </form>
   );
@@ -503,6 +535,7 @@ function Field({
   label,
   required,
   optional,
+  optionalLabel,
   error,
   className,
   children,
@@ -511,6 +544,7 @@ function Field({
   label: string;
   required?: boolean;
   optional?: boolean;
+  optionalLabel: string;
   error?: string | null;
   className?: string;
   children: ReactNode;
@@ -521,7 +555,7 @@ function Field({
         {label}
         {required ? <span className="memory-box-req">*</span> : null}
         {optional ? (
-          <span className="memory-box-optional">optional</span>
+          <span className="memory-box-optional">{optionalLabel}</span>
         ) : null}
       </label>
       {children}

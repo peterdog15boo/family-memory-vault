@@ -13,10 +13,12 @@
  *        clean  → ensure permanent originals/ key + status ready
  *        adult  → keep moderation_status adult (lifecycle rejected)
  *        rejected → leave rejected
+ *        needs_human_review → hold for /admin/review (incl. scanner failures)
  *        csam   → quarantine + NCMEC (handled inside processMediaModeration)
  *   4. Mark processing_jobs completed / failed (with retries)
  *
  * Idempotent: already-terminal media rows complete the job without re-scanning.
+ * processing_failed is not terminal — Ops retry re-scans.
  */
 
 import { config as loadEnv } from "dotenv";
@@ -45,6 +47,8 @@ import {
   logModerationDecision,
 } from "@/lib/observability/events";
 import { logger } from "@/lib/observability/logger";
+import { shouldSkipModerationRescan } from "@/lib/moderation/job-gate";
+import { processingFailedModerationResult } from "@/lib/moderation/processing-failed";
 import {
   isOriginalsKey,
   isQuarantineKey,
@@ -74,15 +78,6 @@ export type ProcessModerationJobResult = {
   finalModerationStatus?: ModerationStatus;
   finalLifecycleStatus?: Media["status"];
 };
-
-/** Terminal moderation states — safe to no-op on retry. */
-const TERMINAL_MODERATION = new Set<ModerationStatus>([
-  "clean",
-  "adult",
-  "rejected",
-  "csam_quarantined",
-  "needs_human_review",
-]);
 
 function log(
   level: "info" | "warn" | "error",
@@ -179,47 +174,7 @@ async function ensurePermanentLocation(row: Media): Promise<Media> {
 }
 
 function isAlreadyHandled(row: Media): { handled: boolean; reason?: string } {
-  if (
-    row.moderationStatus === "clean" &&
-    (row.status === "ready" || isOriginalsKey(row.originalKey))
-  ) {
-    return {
-      handled: true,
-      reason: "Media already clean/ready — idempotent skip.",
-    };
-  }
-
-  if (row.moderationStatus === "csam_quarantined") {
-    // Quarantine is terminal for library visibility, but NCMEC may still be pending.
-    if (row.ncmecReportId?.trim()) {
-      return {
-        handled: true,
-        reason:
-          "Media already csam_quarantined with NCMEC report id — idempotent skip.",
-      };
-    }
-    return {
-      handled: false,
-      reason: "csam_quarantined without ncmecReportId — resume reporting",
-    };
-  }
-
-  if (
-    row.moderationStatus === "adult" ||
-    row.moderationStatus === "rejected" ||
-    row.moderationStatus === "needs_human_review"
-  ) {
-    return {
-      handled: true,
-      reason: `Media already ${row.moderationStatus} — idempotent skip.`,
-    };
-  }
-
-  if (TERMINAL_MODERATION.has(row.moderationStatus) && row.status === "ready") {
-    return { handled: true, reason: "Terminal moderation with ready status." };
-  }
-
-  return { handled: false };
+  return shouldSkipModerationRescan(row);
 }
 
 /**
@@ -408,13 +363,14 @@ export async function processModerationJob(
       await maybeEnqueueSceneAnalysisForMedia(finalMedia, {
         source: "worker.moderation.clean",
       });
-      const { queueMediaReadyNotification } = await import(
-        "@/lib/email/lifecycle"
+      const { afterPhotoBecameLibraryReady } = await import(
+        "@/lib/gamification/photo-ready"
       );
-      queueMediaReadyNotification({
+      await afterPhotoBecameLibraryReady({
         userId: finalMedia.userId,
         mediaId: finalMedia.id,
         filename: finalMedia.originalFilename,
+        mediaType: finalMedia.type,
       });
       break;
     }
@@ -526,31 +482,29 @@ export async function drainModerationJobs(
         retryDelayMs: Number(process.env.QUEUE_RETRY_DELAY_MS ?? 30_000),
       });
 
-      // Permanent processing failure: surface a clear rejection so uploads don't
-      // sit forever as pending_moderation with no gallery visibility.
+      // Exhausted retries: hold for human review. Scanner/vendor failure is not
+      // a policy reject — family photos stay out of the gallery until approved.
       if (!willRetry && job.mediaId) {
         try {
           const { updateMediaModerationStatus } = await import(
             "@/lib/moderation/db"
           );
-          await updateMediaModerationStatus(job.mediaId, "rejected", {
-            photodnaMatch: false,
-            provider: "worker.moderation",
-            notes: `Processing failed after ${job.maxAttempts} attempts: ${message.slice(0, 500)}`,
-            labels: {
-              provider: "worker.moderation",
-              labels: ["processing_failed"],
-              raw: { lastError: message.slice(0, 1000) },
-            },
-            raw: { stage: "moderation_worker", lastError: message.slice(0, 1000) },
-          });
-          log("warn", "Marked media rejected after permanent job failure", {
+          await updateMediaModerationStatus(
+            job.mediaId,
+            "needs_human_review",
+            processingFailedModerationResult({
+              attempts: job.attempts,
+              maxAttempts: job.maxAttempts,
+              lastError: message,
+            }),
+          );
+          log("warn", "Held media for human review after processing failure", {
             jobId: job.id,
             mediaId: job.mediaId,
             error: message.slice(0, 300),
           });
         } catch (markError) {
-          log("error", "Failed to mark media rejected after job failure", {
+          log("error", "Failed to hold media for review after job failure", {
             jobId: job.id,
             mediaId: job.mediaId,
             error:

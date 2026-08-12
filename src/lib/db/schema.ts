@@ -90,7 +90,10 @@ export type ProcessingJobStatus = (typeof PROCESSING_JOB_STATUSES)[number];
 export const NOTIFICATION_TYPES = [
   "media_ready",
   "movie_ready",
+  "memory_created",
   "family_invite",
+  "family_milestone",
+  "legacy_milestone",
   "storage_warning",
   "moderation_attention",
   "emergency_access",
@@ -258,10 +261,16 @@ export type UserAccountPreferences = {
   inAppEmergencyAccess?: boolean;
   /** Soft ding when a new in-app notification arrives while the app is open. */
   notificationSoundEnabled?: boolean;
+  /** Celebration chime — muted by default. */
+  celebrationSoundEnabled?: boolean;
+  /** Rare milestone emails (first photo, 50 photos, first family join, 50% legacy). */
+  emailMilestoneCelebrations?: boolean;
   /** Occasional product updates — opt-in only. */
   productUpdatesEmail?: boolean;
   /** Internal dedupe for storage warning emails when in-app is off. */
   lastStorageWarningAt?: string | null;
+  /** UI locale (BCP 47), e.g. en-US. */
+  locale?: string | null;
 };
 
 export const DEFAULT_USER_ACCOUNT_PREFERENCES = {
@@ -274,8 +283,11 @@ export const DEFAULT_USER_ACCOUNT_PREFERENCES = {
   inAppMediaReady: true,
   inAppEmergencyAccess: true,
   notificationSoundEnabled: true,
+  celebrationSoundEnabled: false,
+  emailMilestoneCelebrations: true,
   productUpdatesEmail: false,
   lastStorageWarningAt: null,
+  locale: "en-US",
 } as const satisfies Required<UserAccountPreferences>;
 
 export const users = pgTable(
@@ -788,6 +800,10 @@ export const familyMembers = pgTable(
       .defaultNow()
       .notNull(),
     acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    /** First photo or memory this member added after joining. */
+    firstContributedAt: timestamp("first_contributed_at", {
+      withTimezone: true,
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -967,6 +983,34 @@ export const notifications = pgTable(
     index("notifications_user_read_at_idx").on(table.userId, table.readAt),
     index("notifications_user_created_idx").on(table.userId, table.createdAt),
     index("notifications_type_idx").on(table.type),
+  ],
+);
+
+/**
+ * Browser Web Push subscriptions (one row per device/browser).
+ * Endpoint is unique; re-subscribe upserts keys for the signed-in user.
+ */
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("push_subscriptions_endpoint_uidx").on(table.endpoint),
+    index("push_subscriptions_user_id_idx").on(table.userId),
   ],
 );
 
@@ -1248,6 +1292,11 @@ export const LEGACY_SECURE_ITEM_TYPES = [
   "other",
 ] as const;
 
+export const LEGACY_PLANNING_SENSITIVITIES = [
+  "owner_only",
+  "emergency_ok",
+] as const;
+
 /**
  * Placement sections for Digital Legacy videos.
  * Includes instruction sections plus message / custom placements.
@@ -1288,6 +1337,11 @@ export const legacyVideoSectionTypeEnum = pgEnum(
 export const legacyVideoSourceTypeEnum = pgEnum(
   "legacy_video_source_type",
   LEGACY_VIDEO_SOURCE_TYPES,
+);
+
+export const legacyPlanningSensitivityEnum = pgEnum(
+  "legacy_planning_sensitivity",
+  LEGACY_PLANNING_SENSITIVITIES,
 );
 
 /**
@@ -1391,6 +1445,73 @@ export const legacyInstructionDocuments = pgTable(
     index("legacy_instruction_documents_user_idx").on(table.userId),
     index("legacy_instruction_documents_instruction_idx").on(table.instructionId),
     index("legacy_instruction_documents_document_idx").on(table.documentId),
+  ],
+);
+
+/**
+ * Guided Legacy Planning checklist items (owner-only).
+ * Attach private documents via legacy_planning_item_documents.
+ */
+export const legacyPlanningItems = pgTable(
+  "legacy_planning_items",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    categoryId: text("category_id").notNull(),
+    title: text("title").notNull(),
+    institution: text("institution"),
+    /** Last-four or similar hint — never a full account number. */
+    accountHint: text("account_hint"),
+    locationHint: text("location_hint"),
+    contactName: text("contact_name"),
+    contactPhone: text("contact_phone"),
+    contactEmail: text("contact_email"),
+    notes: text("notes"),
+    sensitivity: legacyPlanningSensitivityEnum("sensitivity")
+      .notNull()
+      .default("emergency_ok"),
+    lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }),
+    sortOrder: integer("sort_order").default(0).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("legacy_planning_items_user_id_idx").on(table.userId),
+    index("legacy_planning_items_user_category_idx").on(
+      table.userId,
+      table.categoryId,
+      table.sortOrder,
+    ),
+  ],
+);
+
+export const legacyPlanningItemDocuments = pgTable(
+  "legacy_planning_item_documents",
+  {
+    itemId: text("item_id")
+      .notNull()
+      .references(() => legacyPlanningItems.id, { onDelete: "cascade" }),
+    documentId: text("document_id")
+      .notNull()
+      .references(() => privateDocuments.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.itemId, table.documentId] }),
+    index("legacy_planning_item_documents_user_idx").on(table.userId),
+    index("legacy_planning_item_documents_item_idx").on(table.itemId),
+    index("legacy_planning_item_documents_document_idx").on(table.documentId),
   ],
 );
 
@@ -1645,6 +1766,30 @@ export const memoryBoxPaymentStatusEnum = pgEnum(
 /** Flat digitizing price in USD cents ($199). */
 export const MEMORY_BOX_PRICE_CENTS = 19_900;
 
+/** Gamification tracks (photos / memories / family / Digital Legacy). */
+export const ACHIEVEMENT_CATEGORIES = [
+  "photos",
+  "memories",
+  "family",
+  "legacy",
+] as const;
+export type AchievementCategory = (typeof ACHIEVEMENT_CATEGORIES)[number];
+
+export const achievementCategoryEnum = pgEnum(
+  "achievement_category",
+  ACHIEVEMENT_CATEGORIES,
+);
+
+export const GAMIFICATION_EVENT_TYPES = [
+  "photo_upload",
+  "memory_create",
+  "invite_sent",
+  "invite_accepted",
+  "member_first_contribution",
+  "legacy_item_added",
+] as const;
+export type GamificationEventType = (typeof GAMIFICATION_EVENT_TYPES)[number];
+
 /**
  * Customer intake for Family Memory Box digitizing service.
  * Public form submissions; optional link to signed-in user.
@@ -1740,6 +1885,263 @@ export const betaNdaAcceptances = pgTable(
   ],
 );
 
+/**
+ * Terms of Service clickwrap acceptances (audit trail).
+ * Gate checks this table when TERMS_REQUIRED=true.
+ */
+export const termsAcceptances = pgTable(
+  "terms_acceptances",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    fullName: text("full_name").notNull(),
+    email: text("email").notNull(),
+    termsVersion: text("terms_version").notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("terms_acceptances_user_id_idx").on(table.userId),
+    index("terms_acceptances_email_idx").on(table.email),
+    index("terms_acceptances_terms_version_idx").on(table.termsVersion),
+    index("terms_acceptances_accepted_at_idx").on(table.acceptedAt),
+    uniqueIndex("terms_acceptances_user_version_uidx").on(
+      table.userId,
+      table.termsVersion,
+    ),
+  ],
+);
+
+/**
+ * In-app beta feedback submissions (bugs + feature requests).
+ * Status workflow: new → triaged → in-progress → resolved.
+ */
+export const FEEDBACK_SUBMISSION_STATUSES = [
+  "new",
+  "triaged",
+  "in-progress",
+  "resolved",
+] as const;
+export type FeedbackSubmissionStatus =
+  (typeof FEEDBACK_SUBMISSION_STATUSES)[number];
+
+export type FeedbackSubmissionContext = {
+  url?: string;
+  pathname?: string;
+  category?: string;
+  browser?: string;
+  os?: string;
+  viewportWidth?: number | null;
+  viewportHeight?: number | null;
+  devicePixelRatio?: number | null;
+  userAgent?: string | null;
+  timestamp?: string | null;
+  consoleErrors?: string[];
+  userId?: string | null;
+  email?: string | null;
+  screenshotKey?: string | null;
+  screenshotContentType?: string | null;
+};
+
+export const feedbackSubmissions = pgTable(
+  "feedback_submissions",
+  {
+    id: text("id").primaryKey(),
+    /** Human-readable reference, e.g. FMV-A1B2C3. */
+    ticketId: text("ticket_id").notNull(),
+    userId: text("user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    email: text("email"),
+    mode: text("mode").notNull(),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    expectedBehavior: text("expected_behavior"),
+    severity: text("severity"),
+    problemStatement: text("problem_statement"),
+    suggestedSolution: text("suggested_solution"),
+    category: text("category").notNull(),
+    status: text("status").$type<FeedbackSubmissionStatus>().notNull().default("new"),
+    pathname: text("pathname").notNull(),
+    pageUrl: text("page_url").notNull(),
+    browser: text("browser"),
+    os: text("os"),
+    viewportWidth: integer("viewport_width"),
+    viewportHeight: integer("viewport_height"),
+    devicePixelRatio: doublePrecision("device_pixel_ratio"),
+    consoleErrors: jsonb("console_errors")
+      .$type<string[]>()
+      .default([])
+      .notNull(),
+    /** Full auto-collected technical context snapshot. */
+    context: jsonb("context")
+      .$type<FeedbackSubmissionContext>()
+      .default({})
+      .notNull(),
+    userAgent: text("user_agent"),
+    clientTimestamp: timestamp("client_timestamp", { withTimezone: true }),
+    /** R2 key under beta-feedback/ when a screenshot was attached. */
+    screenshotKey: text("screenshot_key"),
+    screenshotContentType: text("screenshot_content_type"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("feedback_submissions_ticket_id_uidx").on(table.ticketId),
+    index("feedback_submissions_user_id_idx").on(table.userId),
+    index("feedback_submissions_mode_idx").on(table.mode),
+    index("feedback_submissions_category_idx").on(table.category),
+    index("feedback_submissions_status_idx").on(table.status),
+    index("feedback_submissions_created_at_idx").on(table.createdAt),
+  ],
+);
+
+/** @deprecated Use feedbackSubmissions */
+export const betaFeedback = feedbackSubmissions;
+
+/**
+ * Catalog of unlockable badges. Seeded from ACHIEVEMENT_CATALOG (stable ids).
+ */
+export const achievementDefinitions = pgTable(
+  "achievement_definitions",
+  {
+    id: text("id").primaryKey(),
+    key: text("key").notNull(),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    category: achievementCategoryEnum("category").notNull(),
+    /** Count, percent (0–100), or 1 for a boolean legacy category. */
+    threshold: integer("threshold").notNull(),
+    lpReward: integer("lp_reward").notNull().default(0),
+    badgeImage: text("badge_image"),
+    /** Optional future feature gate, e.g. cinematic_themes. */
+    unlockFeature: text("unlock_feature"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("achievement_definitions_key_uidx").on(table.key),
+    index("achievement_definitions_category_idx").on(table.category),
+    index("achievement_definitions_sort_order_idx").on(
+      table.category,
+      table.sortOrder,
+    ),
+  ],
+);
+
+/**
+ * One unlock per user + achievement (familyId is context when earned).
+ */
+export const userAchievements = pgTable(
+  "user_achievements",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    achievementId: text("achievement_id")
+      .notNull()
+      .references(() => achievementDefinitions.id, { onDelete: "cascade" }),
+    familyId: text("family_id").references(() => families.id, {
+      onDelete: "set null",
+    }),
+    unlockedAt: timestamp("unlocked_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("user_achievements_user_achievement_uidx").on(
+      table.userId,
+      table.achievementId,
+    ),
+    index("user_achievements_user_id_idx").on(table.userId),
+    index("user_achievements_family_id_idx").on(table.familyId),
+    index("user_achievements_unlocked_at_idx").on(table.unlockedAt),
+  ],
+);
+
+/**
+ * Per-user vault journey counters + Legacy Points.
+ * familyId is the last associated household (not part of the unique key).
+ */
+export const userProgress = pgTable(
+  "user_progress",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    familyId: text("family_id").references(() => families.id, {
+      onDelete: "set null",
+    }),
+    photoCount: integer("photo_count").notNull().default(0),
+    memoryCount: integer("memory_count").notNull().default(0),
+    familyMembersCount: integer("family_members_count").notNull().default(0),
+    invitesSentCount: integer("invites_sent_count").notNull().default(0),
+    activeCircleCount: integer("active_circle_count").notNull().default(0),
+    /** Digital Legacy readiness 0–100. */
+    legacyScore: integer("legacy_score").notNull().default(0),
+    totalLp: integer("total_lp").notNull().default(0),
+    level: integer("level").notNull().default(1),
+    lastActiveAt: timestamp("last_active_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    streakDays: integer("streak_days").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("user_progress_user_id_uidx").on(table.userId),
+    index("user_progress_family_id_idx").on(table.familyId),
+    index("user_progress_level_idx").on(table.level),
+  ],
+);
+
+/**
+ * Household rollup for a shared vault level.
+ */
+export const familyProgress = pgTable(
+  "family_progress",
+  {
+    familyId: text("family_id")
+      .primaryKey()
+      .references(() => families.id, { onDelete: "cascade" }),
+    totalPhotos: integer("total_photos").notNull().default(0),
+    totalMemories: integer("total_memories").notNull().default(0),
+    activeMembers: integer("active_members").notNull().default(0),
+    contributingMembers: integer("contributing_members").notNull().default(0),
+    averageLegacyScore: integer("average_legacy_score").notNull().default(0),
+    vaultLevel: integer("vault_level").notNull().default(1),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("family_progress_vault_level_idx").on(table.vaultLevel),
+  ],
+);
+
 /* -------------------------------------------------------------------------- */
 /* Relations                                                                  */
 /* -------------------------------------------------------------------------- */
@@ -1749,6 +2151,9 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   memories: many(memories),
   movies: many(movies),
   betaNdaAcceptances: many(betaNdaAcceptances),
+  termsAcceptances: many(termsAcceptances),
+  betaFeedback: many(feedbackSubmissions),
+  feedbackSubmissions: many(feedbackSubmissions),
   people: many(people),
   faces: many(faces),
   moderationEvents: many(moderationEvents),
@@ -1757,6 +2162,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   subscriptions: many(subscriptions),
   usageRecords: many(usageRecords),
   notifications: many(notifications),
+  pushSubscriptions: many(pushSubscriptions),
   adminAuditLogs: many(adminAuditLogs),
   assistantConversations: many(assistantConversations),
   assistantActions: many(assistantActions),
@@ -1774,6 +2180,8 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     relationName: "emergencyAccessDesignatee",
   }),
   sensitiveAccessEvents: many(sensitiveAccessEvents),
+  userProgress: one(userProgress),
+  userAchievements: many(userAchievements),
 }));
 
 export const adminAuditLogsRelations = relations(adminAuditLogs, ({ one }) => ({
@@ -1793,12 +2201,41 @@ export const betaNdaAcceptancesRelations = relations(
   }),
 );
 
+export const termsAcceptancesRelations = relations(
+  termsAcceptances,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [termsAcceptances.userId],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const betaFeedbackRelations = relations(feedbackSubmissions, ({ one }) => ({
+  user: one(users, {
+    fields: [feedbackSubmissions.userId],
+    references: [users.id],
+  }),
+}));
+
+export const feedbackSubmissionsRelations = betaFeedbackRelations;
+
 export const notificationsRelations = relations(notifications, ({ one }) => ({
   user: one(users, {
     fields: [notifications.userId],
     references: [users.id],
   }),
 }));
+
+export const pushSubscriptionsRelations = relations(
+  pushSubscriptions,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [pushSubscriptions.userId],
+      references: [users.id],
+    }),
+  }),
+);
 
 export const mediaRelations = relations(media, ({ one, many }) => ({
   user: one(users, {
@@ -1902,6 +2339,9 @@ export const familiesRelations = relations(families, ({ one, many }) => ({
   members: many(familyMembers),
   subscriptions: many(subscriptions),
   usageRecords: many(usageRecords),
+  familyProgress: one(familyProgress),
+  userProgressRows: many(userProgress),
+  userAchievements: many(userAchievements),
 }));
 
 export const familyMembersRelations = relations(familyMembers, ({ one }) => ({
@@ -2089,6 +2529,49 @@ export const emergencyAccessDesignationsRelations = relations(
   }),
 );
 
+export const achievementDefinitionsRelations = relations(
+  achievementDefinitions,
+  ({ many }) => ({
+    unlocks: many(userAchievements),
+  }),
+);
+
+export const userAchievementsRelations = relations(
+  userAchievements,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [userAchievements.userId],
+      references: [users.id],
+    }),
+    achievement: one(achievementDefinitions, {
+      fields: [userAchievements.achievementId],
+      references: [achievementDefinitions.id],
+    }),
+    family: one(families, {
+      fields: [userAchievements.familyId],
+      references: [families.id],
+    }),
+  }),
+);
+
+export const userProgressRelations = relations(userProgress, ({ one }) => ({
+  user: one(users, {
+    fields: [userProgress.userId],
+    references: [users.id],
+  }),
+  family: one(families, {
+    fields: [userProgress.familyId],
+    references: [families.id],
+  }),
+}));
+
+export const familyProgressRelations = relations(familyProgress, ({ one }) => ({
+  family: one(families, {
+    fields: [familyProgress.familyId],
+    references: [families.id],
+  }),
+}));
+
 /* -------------------------------------------------------------------------- */
 /* Inferred types                                                             */
 /* -------------------------------------------------------------------------- */
@@ -2125,6 +2608,8 @@ export type StripeWebhookEvent = typeof stripeWebhookEvents.$inferSelect;
 export type NewStripeWebhookEvent = typeof stripeWebhookEvents.$inferInsert;
 export type Notification = typeof notifications.$inferSelect;
 export type NewNotification = typeof notifications.$inferInsert;
+export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
+export type NewPushSubscriptionRow = typeof pushSubscriptions.$inferInsert;
 export type AdminAuditLog = typeof adminAuditLogs.$inferSelect;
 export type NewAdminAuditLog = typeof adminAuditLogs.$inferInsert;
 export type AssistantConversationRow =
@@ -2149,6 +2634,12 @@ export type LegacyInstructionDocument =
   typeof legacyInstructionDocuments.$inferSelect;
 export type NewLegacyInstructionDocument =
   typeof legacyInstructionDocuments.$inferInsert;
+export type LegacyPlanningItem = typeof legacyPlanningItems.$inferSelect;
+export type NewLegacyPlanningItem = typeof legacyPlanningItems.$inferInsert;
+export type LegacyPlanningItemDocument =
+  typeof legacyPlanningItemDocuments.$inferSelect;
+export type NewLegacyPlanningItemDocument =
+  typeof legacyPlanningItemDocuments.$inferInsert;
 export type LegacySecureItem = typeof legacySecureItems.$inferSelect;
 export type NewLegacySecureItem = typeof legacySecureItems.$inferInsert;
 export type LegacyVideo = typeof legacyVideos.$inferSelect;
@@ -2163,6 +2654,20 @@ export type MemoryBoxOrder = typeof memoryBoxOrders.$inferSelect;
 export type NewMemoryBoxOrder = typeof memoryBoxOrders.$inferInsert;
 export type BetaNdaAcceptance = typeof betaNdaAcceptances.$inferSelect;
 export type NewBetaNdaAcceptance = typeof betaNdaAcceptances.$inferInsert;
+export type TermsAcceptance = typeof termsAcceptances.$inferSelect;
+export type NewTermsAcceptance = typeof termsAcceptances.$inferInsert;
+export type BetaFeedback = typeof feedbackSubmissions.$inferSelect;
+export type NewBetaFeedback = typeof feedbackSubmissions.$inferInsert;
+export type FeedbackSubmission = typeof feedbackSubmissions.$inferSelect;
+export type NewFeedbackSubmission = typeof feedbackSubmissions.$inferInsert;
+export type AchievementDefinition = typeof achievementDefinitions.$inferSelect;
+export type NewAchievementDefinition = typeof achievementDefinitions.$inferInsert;
+export type UserAchievement = typeof userAchievements.$inferSelect;
+export type NewUserAchievement = typeof userAchievements.$inferInsert;
+export type UserProgress = typeof userProgress.$inferSelect;
+export type NewUserProgress = typeof userProgress.$inferInsert;
+export type FamilyProgress = typeof familyProgress.$inferSelect;
+export type NewFamilyProgress = typeof familyProgress.$inferInsert;
 
 /** @deprecated Use ProcessingJob — kept for queue helper compatibility */
 export type QueueJob = ProcessingJob;

@@ -6,6 +6,8 @@ import Link from "next/link";
 import { AuthVisualCollage } from "@/components/auth/AuthVisualCollage";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { CinematicSection } from "@/components/cinematic";
+import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { LANDING_MEDIA } from "@/content/landing-media";
 import {
@@ -58,39 +60,9 @@ export function AuthPageShell({
 
   if (effective === "original") {
     return (
-      <div className="auth-page">
-        <aside className="auth-page-media">
-          <AuthVisualCollage />
-          <div className="auth-page-media-copy">
-            <p className="auth-page-eyebrow">{eyebrow}</p>
-            <h1 className="auth-page-media-title">{title}</h1>
-            <p className="auth-page-media-support">{support}</p>
-          </div>
-        </aside>
-
-        <div className="auth-page-form">
-          <div className="auth-page-form-inner">
-            <div className="mb-6 lg:hidden">
-              <p className="auth-page-eyebrow">{eyebrow}</p>
-              <h1 className="mt-2 font-display text-2xl tracking-tight text-ink">
-                {title}
-              </h1>
-              <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-                {support}
-              </p>
-            </div>
-            {children}
-            <p className="mt-6 text-center text-sm text-ink-muted">
-              <Link
-                href="/"
-                className="font-medium text-accent-deep hover:underline"
-              >
-                Back to home
-              </Link>
-            </p>
-          </div>
-        </div>
-      </div>
+      <AuthOriginalFrame eyebrow={eyebrow} title={title} support={support}>
+        {children}
+      </AuthOriginalFrame>
     );
   }
 
@@ -98,6 +70,59 @@ export function AuthPageShell({
     <AuthCinematicFrame eyebrow={eyebrow} title={title} support={support}>
       {children}
     </AuthCinematicFrame>
+  );
+}
+
+function AuthOriginalFrame({
+  children,
+  eyebrow,
+  title,
+  support,
+}: {
+  children: ReactNode;
+  eyebrow: string;
+  title: string;
+  support: string;
+}) {
+  const t = useTranslations();
+
+  return (
+    <div className="auth-page">
+      <aside className="auth-page-media">
+        <AuthVisualCollage />
+        <div className="auth-page-media-copy">
+          <p className="auth-page-eyebrow">{eyebrow}</p>
+          <h1 className="auth-page-media-title">{title}</h1>
+          <p className="auth-page-media-support">{support}</p>
+        </div>
+      </aside>
+
+      <div className="auth-page-form">
+        <div className="auth-page-form-inner">
+          <div className="mb-5 flex justify-end">
+            <LanguageSwitcher compact />
+          </div>
+          <div className="mb-6 lg:hidden">
+            <p className="auth-page-eyebrow">{eyebrow}</p>
+            <h1 className="mt-2 font-display text-2xl tracking-tight text-ink">
+              {title}
+            </h1>
+            <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+              {support}
+            </p>
+          </div>
+          {children}
+          <p className="mt-6 text-center text-sm text-ink-muted">
+            <Link
+              href="/"
+              className="font-medium text-accent-deep hover:underline"
+            >
+              {t("pages.backToHome")}
+            </Link>
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -112,6 +137,7 @@ function AuthCinematicFrame({
   title: string;
   support: string;
 }) {
+  const t = useTranslations();
   // Dedicated photographic still — not the soft hero loop, which reads as a
   // gradient under dark veils and fails the “real full-bleed image” bar.
   const photo = LANDING_MEDIA.signIn.image;
@@ -136,13 +162,16 @@ function AuthCinematicFrame({
         <Link
           href="/"
           className="auth-cinematic-brand"
-          aria-label="Family Memory Vault"
+          aria-label={t("meta.appName")}
         >
           <BrandLogo tone="onDark" size="lg" priority decorative />
         </Link>
-        <Link href="/" className="auth-cinematic-home">
-          Back to home
-        </Link>
+        <div className="auth-cinematic-top-actions flex items-center gap-3">
+          <LanguageSwitcher compact tone="onDark" />
+          <Link href="/" className="auth-cinematic-home">
+            {t("pages.backToHome")}
+          </Link>
+        </div>
       </header>
 
       <div className="auth-cinematic-stage">

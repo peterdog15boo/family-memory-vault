@@ -10,6 +10,7 @@ import type { AccountUsageSummary } from "@/lib/billing/account-usage";
 import type { MediaReviewSummary, SafeMediaItem } from "@/lib/media/queries";
 import type { MemoryListItem } from "@/lib/memories";
 import type { OnboardingProgress } from "@/lib/onboarding/types";
+import type { JourneyBoardSnapshot } from "@/lib/gamification/journey-board";
 import {
   APP_THEME_DEFAULT,
   isAppTheme,
@@ -28,6 +29,7 @@ type DashboardHomeProps = {
   usage: AccountUsageSummary;
   onboarding: OnboardingProgress;
   stripeConfigured: boolean;
+  journeyBoard: JourneyBoardSnapshot;
 };
 
 /**

@@ -282,12 +282,36 @@ export async function generateMovie(
       encoder: encoded.encoder,
     });
 
+    const memoryKind =
+      movie.style === "holiday" ? "holiday_compilation" : "film";
+    let celebration: import("@/lib/gamification/types").JourneyCelebrationPayload | null =
+      null;
+    try {
+      const { awardMemoryCreatedCelebration } = await import(
+        "@/lib/gamification/memory-created"
+      );
+      celebration = await awardMemoryCreatedCelebration({
+        userId,
+        memoryId: movie.memoryId ?? undefined,
+        movieId,
+        memoryKind,
+      });
+    } catch (error) {
+      console.error("[gamification] movie ready memory award failed", {
+        userId,
+        movieId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     const { queueMovieReadyLifecycle } = await import("@/lib/email/lifecycle");
     queueMovieReadyLifecycle({
       userId,
       movieId,
       memoryId: movie.memoryId,
       title: movie.title || "Your memory movie",
+      memoryKind,
+      celebration,
     });
 
     return {

@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { createPortal } from "react-dom";
 import { Check, ImagePlus, Loader2, X } from "lucide-react";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { MediaThumb } from "@/components/memories/MediaThumb";
+import { useOverlayA11y } from "@/hooks/useOverlayA11y";
 import type { SerializedSafeMedia } from "@/lib/people/queries";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +37,7 @@ export function AddPhotosToPersonSheet({
   onClose,
   onAssigned,
 }: AddPhotosToPersonSheetProps) {
+  const t = useTranslations();
   const [mounted, setMounted] = useState(false);
   const [library, setLibrary] = useState<SerializedSafeMedia[]>([]);
   const [loadingLibrary, setLoadingLibrary] = useState(false);
@@ -60,7 +63,7 @@ export function AddPhotosToPersonSheet({
         own?: SerializedSafeMedia[];
       };
       if (!res.ok) {
-        throw new Error(data.error || "Could not load your library.");
+        throw new Error(data.error || t("people.errorLoadLibrary"));
       }
       const rows = data.items ?? data.own ?? [];
       setLibrary(
@@ -68,12 +71,12 @@ export function AddPhotosToPersonSheet({
       );
     } catch (err) {
       setLoadError(
-        err instanceof Error ? err.message : "Could not load your library.",
+        err instanceof Error ? err.message : t("people.errorLoadLibrary"),
       );
     } finally {
       setLoadingLibrary(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!open) return;
@@ -116,7 +119,7 @@ export function AddPhotosToPersonSheet({
           skipped?: { mediaId: string; reason: string }[];
         };
         if (!res.ok || !data.person) {
-          throw new Error(data.error || "Could not add photos or videos.");
+          throw new Error(data.error || t("people.errorAddPhotos"));
         }
         onAssigned({
           person: data.person,
@@ -127,22 +130,30 @@ export function AddPhotosToPersonSheet({
         onClose();
       } catch (err) {
         setSaveError(
-          err instanceof Error
-            ? err.message
-            : "Could not add photos or videos.",
+          err instanceof Error ? err.message : t("people.errorAddPhotos"),
         );
       }
     });
   }
 
+  const sheetRef = useRef<HTMLDivElement>(null);
+  useOverlayA11y({
+    open: open && mounted,
+    onClose,
+    containerRef: sheetRef,
+    escapeEnabled: !pending,
+  });
+
   if (!open || !mounted) return null;
 
   return createPortal(
     <div
+      ref={sheetRef}
       className="fixed inset-0 z-[100] flex items-end justify-center bg-ink/50 p-4 backdrop-blur-sm sm:items-center"
       role="dialog"
       aria-modal="true"
-      aria-label={`Add photos or videos to ${personName}`}
+      aria-labelledby="add-photos-person-title"
+      tabIndex={-1}
       onClick={() => !pending && onClose()}
     >
       <div
@@ -151,20 +162,22 @@ export function AddPhotosToPersonSheet({
       >
         <div className="flex items-center justify-between border-b border-ink/8 px-4 py-3">
           <div>
-            <h3 className="font-display text-lg text-ink">
-              Add photos / videos
+            <h3
+              id="add-photos-person-title"
+              className="font-display text-lg text-ink"
+            >
+              {t("people.addPhotosTitle")}
             </h3>
             <p className="text-xs text-ink-muted">
-              Choose clean, ready photos or videos to attach to {personName}.
-              Works even when face detection missed them.
+              {t("people.addPhotosLead", { name: personName })}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
             disabled={pending}
-            className="rounded-md p-2 text-ink-muted hover:bg-ink/5 hover:text-ink disabled:opacity-50"
-            aria-label="Close"
+            className="rounded-md p-2 text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-50"
+            aria-label={t("common.close")}
           >
             <X className="size-5" />
           </button>
@@ -181,9 +194,9 @@ export function AddPhotosToPersonSheet({
             <div className="py-10 text-center">
               <ImagePlus className="mx-auto size-8 text-ink/25" aria-hidden />
               <p className="mt-3 text-sm text-ink-muted">
-                No more ready photos or videos to add.{" "}
+                {t("people.noMoreToAdd")}{" "}
                 <Link href="/upload" className="text-accent-deep underline">
-                  Upload more
+                  {t("people.uploadMore")}
                 </Link>
               </p>
             </div>
@@ -191,15 +204,22 @@ export function AddPhotosToPersonSheet({
             <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
               {addable.map((item) => {
                 const selected = pickedIds.includes(item.id);
+                const mediaName = item.originalFilename || item.id;
+                const ariaLabel =
+                  item.type === "video"
+                    ? selected
+                      ? t("people.deselectVideo", { name: mediaName })
+                      : t("people.selectVideo", { name: mediaName })
+                    : selected
+                      ? t("people.deselectPhoto", { name: mediaName })
+                      : t("people.selectPhoto", { name: mediaName });
                 return (
                   <li key={item.id}>
                     <button
                       type="button"
                       onClick={() => toggle(item.id)}
                       aria-pressed={selected}
-                      aria-label={`${selected ? "Deselect" : "Select"} ${
-                        item.type === "video" ? "video" : "photo"
-                      } ${item.originalFilename || item.id}`}
+                      aria-label={ariaLabel}
                       className={cn(
                         "relative aspect-square w-full overflow-hidden rounded-lg border",
                         selected
@@ -229,7 +249,7 @@ export function AddPhotosToPersonSheet({
         <div className="flex items-center justify-between gap-3 border-t border-ink/8 px-4 py-3">
           <div className="min-w-0">
             <p className="text-xs text-ink-muted">
-              {pickedIds.length} selected
+              {t("memories.selectedCount", { count: pickedIds.length })}
             </p>
             {saveError ? (
               <p className="mt-0.5 truncate text-xs text-red-800">{saveError}</p>
@@ -246,7 +266,7 @@ export function AddPhotosToPersonSheet({
             ) : (
               <ImagePlus className="size-3.5" aria-hidden />
             )}
-            Add to {personName}
+            {t("people.addToPersonName", { name: personName })}
           </button>
         </div>
       </div>

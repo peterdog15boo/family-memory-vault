@@ -127,6 +127,14 @@ export function assertProductionEnv(): void {
       "RESEND_API_KEY unset — transactional email will log instead of send",
     );
   }
+  if (
+    missing("WEB_PUSH_VAPID_PUBLIC_KEY") ||
+    missing("WEB_PUSH_VAPID_PRIVATE_KEY")
+  ) {
+    warnings.push(
+      "WEB_PUSH_VAPID_* unset — lock-screen Web Push is off (in-app + email still work)",
+    );
+  }
 
   for (const warning of warnings) {
     logger.warn("env.production_warning", { message: warning });

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import { AssistantChat } from "@/components/assistant/AssistantChat";
 import { useAskAiOptional } from "@/components/assistant/AskAiContext";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { AppPageIntro } from "@/components/ui/AppPageIntro";
 
 type AssistantPageClientProps = {
@@ -23,6 +24,7 @@ export function AssistantPageClient({
 }: AssistantPageClientProps) {
   const askAi = useAskAiOptional();
   const router = useRouter();
+  const t = useTranslations();
 
   useEffect(() => {
     if (!askAi) return;
@@ -40,9 +42,9 @@ export function AssistantPageClient({
     return (
       <div className="app-page mx-auto max-w-lg py-16 text-center">
         <Sparkles className="mx-auto size-8 text-accent" aria-hidden />
-        <p className="mt-3 font-display text-xl text-ink">Opening Ask AI…</p>
+        <p className="mt-3 font-display text-xl text-ink">{t("assistant.opening")}</p>
         <p className="mt-2 text-sm text-ink-muted">
-          You can also use Ask AI from the header, sidebar, or floating button.
+          {t("assistant.openingHint")}
         </p>
       </div>
     );
@@ -55,11 +57,11 @@ export function AssistantPageClient({
         eyebrow={
           <>
             <Sparkles className="size-3.5" aria-hidden />
-            Here to help
+            {t("assistant.eyebrow")}
           </>
         }
-        title="Ask AI"
-        description="Tell me what you’re looking for in plain words. I’ll help find photos and turn them into a memory or movie."
+        title={t("assistant.title")}
+        description={t("assistant.description")}
       />
 
       <div className="app-page app-page--assistant mx-auto max-w-4xl">

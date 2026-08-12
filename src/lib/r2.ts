@@ -57,6 +57,8 @@ export const R2_PREFIXES = {
    */
   privateLegacyVideos: "private-legacy-videos/",
   privateLegacyVideosTemp: "private-legacy-videos-temp/",
+  /** Beta feedback screenshots (admin-only evidence; never gallery-served). */
+  betaFeedback: "beta-feedback/",
 } as const;
 
 export type R2Prefix = (typeof R2_PREFIXES)[keyof typeof R2_PREFIXES];

@@ -2,6 +2,8 @@
  * Client types mirroring /api/assistant turn payloads.
  */
 
+import type { TranslateFn } from "@/lib/i18n";
+
 export type AssistantUnderstandingView = {
   action: string;
   people: string[];
@@ -85,6 +87,16 @@ export type AssistantChatMessage = {
   turn?: AssistantTurnView;
 };
 
+export const ASSISTANT_EXAMPLE_PROMPT_KEYS = [
+  "assistant.examples.beach",
+  "assistant.examples.invite",
+  "assistant.examples.cake",
+  "assistant.examples.createMemory",
+  "assistant.examples.slideshow",
+  "assistant.examples.moreMovies",
+] as const;
+
+/** @deprecated Prefer ASSISTANT_EXAMPLE_PROMPT_KEYS + t() */
 export const ASSISTANT_EXAMPLE_PROMPTS = [
   "Show me beach photos",
   "How do I invite family members?",
@@ -93,3 +105,7 @@ export const ASSISTANT_EXAMPLE_PROMPTS = [
   "Create a slideshow of summer photos",
   "How can I make more movies this month?",
 ] as const;
+
+export function getAssistantExamplePrompts(t: TranslateFn): string[] {
+  return ASSISTANT_EXAMPLE_PROMPT_KEYS.map((key) => t(key));
+}

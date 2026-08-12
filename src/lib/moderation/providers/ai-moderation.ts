@@ -290,22 +290,65 @@ export function moderateWithAiMock(keyOrHint?: string): AiModerationProviderResu
 /* AWS Rekognition                                                            */
 /* -------------------------------------------------------------------------- */
 
-const NUDITY_LABEL_HINTS = [
-  "nudity",
+/** Explicit sexual content — may auto-adult / reject. */
+const EXPLICIT_NUDITY_LABEL_HINTS = [
   "explicit nudity",
   "graphic male nudity",
   "graphic female nudity",
   "sexual activity",
   "illustrated explicit nudity",
   "adult toys",
-  "partial nudity",
+  "sex toys",
+  "exposed female nipple",
+  "exposed male genitalia",
+  "exposed female genitalia",
+] as const;
+
+/**
+ * Beach / pool / swimsuit family photos. Rekognition often tags these as
+ * "Non-Explicit Nudity" or "Partially Exposed Female Breast" (bikini).
+ * Must not drive auto-adult or auto-reject.
+ */
+const FAMILY_SAFE_BEACHWEAR_HINTS = [
   "suggestive",
-  "female swimwear or underwear",
-  "male swimwear or underwear",
-  "barechested male",
+  "swimwear",
+  "underwear",
+  "barechested",
+  "bare chest",
   "revealing clothes",
-  "sexual situations",
-];
+  "non-explicit",
+  "partial nudity",
+  "partially exposed",
+  "exposed male nipple",
+  "implied nudity",
+  "obstructed intimate",
+  "kissing",
+] as const;
+
+function normalizeLabelName(name: string): string {
+  return name.toLowerCase().trim();
+}
+
+function isFamilySafeBeachwearLabel(name: string): boolean {
+  const n = normalizeLabelName(name);
+  if (!n) return false;
+  if (n.includes("non-explicit")) return true;
+  return FAMILY_SAFE_BEACHWEAR_HINTS.some((hint) => n.includes(hint));
+}
+
+function isExplicitSexualLabel(name: string): boolean {
+  const n = normalizeLabelName(name);
+  if (!n || isFamilySafeBeachwearLabel(n)) return false;
+  return EXPLICIT_NUDITY_LABEL_HINTS.some((hint) => n === hint || n.includes(hint));
+}
+
+function nameMatchesAnyHint(
+  name: string,
+  hints: readonly string[],
+): boolean {
+  const n = normalizeLabelName(name);
+  return hints.some((hint) => n === hint || n.includes(hint));
+}
 
 const VIOLENCE_LABEL_HINTS = [
   "violence",
@@ -323,7 +366,7 @@ const UNDERAGE_LABEL_HINTS = [
   "explicit nudity of a minor",
 ];
 
-function scoreFromRekognitionLabels(
+export function scoreFromRekognitionLabels(
   labels: Array<{ Name?: string; ParentName?: string; Confidence?: number }>,
 ): AiModerationProviderResult {
   const detailed: AiSafetyLabel[] = labels
@@ -343,13 +386,15 @@ function scoreFromRekognitionLabels(
     const name = label.name.toLowerCase();
     categories[label.name] = label.score;
 
-    if (NUDITY_LABEL_HINTS.some((h) => name.includes(h) || h.includes(name))) {
+    if (isExplicitSexualLabel(name)) {
       nudityScores.push(label.score);
+    } else if (isFamilySafeBeachwearLabel(name)) {
+      categories[`beachwear:${label.name}`] = label.score;
     }
-    if (VIOLENCE_LABEL_HINTS.some((h) => name.includes(h))) {
+    if (nameMatchesAnyHint(name, VIOLENCE_LABEL_HINTS)) {
       violenceScores.push(label.score);
     }
-    if (UNDERAGE_LABEL_HINTS.some((h) => name.includes(h))) {
+    if (nameMatchesAnyHint(name, UNDERAGE_LABEL_HINTS)) {
       csamScores.push(label.score);
     }
   }
@@ -528,7 +573,8 @@ async function moderateWithGoogleVision(
   const medical = likelihoodScore(annotation.medical);
   const spoof = likelihoodScore(annotation.spoof);
 
-  const nudityScore = maxScore([adult, racy]);
+  // Racy/swimwear alone is common on family beach photos — do not auto-block.
+  const nudityScore = adult;
   // SafeSearch has no CSAM class — leave at 0; PhotoDNA covers known hashes.
   const csamScore = 0;
 
@@ -591,7 +637,9 @@ function scoreHiveClasses(
     categories[label.name] = label.score;
     const name = label.name.toLowerCase();
 
-    if (
+    if (isFamilySafeBeachwearLabel(name)) {
+      categories[`beachwear:${label.name}`] = label.score;
+    } else if (
       name.includes("nudity") ||
       name.includes("nsfw") ||
       name.includes("sexual") ||

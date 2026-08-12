@@ -2,16 +2,22 @@ import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { ArrowLeft, Upload } from "lucide-react";
+import { PhotosJourneyTrack } from "@/components/gamification/PhotosJourneyTrack";
 import { PaginatedMediaLibrary } from "@/components/media/PaginatedMediaLibrary";
 import { AppPageIntro } from "@/components/ui/AppPageIntro";
 import { HintTooltip } from "@/components/ui/HintTooltip";
-import { COPY } from "@/lib/copy";
+import { getTranslations } from "@/lib/i18n/server";
 import {
   getSafeMediaLibrary,
   MEDIA_LIBRARY_INITIAL_SIZE,
   MEDIA_PAGE_SIZE,
 } from "@/lib/media/queries";
 import { serializeSafeMediaItem } from "@/lib/memories";
+import {
+  emptyJourneySnapshot,
+  getUserJourney,
+  photosSnapshotFromJourney,
+} from "@/lib/gamification";
 
 /**
  * Full clean media library — own uploads plus family-shared clean media.
@@ -22,6 +28,12 @@ export default async function MediaLibraryPage() {
   if (!isAuthenticated || !userId) {
     redirect("/");
   }
+
+  const t = await getTranslations();
+  const journey = await getUserJourney(userId).catch(() => null);
+  const photosJourney = journey
+    ? photosSnapshotFromJourney(journey)
+    : emptyJourneySnapshot("photos");
 
   let library;
   try {
@@ -40,18 +52,18 @@ export default async function MediaLibraryPage() {
     <>
       <AppPageIntro
         slot="media"
-        eyebrow="Your photos"
+        eyebrow={t("pages.mediaEyebrow")}
         title={
           <>
-            Your photos{" "}
-            <HintTooltip tip={COPY.tips.moderation} label="About photo readiness" />
+            {t("pages.mediaTitle")}{" "}
+            <HintTooltip tip={t("tips.moderation")} label={t("pages.mediaReadiness")} />
           </>
         }
-        description="Browse the photos and videos you’ve saved — ready for albums and movies."
+        description={t("pages.mediaDescription")}
         actions={
           <Link href="/upload" className="ui-btn ui-btn-primary ui-btn-lg">
             <Upload className="size-4" aria-hidden />
-            Add photos
+            {t("pages.mediaAdd")}
           </Link>
         }
       />
@@ -62,8 +74,10 @@ export default async function MediaLibraryPage() {
           className="inline-flex items-center gap-1.5 text-sm text-ink-muted transition hover:text-ink"
         >
           <ArrowLeft className="size-3.5" aria-hidden />
-          Back to vault
+          {t("pages.backToVault")}
         </Link>
+
+        <PhotosJourneyTrack initial={photosJourney} />
 
         <PaginatedMediaLibrary
           initialOwn={own}

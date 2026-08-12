@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { Loader2, UserRound } from "lucide-react";
 import { PersonAvatar } from "@/components/people/PersonAvatar";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 import type {
   SerializedMediaFaceLabel,
   SerializedPersonListItem,
@@ -25,6 +26,7 @@ export function FaceLabelEditor({
   onChanged,
   className,
 }: FaceLabelEditorProps) {
+  const t = useTranslations();
   const [faces, setFaces] = useState<SerializedMediaFaceLabel[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -44,13 +46,15 @@ export function FaceLabelEditor({
           faces?: SerializedMediaFaceLabel[];
         };
         if (!response.ok) {
-          throw new Error(data.error || "Could not load faces.");
+          throw new Error(data.error || t("people.errorLoadFaces"));
         }
         if (!cancelled) setFaces(data.faces ?? []);
       })
       .catch((err) => {
         if (!cancelled) {
-          setLoadError(err instanceof Error ? err.message : "Load failed.");
+          setLoadError(
+            err instanceof Error ? err.message : t("people.errorLoadFailed"),
+          );
         }
       })
       .finally(() => {
@@ -60,7 +64,7 @@ export function FaceLabelEditor({
     return () => {
       cancelled = true;
     };
-  }, [mediaId]);
+  }, [mediaId, t]);
 
   function saveLabel(faceId: string, personId: string | null) {
     setSaveError(null);
@@ -77,12 +81,14 @@ export function FaceLabelEditor({
           faces?: SerializedMediaFaceLabel[];
         };
         if (!response.ok) {
-          throw new Error(data.error || "Could not update label.");
+          throw new Error(data.error || t("people.errorUpdateLabel"));
         }
         if (data.faces) setFaces(data.faces);
         onChanged?.();
       } catch (err) {
-        setSaveError(err instanceof Error ? err.message : "Update failed.");
+        setSaveError(
+          err instanceof Error ? err.message : t("people.errorUpdateFailed"),
+        );
       } finally {
         setBusyFaceId(null);
       }
@@ -93,7 +99,7 @@ export function FaceLabelEditor({
     return (
       <div className={cn("flex items-center gap-2 px-4 py-3 text-sm text-ink-muted", className)}>
         <Loader2 className="size-3.5 animate-spin" aria-hidden />
-        Loading faces…
+        {t("people.loadingFaces")}
       </div>
     );
   }
@@ -107,12 +113,7 @@ export function FaceLabelEditor({
   if (faces.length === 0) {
     return (
       <div className={cn("border-t border-ink/8 px-4 py-3", className)}>
-        <p className="text-sm text-ink-muted">
-          No faces detected on this item. You can still assign the whole photo
-          or video to someone from People → Add photos / videos, or use{" "}
-          <span className="font-medium text-ink">Add to person</span> in the
-          media viewer.
-        </p>
+        <p className="text-sm text-ink-muted">{t("people.noFacesDetected")}</p>
         {people.length > 0 ? (
           <ManualWholePhotoAssign
             mediaId={mediaId}
@@ -127,11 +128,9 @@ export function FaceLabelEditor({
   return (
     <div className={cn("border-t border-ink/8 px-4 py-3", className)}>
       <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
-        Who is in this?
+        {t("people.whoIsInThis")}
       </p>
-      <p className="mt-1 text-xs text-ink-muted">
-        Change a label if automatic matching got it wrong.
-      </p>
+      <p className="mt-1 text-xs text-ink-muted">{t("people.changeLabelHint")}</p>
       {saveError ? (
         <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-800">
           {saveError}
@@ -150,7 +149,7 @@ export function FaceLabelEditor({
               />
               <div className="min-w-0 flex-1">
                 <label className="block text-left">
-                  <span className="sr-only">Person for this face</span>
+                  <span className="sr-only">{t("people.personForFace")}</span>
                   <select
                     value={face.personId ?? ""}
                     disabled={busy}
@@ -160,7 +159,7 @@ export function FaceLabelEditor({
                     }}
                     className="w-full rounded-md border border-ink/15 bg-canvas px-2.5 py-1.5 text-sm outline-none ring-accent/30 focus:ring-2 disabled:opacity-60"
                   >
-                    <option value="">Unlabeled</option>
+                    <option value="">{t("people.unlabeled")}</option>
                     {people.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.displayName}
@@ -191,6 +190,7 @@ function ManualWholePhotoAssign({
   people: SerializedPersonListItem[];
   onChanged?: () => void;
 }) {
+  const t = useTranslations();
   const [personId, setPersonId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -210,7 +210,7 @@ function ManualWholePhotoAssign({
           skipped?: { reason: string }[];
         };
         if (!res.ok) {
-          throw new Error(data.error || "Could not assign to person.");
+          throw new Error(data.error || t("people.errorAssign"));
         }
         if (data.skipped?.[0]) {
           throw new Error(data.skipped[0].reason);
@@ -218,7 +218,7 @@ function ManualWholePhotoAssign({
         onChanged?.();
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : "Could not assign to person.",
+          err instanceof Error ? err.message : t("people.errorAssign"),
         );
       }
     });
@@ -232,7 +232,7 @@ function ManualWholePhotoAssign({
         onChange={(e) => setPersonId(e.target.value)}
         className="min-w-[10rem] flex-1 rounded-md border border-ink/15 bg-canvas px-2.5 py-1.5 text-sm outline-none ring-accent/30 focus:ring-2 disabled:opacity-60"
       >
-        <option value="">Assign to person…</option>
+        <option value="">{t("people.assignToPerson")}</option>
         {people.map((p) => (
           <option key={p.id} value={p.id}>
             {p.displayName}
@@ -248,7 +248,7 @@ function ManualWholePhotoAssign({
         {pending ? (
           <Loader2 className="size-3 animate-spin" aria-hidden />
         ) : null}
-        Assign
+        {t("people.assign")}
       </button>
       {error ? <p className="w-full text-xs text-red-800">{error}</p> : null}
     </div>

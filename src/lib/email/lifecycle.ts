@@ -120,12 +120,15 @@ export async function sendFamilyInviteLifecycle(input: {
 }): Promise<FamilyInviteLifecycleResult> {
   // Family invites are transactional: always email the address the owner typed.
   // Preference opt-outs apply to other lifecycle mail, not owner-initiated invites.
+  const { resolveUserLocale } = await import("@/lib/i18n/user-locale");
+  const locale = await resolveUserLocale(input.inviteeUserId);
   const email = await sendFamilyInviteEmail({
     to: input.inviteeEmail,
     inviterName: input.inviterName,
     familyName: input.familyName,
     role: input.role,
     inviteUrl: input.inviteUrl,
+    locale,
   });
   if (!email.ok) {
     console.error(
@@ -189,6 +192,8 @@ export async function sendMovieReadyLifecycle(input: {
   movieId: string;
   memoryId?: string | null;
   title: string;
+  memoryKind?: import("@/lib/gamification/types").MemoryKind;
+  celebration?: import("@/lib/gamification/types").JourneyCelebrationPayload | null;
 }): Promise<void> {
   const { userAllowsEmail } = await import("@/lib/account-preferences");
   const contact = await getUserContact(input.userId);
@@ -197,14 +202,48 @@ export async function sendMovieReadyLifecycle(input: {
     : "/movies";
 
   try {
-    await notifyMovieReady(input.userId, {
+    const row = await notifyMovieReady(input.userId, {
       movieId: input.movieId,
       memoryId: input.memoryId ?? undefined,
       title: input.title,
       link: appPath,
+      ...(input.celebration ? { celebration: input.celebration } : {}),
     });
+    if (!row && input.celebration) {
+      const { notifyMemoryCreated } = await import("@/lib/notifications");
+      await notifyMemoryCreated(input.userId, {
+        memoryId: input.memoryId ?? undefined,
+        movieId: input.movieId,
+        memoryKind: input.memoryKind ?? "film",
+        title: input.title,
+        link: appPath,
+        celebration: input.celebration,
+      });
+    }
   } catch (error) {
     console.error("[email.lifecycle] movie ready notification failed", error);
+  }
+
+  try {
+    const { userAllowsInApp } = await import("@/lib/account-preferences");
+    if (await userAllowsInApp(input.userId, "movie_ready")) {
+      const { translatorForUserId } = await import("@/lib/i18n/user-locale");
+      const { sendWebPushToUser } = await import("@/lib/push/send");
+      const { t } = await translatorForUserId(input.userId);
+      await sendWebPushToUser({
+        userId: input.userId,
+        title: t("notifications.movieReady.title"),
+        body: input.title
+          ? t("notifications.movieReady.messageWithTitle", {
+              title: input.title,
+            })
+          : t("notifications.movieReady.message"),
+        href: appPath,
+        tag: "fmv-movie-ready",
+      });
+    }
+  } catch (error) {
+    console.error("[email.lifecycle] movie ready push failed", error);
   }
 
   if (!contact) {
@@ -313,12 +352,14 @@ export async function sendMediaReadyNotification(input: {
   userId: string;
   mediaId: string;
   filename?: string | null;
+  celebration?: import("@/lib/gamification/types").JourneyCelebrationPayload | null;
 }): Promise<void> {
   try {
     await notifyMediaReady(input.userId, {
       mediaId: input.mediaId,
       filename: input.filename ?? undefined,
       link: "/media",
+      ...(input.celebration ? { celebration: input.celebration } : {}),
     });
   } catch (error) {
     console.error("[email.lifecycle] media ready notification failed", error);

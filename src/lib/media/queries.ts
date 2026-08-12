@@ -377,3 +377,18 @@ export async function countOwnSafeMedia(userId: string): Promise<number> {
     .where(cleanReadyMediaFilter(userId));
   return row?.value ?? 0;
 }
+
+/** Clean/ready photos only — source of truth for the Photos journey track. */
+export async function countOwnCleanPhotos(userId: string): Promise<number> {
+  const db = getDb();
+  const [row] = await db
+    .select({ value: count() })
+    .from(media)
+    .where(
+      and(
+        cleanReadyMediaFilter(userId),
+        eq(media.type, "photo"),
+      ),
+    );
+  return Number(row?.value ?? 0);
+}

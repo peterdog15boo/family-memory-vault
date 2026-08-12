@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, RefreshCw, Video, X } from "lucide-react";
 import {
   fetchLegacyVideoPlayback,
   type LegacyVideoMediaResponse,
   type LegacyVideoPlaybackSource,
 } from "@/lib/legacy/video-playback-client";
-
+import { useOverlayA11y } from "@/hooks/useOverlayA11y";
 type LegacyVideoPlayerProps = {
   playbackUrl: string;
   posterUrl?: string | null;
@@ -106,14 +106,12 @@ export function LegacyVideoPlaybackModal({
     void load();
   }, [open, source, load]);
 
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useOverlayA11y({
+    open: open && Boolean(source),
+    onClose,
+    containerRef: dialogRef,
+  });
 
   if (!open || !source) return null;
 
@@ -121,9 +119,11 @@ export function LegacyVideoPlaybackModal({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label={title}
+      tabIndex={-1}
       className="ui-modal-backdrop bg-[color:var(--legacy-ink)]/55 p-3 sm:p-4"
       onClick={onClose}
     >

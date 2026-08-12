@@ -1,6 +1,6 @@
 # Notifications & email
 
-Family Memory Vault uses **in-app notifications** (bell in the header) and optional **transactional email** (Resend) for the same lifecycle moments.
+Family Memory Vault uses **in-app notifications** (bell in the header), optional **transactional email** (Resend), and optional **Web Push** (this-device lock-screen alerts) for the same lifecycle moments.
 
 Auth emails (sign-in, verify) stay with **Clerk**.
 
@@ -75,6 +75,23 @@ Without `RESEND_API_KEY`, `sendEmail` returns `{ ok: true, logged: true }` and p
 
 ---
 
+## Web Push (optional)
+
+Opt-in per browser in Settings → Notifications → **This device**. Never auto-prompted. Requires HTTPS or localhost plus VAPID keys.
+
+| Piece | Location |
+|-------|----------|
+| Keys | `WEB_PUSH_VAPID_PUBLIC_KEY`, `WEB_PUSH_VAPID_PRIVATE_KEY`, optional `WEB_PUSH_VAPID_SUBJECT` (`mailto:` or `https:`) |
+| Generate | `npx web-push generate-vapid-keys` |
+| Table | `push_subscriptions` (`drizzle/0045_push_subscriptions.sql`) |
+| Service worker | `/push-sw.js` (public; middleware skips static `.js`) |
+| APIs | `GET /api/push/config`, `POST`/`DELETE /api/push/subscribe` |
+| Send | `sendWebPushToUser` — major milestones + movie ready; prunes 404/410/403 endpoints |
+
+Without VAPID keys, subscribe APIs return not configured and sends no-op. In-app + email still work.
+
+---
+
 ## Onboarding
 
 State lives on `users.onboarding` JSONB (`eligible`, `welcomeSeenAt`, `dismissedAt`, `completedAt`).
@@ -95,6 +112,7 @@ UI: `OnboardingChecklist` on the dashboard. Progress for upload / memory / invit
 
 ```
 src/lib/notifications/     # DB helpers + typed notify*
+src/lib/push/              # VAPID, subscriptions, send
 src/lib/email.ts           # Resend send + template helpers
 src/lib/email/templates.ts # HTML/text builders
 src/lib/email/lifecycle.ts # Wire emails + notifications to product events

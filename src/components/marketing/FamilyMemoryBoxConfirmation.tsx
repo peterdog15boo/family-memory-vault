@@ -1,10 +1,13 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { CheckCircle2, Clock3 } from "lucide-react";
 import {
   formatMemoryBoxPrice,
-  MEMORY_BOX_PAYMENT_LABELS,
+  type MemoryBoxPaymentStatus,
 } from "@/lib/memory-box/constants";
 import type { MemoryBoxOrder } from "@/lib/db/schema";
+import { getTranslations } from "@/lib/i18n/server";
+import type { TranslateFn } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 type FamilyMemoryBoxConfirmationProps = {
@@ -24,11 +27,26 @@ function formatAddress(order: MemoryBoxOrder): string {
     .join(", ");
 }
 
-function formatEstimates(order: MemoryBoxOrder): string {
+function formatEstimates(order: MemoryBoxOrder, t: TranslateFn): string {
   const parts = [
-    `${order.estimatedPhotos} photo${order.estimatedPhotos === 1 ? "" : "s"}`,
-    `${order.estimatedVideoTapes} tape${order.estimatedVideoTapes === 1 ? "" : "s"}`,
-    `${order.estimatedFilmReels} reel${order.estimatedFilmReels === 1 ? "" : "s"}`,
+    t(
+      order.estimatedPhotos === 1
+        ? "memoryBox.estimatePhoto"
+        : "memoryBox.estimatePhotos",
+      { count: order.estimatedPhotos },
+    ),
+    t(
+      order.estimatedVideoTapes === 1
+        ? "memoryBox.estimateTape"
+        : "memoryBox.estimateTapes",
+      { count: order.estimatedVideoTapes },
+    ),
+    t(
+      order.estimatedFilmReels === 1
+        ? "memoryBox.estimateReel"
+        : "memoryBox.estimateReels",
+      { count: order.estimatedFilmReels },
+    ),
   ];
   if (order.otherItemsNotes?.trim()) {
     parts.push(order.otherItemsNotes.trim());
@@ -36,29 +54,71 @@ function formatEstimates(order: MemoryBoxOrder): string {
   return parts.join(" · ");
 }
 
+function paymentLabel(
+  status: MemoryBoxPaymentStatus,
+  t: TranslateFn,
+): string {
+  switch (status) {
+    case "unpaid":
+      return t("memoryBox.paymentUnpaid");
+    case "checkout_pending":
+      return t("memoryBox.paymentCheckoutPending");
+    case "paid":
+      return t("memoryBox.paymentPaid");
+    case "manual_follow_up":
+      return t("memoryBox.paymentManualFollowUp");
+    default:
+      return status;
+  }
+}
+
+function HighlightPlaceholder({
+  template,
+  placeholder,
+  highlight,
+}: {
+  template: string;
+  placeholder: string;
+  highlight: ReactNode;
+}) {
+  const parts = template.split(placeholder);
+  return (
+    <>
+      {parts[0]}
+      {highlight}
+      {parts.slice(1).join(placeholder)}
+    </>
+  );
+}
+
 /**
  * Full-page confirmation after Memory Box submit / Checkout.
  */
-export function FamilyMemoryBoxConfirmation({
+export async function FamilyMemoryBoxConfirmation({
   order,
   paymentPendingNote = null,
 }: FamilyMemoryBoxConfirmationProps) {
+  const t = await getTranslations();
   const paid = order.paymentStatus === "paid";
   const manual = order.paymentStatus === "manual_follow_up";
 
-  const title = paid
-    ? "Your Family Memory Box order is confirmed"
-    : paymentPendingNote
-      ? "Thanks — we’re confirming your payment"
-      : "Your Family Memory Box order is confirmed";
+  const title =
+    paymentPendingNote && !paid
+      ? t("memoryBox.confirmTitlePending")
+      : t("memoryBox.confirmTitle");
 
-  const lead = paid
-    ? `You’re all set${order.priceCents ? ` — ${formatMemoryBoxPrice(order.priceCents)} received` : ""}. We’ll email shipping details soon, and take good care of what’s in the box.`
-    : paymentPendingNote
-      ? paymentPendingNote
-      : manual
-        ? "Thank you. We’ve saved your request. Payment was not taken online — we’ll email you to collect the $199 fee before we ship your box."
-        : "Thank you. We’ve received your order details and will be in touch by email.";
+  const lead =
+    paid
+      ? order.priceCents
+        ? t("memoryBox.leadPaidWithPrice", {
+            price: formatMemoryBoxPrice(order.priceCents),
+          })
+        : t("memoryBox.leadPaid")
+      : paymentPendingNote
+        ? paymentPendingNote
+        : manual
+          ? t("memoryBox.leadManual")
+          : t("memoryBox.leadDefault");
 
   return (
     <div className="memory-box-confirm">
@@ -72,7 +132,7 @@ export function FamilyMemoryBoxConfirmation({
               aria-hidden
             />
           )}
-          <p className="memory-box-confirm-brand">Family Memory Vault</p>
+          <p className="memory-box-confirm-brand">{t("memoryBox.brand")}</p>
           <h1 className="memory-box-confirm-title">{title}</h1>
           <p className="memory-box-confirm-lead">{lead}</p>
           <p
@@ -82,7 +142,7 @@ export function FamilyMemoryBoxConfirmation({
               manual && "memory-box-confirm-payment-pill--manual",
             )}
           >
-            {MEMORY_BOX_PAYMENT_LABELS[order.paymentStatus]}
+            {paymentLabel(order.paymentStatus, t)}
             {paid ? ` · ${formatMemoryBoxPrice(order.priceCents)}` : null}
           </p>
         </div>
@@ -92,21 +152,39 @@ export function FamilyMemoryBoxConfirmation({
           aria-labelledby="memory-box-next-title"
         >
           <h2 id="memory-box-next-title" className="memory-box-confirm-heading">
-            What happens next
+            {t("memoryBox.whatHappensNext")}
           </h2>
           <ol className="memory-box-confirm-steps">
             <li>
-              Expect your Family Memory Box within about{" "}
-              <strong>2 weeks</strong>
-              {manual ? " after payment is confirmed" : ""}.
+              <HighlightPlaceholder
+                template={t(
+                  manual
+                    ? "memoryBox.nextStep1AfterPayment"
+                    : "memoryBox.nextStep1",
+                )}
+                placeholder="{weeks}"
+                highlight={
+                  <strong>{t("memoryBox.nextStep1Weeks")}</strong>
+                }
+              />
             </li>
             <li>
-              After you return it filled, allow about{" "}
-              <strong>5–8 weeks</strong> for processing.
+              <HighlightPlaceholder
+                template={t("memoryBox.nextStep2")}
+                placeholder="{weeks}"
+                highlight={
+                  <strong>{t("memoryBox.nextStep2Weeks")}</strong>
+                }
+              />
             </li>
             <li>
-              Digitized items will appear in <strong>Photos</strong> when
-              ready — automatically, no upload needed.
+              <HighlightPlaceholder
+                template={t("memoryBox.nextStep3")}
+                placeholder="{photos}"
+                highlight={
+                  <strong>{t("memoryBox.nextStep3Photos")}</strong>
+                }
+              />
             </li>
           </ol>
         </section>
@@ -119,41 +197,43 @@ export function FamilyMemoryBoxConfirmation({
             id="memory-box-details-title"
             className="memory-box-confirm-heading"
           >
-            Your order details
+            {t("memoryBox.orderDetails")}
           </h2>
           <dl className="memory-box-confirm-details">
             <div>
-              <dt>Name</dt>
+              <dt>{t("memoryBox.detailName")}</dt>
               <dd>{order.fullName}</dd>
             </div>
             <div>
-              <dt>Email</dt>
+              <dt>{t("memoryBox.detailEmail")}</dt>
               <dd>{order.email}</dd>
             </div>
             <div>
-              <dt>Ship to</dt>
+              <dt>{t("memoryBox.detailShipTo")}</dt>
               <dd>{formatAddress(order)}</dd>
             </div>
             <div>
-              <dt>Estimated items</dt>
-              <dd>{formatEstimates(order)}</dd>
+              <dt>{t("memoryBox.detailEstimatedItems")}</dt>
+              <dd>{formatEstimates(order, t)}</dd>
             </div>
             {order.customerNotes?.trim() ? (
               <div>
-                <dt>Notes</dt>
+                <dt>{t("memoryBox.detailNotes")}</dt>
                 <dd>{order.customerNotes.trim()}</dd>
               </div>
             ) : null}
           </dl>
-          <p className="memory-box-confirm-order-id">Order {order.id}</p>
+          <p className="memory-box-confirm-order-id">
+            {t("memoryBox.orderId", { id: order.id })}
+          </p>
         </section>
 
         <div className="memory-box-confirm-actions">
           <Link href="/dashboard" className="ui-btn ui-btn-primary ui-btn-lg">
-            Back to Dashboard
+            {t("memoryBox.backToDashboard")}
           </Link>
           <Link href="/media" className="memory-box-confirm-secondary">
-            View Photos
+            {t("memoryBox.viewPhotos")}
           </Link>
         </div>
       </div>

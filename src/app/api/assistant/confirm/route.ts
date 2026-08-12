@@ -11,6 +11,7 @@ import {
   toAssistantTurnApiPayload,
 } from "@/lib/ai/http";
 import { ensureAppUser } from "@/lib/users";
+import { getLocale } from "@/lib/i18n/server";
 
 const bodySchema = z.object({
   conversationId: z.string().trim().min(1).max(128),
@@ -56,6 +57,7 @@ export async function POST(request: Request) {
 
   try {
     await ensureAppUser(userId);
+    const locale = await getLocale();
     const conversation = await getConversationForUser(
       parsed.data.conversationId,
       userId,
@@ -69,16 +71,18 @@ export async function POST(request: Request) {
           userId,
           conversationId: parsed.data.conversationId,
           proposalId: parsed.data.proposalId,
+          locale,
         })
       : await confirmAssistantProposal({
           userId,
           conversationId: parsed.data.conversationId,
           proposalId: parsed.data.proposalId,
           mediaIds: parsed.data.mediaIds,
+          locale,
         });
 
     return NextResponse.json({
-      turn: toAssistantTurnApiPayload(turn),
+      turn: toAssistantTurnApiPayload(turn, locale),
     });
   } catch (error) {
     return assistantApiErrorResponse(error, "Failed to confirm assistant action");

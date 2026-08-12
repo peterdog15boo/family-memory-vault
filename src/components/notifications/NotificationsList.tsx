@@ -5,13 +5,16 @@ import { useRouter } from "next/navigation";
 import {
   Bell,
   CheckCheck,
+  BookHeart,
   Film,
   HardDrive,
   ImageIcon,
   Shield,
+  Heart,
   Users,
 } from "lucide-react";
-import { COPY } from "@/lib/copy";
+import { useCopy, useLocale, useTranslations } from "@/components/i18n/LocaleProvider";
+import { formatDate, type TranslateFn } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 type NotificationItem = {
@@ -31,30 +34,35 @@ type Props = {
 const ICON_MAP: Record<string, typeof Bell> = {
   media_ready: ImageIcon,
   movie_ready: Film,
+  memory_created: BookHeart,
   family_invite: Users,
+  family_milestone: Users,
+  legacy_milestone: Heart,
   storage_warning: HardDrive,
   moderation_attention: Shield,
 };
 
-function timeAgo(dateStr: string): string {
+function timeAgo(dateStr: string, t: TranslateFn, locale: string): string {
   const seconds = Math.floor(
     (Date.now() - new Date(dateStr).getTime()) / 1000,
   );
-  if (seconds < 60) return "just now";
+  if (seconds < 60) return t("notifications.ui.justNow");
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60) {
+    return t("notifications.ui.minutesAgo", { count: minutes });
+  }
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t("notifications.ui.hoursAgo", { count: hours });
   const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
+  if (days < 7) return t("notifications.ui.daysAgo", { count: days });
+  return formatDate(dateStr, locale, { month: "short", day: "numeric" });
 }
 
 export function NotificationsList({ initialItems }: Props) {
   const router = useRouter();
+  const copy = useCopy();
+  const t = useTranslations();
+  const { locale } = useLocale();
   const [items, setItems] = useState(initialItems);
   const [, startTransition] = useTransition();
 
@@ -104,10 +112,10 @@ export function NotificationsList({ initialItems }: Props) {
       <div className="list-panel rounded-2xl border border-ink/10 bg-canvas/80 px-6 py-16 text-center">
         <Bell className="mx-auto size-10 text-ink/15" aria-hidden />
         <p className="mt-3 text-sm font-medium text-ink/60">
-          {COPY.empty.notifications.title}
+          {copy.empty.notifications.title}
         </p>
         <p className="mt-1 text-xs text-ink-muted">
-          {COPY.empty.notifications.description}
+          {copy.empty.notifications.description}
         </p>
       </div>
     );
@@ -123,7 +131,7 @@ export function NotificationsList({ initialItems }: Props) {
             className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-accent-deep transition hover:bg-accent/10"
           >
             <CheckCheck className="size-3.5" aria-hidden />
-            Mark all as read
+            {t("notifications.ui.markAllAsRead")}
           </button>
         </div>
       ) : null}
@@ -168,7 +176,7 @@ export function NotificationsList({ initialItems }: Props) {
                     {isUnread ? (
                       <span
                         className="mt-1.5 size-2 shrink-0 rounded-full bg-accent"
-                        aria-label="Unread"
+                        aria-label={t("notifications.ui.unreadAria")}
                       />
                     ) : null}
                   </div>
@@ -176,7 +184,7 @@ export function NotificationsList({ initialItems }: Props) {
                     {item.message}
                   </p>
                   <p className="mt-1.5 text-xs text-ink-muted/70">
-                    {timeAgo(item.createdAt)}
+                    {timeAgo(item.createdAt, t, locale)}
                   </p>
                 </div>
               </button>

@@ -2,6 +2,7 @@
 
 import { Sparkles } from "lucide-react";
 import { useAskAi } from "@/components/assistant/AskAiContext";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { cn } from "@/lib/utils";
 
 /**
@@ -10,6 +11,7 @@ import { cn } from "@/lib/utils";
  */
 export function AskAiFab({ className }: { className?: string }) {
   const { open, minimized, toggleAskAi, restoreAskAi } = useAskAi();
+  const t = useTranslations();
 
   if (open) return null;
 
@@ -22,11 +24,13 @@ export function AskAiFab({ className }: { className?: string }) {
           "ask-ai-fab ask-ai-fab--restore",
           className,
         )}
-        aria-label="Restore Ask AI"
+        aria-label={t("assistant.restore")}
+        aria-haspopup="dialog"
+        aria-expanded={false}
       >
         <Sparkles className="size-4" aria-hidden />
-        Ask AI
-        <span className="ask-ai-fab-badge">Open</span>
+        {t("nav.askAi")}
+        <span className="ask-ai-fab-badge">{t("assistant.openBadge")}</span>
       </button>
     );
   }
@@ -36,10 +40,12 @@ export function AskAiFab({ className }: { className?: string }) {
       type="button"
       onClick={toggleAskAi}
       className={cn("ask-ai-fab", className)}
-      aria-label="Ask AI"
+      aria-label={t("nav.askAi")}
+      aria-haspopup="dialog"
+      aria-expanded={false}
     >
       <Sparkles className="size-4" aria-hidden />
-      Ask AI
+      {t("nav.askAi")}
     </button>
   );
 }

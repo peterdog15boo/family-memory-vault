@@ -4,7 +4,7 @@ import { Shield } from "lucide-react";
 import { FamilySettingsPanel } from "@/components/family/FamilySettingsPanel";
 import { AppPageIntro } from "@/components/ui/AppPageIntro";
 import { HintTooltip } from "@/components/ui/HintTooltip";
-import { COPY } from "@/lib/copy";
+import { getTranslations } from "@/lib/i18n/server";
 import {
   getFamilyMembersWithProfiles,
   getUserFamilies,
@@ -25,6 +25,8 @@ export default async function FamilyPage() {
   if (!isAuthenticated || !userId) {
     redirect("/");
   }
+
+  const t = await getTranslations();
 
   await ensureAppUser(userId);
   const [families, capabilities] = await Promise.all([
@@ -51,14 +53,14 @@ export default async function FamilyPage() {
         slot="family"
         title={
           <>
-            Family{" "}
+            {t("pages.familyTitle")}{" "}
             <HintTooltip
-              tip={COPY.tips.familyShare}
-              label="About family sharing"
+              tip={t("tips.familyShare")}
+              label={t("pages.familyAbout")}
             />
           </>
         }
-        description="Invite people you trust. Photos can be shared with family; memories stay private until you choose."
+        description={t("pages.familyDescription")}
       />
 
       <div className="app-page mx-auto max-w-3xl">

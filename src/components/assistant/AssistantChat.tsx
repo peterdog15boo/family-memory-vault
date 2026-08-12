@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Loader2, Send } from "lucide-react";
 import { Ava } from "@/components/ava/Ava";
 import { AssistantTurnCard } from "@/components/assistant/AssistantTurnCard";
 import { useAskAiOptional } from "@/components/assistant/AskAiContext";
 import {
-  ASSISTANT_EXAMPLE_PROMPTS,
+  getAssistantExamplePrompts,
   type AssistantChatMessage,
   type AssistantTurnView,
 } from "@/components/assistant/types";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
+import type { TranslateFn } from "@/lib/i18n";
 
 type AssistantChatProps = {
   /** Resume an existing conversation when provided. */
@@ -74,6 +76,7 @@ export function AssistantChat({
   resumeLatestIfEmpty = false,
   focusNonce = 0,
 }: AssistantChatProps) {
+  const t = useTranslations();
   const isPanel = variant === "panel";
   const askAi = useAskAiOptional();
   const [conversationId, setConversationId] = useState<string | null>(
@@ -88,6 +91,9 @@ export function AssistantChat({
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const composerId = useId();
+  const composerErrorId = useId();
+  const composerHintId = useId();
   const loadedIdRef = useRef<string | null>(null);
   const resumeAttemptedRef = useRef(false);
 
@@ -226,8 +232,11 @@ export function AssistantChat({
   }, [focusNonce, isPanel, askAi]);
 
   useEffect(() => {
+    const reduceMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     bottomRef.current?.scrollIntoView({
-      behavior: "smooth",
+      behavior: reduceMotion ? "auto" : "smooth",
       block: isPanel ? "nearest" : "end",
     });
   }, [messages, busy, isPanel]);
@@ -306,7 +315,7 @@ export function AssistantChat({
     } catch (err) {
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       setDraft(content);
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setError(err instanceof Error ? err.message : t("assistant.somethingWrong"));
     } finally {
       setBusy(false);
       inputRef.current?.focus();
@@ -362,7 +371,7 @@ export function AssistantChat({
         },
       ]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setError(err instanceof Error ? err.message : t("assistant.somethingWrong"));
     } finally {
       setBusy(false);
     }
@@ -374,7 +383,7 @@ export function AssistantChat({
     // Soft hint in the field without sending.
     inputRef.current?.setAttribute(
       "placeholder",
-      "Tell me what to change — people, dates, tone…",
+      t("assistant.placeholderEdit"),
     );
   }
 
@@ -422,7 +431,7 @@ export function AssistantChat({
         } | null;
         throw new Error(
           body?.error ??
-            `Could not start a ${mode} from those items`,
+            mode === "movie" ? t("assistant.couldNotStartMovie") : t("assistant.couldNotStartMemory"),
         );
       }
 
@@ -436,8 +445,8 @@ export function AssistantChat({
           role: "user",
           content:
             mode === "movie"
-              ? "Create a movie from these items"
-              : "Create a memory from these items",
+              ? t("assistant.createFromSearchMovie")
+              : t("assistant.createFromSearchMemory"),
           createdAt: new Date().toISOString(),
         },
         {
@@ -449,7 +458,7 @@ export function AssistantChat({
         },
       ]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setError(err instanceof Error ? err.message : t("assistant.somethingWrong"));
     } finally {
       setBusy(false);
     }
@@ -477,10 +486,10 @@ export function AssistantChat({
         <div className="border-b border-ink/8 px-4 py-3 sm:px-5">
           <p className="flex items-center gap-2 text-sm font-medium text-ink">
             <Ava size="sm" className="!size-8" decorative />
-            Ask AI
+            {t("assistant.title")}
           </p>
           <p className="mt-0.5 text-xs text-ink-muted">
-            Find photos, make a memory, or start a movie — in your own words.
+            {t("assistant.chatSubtitle")}
           </p>
         </div>
       ) : null}
@@ -494,7 +503,7 @@ export function AssistantChat({
         {booting ? (
           <div className="flex items-center justify-center gap-2 py-12 text-sm text-ink-muted">
             <Loader2 className="size-4 animate-spin" aria-hidden />
-            Loading conversation…
+            {t("assistant.loading")}
           </div>
         ) : null}
 
@@ -561,7 +570,7 @@ export function AssistantChat({
               <span className="ask-ai-typing-dot" />
               <span className="ask-ai-typing-dot" />
               <span className="ask-ai-typing-dot" />
-              <span className="sr-only">Thinking…</span>
+              <span className="sr-only">{t("assistant.thinking")}</span>
             </span>
           </div>
         ) : null}
@@ -571,6 +580,8 @@ export function AssistantChat({
 
       {error ? (
         <p
+          id={composerErrorId}
+          role="alert"
           className={cn(
             "border-t border-ink/8 py-2 text-sm text-red-700",
             isPanel ? "px-3" : "px-4 sm:px-5",
@@ -592,8 +603,12 @@ export function AssistantChat({
           void sendMessage(draft);
         }}
       >
+        <label htmlFor={composerId} className="sr-only">
+          {t("assistant.messageLabel")}
+        </label>
         <div className="flex items-end gap-2 rounded-xl border border-ink/12 bg-canvas px-3 py-2 focus-within:border-accent/40">
           <textarea
+            id={composerId}
             ref={inputRef}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
@@ -602,10 +617,16 @@ export function AssistantChat({
             enterKeyHint="send"
             autoComplete="off"
             disabled={busy || booting}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={
+              [error ? composerErrorId : null, composerHintId]
+                .filter(Boolean)
+                .join(" ") || undefined
+            }
             placeholder={
               isPanel
-                ? "Ask about photos, or how to use the vault…"
-                : "Ask about a person, trip, or how to use the vault…"
+                ? t("assistant.placeholderPanel")
+                : t("assistant.placeholderPage")
             }
             className={cn(
               "max-h-28 flex-1 resize-none bg-transparent leading-relaxed text-ink outline-none placeholder:text-ink-muted/70 disabled:opacity-60",
@@ -619,7 +640,7 @@ export function AssistantChat({
             type="submit"
             disabled={busy || booting || !draft.trim()}
             className="ui-btn ui-btn-primary size-10 shrink-0 !px-0"
-            aria-label="Send message"
+            aria-label={t("assistant.send")}
           >
             {busy ? (
               <Loader2 className="size-4 animate-spin" aria-hidden />
@@ -628,9 +649,12 @@ export function AssistantChat({
             )}
           </button>
         </div>
-        <p className="mt-1.5 hidden text-[11px] text-ink-muted sm:block">
-          Enter to send · Shift+Enter for a new line
-          {isPanel ? " · Esc to close" : ""}
+        <p
+          id={composerHintId}
+          className="mt-1.5 hidden text-[11px] text-ink-muted sm:block"
+        >
+          {t("assistant.composerHint")}
+          {isPanel ? t("assistant.composerHintEsc") : ""}
         </p>
       </form>
     </div>
@@ -644,7 +668,8 @@ function AssistantEmptyState({
   onPick: (prompt: string) => void;
   compact?: boolean;
 }) {
-  const prompts = ASSISTANT_EXAMPLE_PROMPTS.slice(0, compact ? 4 : undefined);
+  const t = useTranslations();
+  const prompts = getAssistantExamplePrompts(t).slice(0, compact ? 4 : undefined);
 
   return (
     <div
@@ -666,7 +691,7 @@ function AssistantEmptyState({
           compact ? "text-base" : "text-xl",
         )}
       >
-        What would you like to find?
+        {t("assistant.emptyTitle")}
       </p>
       <p
         className={cn(
@@ -674,7 +699,7 @@ function AssistantEmptyState({
           compact ? "text-xs" : "text-sm",
         )}
       >
-        Ask for photos, make a memory, or get a quick how-to.
+        {t("assistant.emptyCopy")}
       </p>
       <div className={cn("flex flex-col gap-1.5", compact ? "mt-4" : "mt-6")}>
         {prompts.map((prompt) => (

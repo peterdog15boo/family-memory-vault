@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { BrandLogo } from "@/components/brand/BrandLogo";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { ThemeSwitcher } from "@/components/theme/ThemeSwitcher";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { THEME_EVALUATION_PAGES } from "@/lib/theme/types";
@@ -9,8 +10,24 @@ import { THEME_EVALUATION_PAGES } from "@/lib/theme/types";
 /**
  * Settings section for choosing Modern (default) vs Original appearance.
  */
+const EVALUATION_PAGE_KEYS: Record<string, string> = {
+  "/": "pages.landing",
+  "/sign-in": "nav.signIn",
+  "/pricing": "nav.pricing",
+  "/dashboard": "pages.dashboard",
+  "/media": "nav.photos",
+  "/memories": "nav.memories",
+  "/people": "nav.people",
+  "/movies": "nav.movies",
+  "/assistant": "nav.askAi",
+  "/documents": "nav.documents",
+  "/legacy": "pages.legacyPlanTitle",
+  "/documents/legacy": "legacy.title",
+};
+
 export function ThemeSettingsSection() {
   const { theme, applyModernDefault, ready, isModern } = useTheme();
+  const t = useTranslations();
 
   return (
     <section id="appearance" className="ui-card ui-card-elevated ui-card-pad-lg">
@@ -18,28 +35,25 @@ export function ThemeSettingsSection() {
         <div className="settings-brand-moment">
           <BrandLogo tone="color" size="md" />
           <p className="settings-brand-moment-copy">
-            Modern look for Family Memory Vault — calm, photographic, and
-            private by design.
+            {t("settings.brandMoment")}
           </p>
         </div>
       ) : null}
 
       <h2 className="font-display text-xl tracking-tight text-ink">
-        Appearance
+        {t("settings.appearanceTitle")}
       </h2>
       <p className="page-lead mt-2 text-sm leading-relaxed text-ink-muted">
-        Modern is the default look for Family Memory Vault. You can switch to
-        Original anytime — the change only affects visuals on this device, never
-        your memories or data.
+        {t("settings.appearanceLead")}
       </p>
 
       {isModern ? (
         <p className="mt-3 text-sm font-medium text-[color:var(--ink)]">
-          Modern (default) is active
+          {t("settings.appearanceModernActive")}
         </p>
       ) : (
         <p className="mt-3 text-sm font-medium text-[color:var(--ink)]">
-          Original is active on this device
+          {t("settings.appearanceOriginalActive")}
         </p>
       )}
 
@@ -55,14 +69,14 @@ export function ThemeSettingsSection() {
             onClick={() => applyModernDefault()}
             className="ui-btn ui-btn-primary"
           >
-            Use Modern (default)
+            {t("settings.useModern")}
           </button>
         </div>
       ) : null}
 
       <div className="mt-6 rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--canvas-deep)]/40 px-4 py-3">
         <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[color:var(--ink-muted)]">
-          Compare looks on
+          {t("settings.compareLooks")}
         </p>
         <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1.5 text-sm text-[color:var(--ink-muted)]">
           {THEME_EVALUATION_PAGES.map((page) => (
@@ -71,15 +85,13 @@ export function ThemeSettingsSection() {
                 href={page.href}
                 className="font-medium text-[color:var(--accent-deep)] underline-offset-2 hover:underline"
               >
-                {page.label}
+                {t(EVALUATION_PAGE_KEYS[page.href] ?? page.label)}
               </Link>
             </li>
           ))}
           <li className="w-full text-xs text-[color:var(--ink-muted)]">
-            Active theme:{" "}
-            <span className="font-medium text-[color:var(--ink)]">{theme}</span>.
-            Deep-link with{" "}
-            <code className="rounded bg-black/5 px-1">?theme=modern</code> or{" "}
+            {t("settings.activeTheme", { theme })}{" "}
+            <code className="rounded bg-black/5 px-1">?theme=modern</code> /{" "}
             <code className="rounded bg-black/5 px-1">?theme=original</code>.
           </li>
         </ul>

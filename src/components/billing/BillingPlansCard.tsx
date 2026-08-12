@@ -5,6 +5,7 @@ import { CreditCard, Loader2 } from "lucide-react";
 import { PLAN_CATALOG } from "@/lib/plans/catalog";
 import type { BillingInterval, PaidPlanSlug } from "@/lib/stripe/config";
 import { userFacingApiError } from "@/lib/http/user-messages";
+import { useFormat } from "@/components/i18n/LocaleProvider";
 import { cn } from "@/lib/utils";
 
 export type BillingPlansCardProps = {
@@ -21,14 +22,6 @@ const PAID = PLAN_CATALOG.filter(
   (p) => p.slug === "family" || p.slug === "family_plus",
 );
 
-function formatCents(cents: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: cents % 100 === 0 ? 0 : 2,
-  }).format(cents / 100);
-}
-
 /**
  * Plan picker + Stripe Checkout / Customer Portal actions.
  * Free works without Stripe; paid CTAs degrade gracefully when unset.
@@ -41,6 +34,7 @@ export function BillingPlansCard({
   stripeConfigured,
   notice,
 }: BillingPlansCardProps) {
+  const format = useFormat();
   const [interval, setInterval] = useState<BillingInterval>(
     billingInterval === "yearly" ? "yearly" : "monthly",
   );
@@ -211,7 +205,7 @@ export function BillingPlansCard({
                       ) : null}
                     </p>
                     <p className="mt-0.5 text-sm text-ink-muted">
-                      {formatCents(price)}
+                      {format.cents(price)}
                       {interval === "yearly" ? "/year" : "/month"}
                       {" · "}
                       {plan.maxFamilyMembers} members ·{" "}

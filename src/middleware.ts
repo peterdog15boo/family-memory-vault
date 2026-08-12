@@ -16,6 +16,7 @@ const isProtectedRoute = createRouteMatcher([
   "/movies(.*)",
   "/people(.*)",
   "/family(.*)",
+  "/legacy(.*)",
   "/settings(.*)",
   "/media(.*)",
   "/billing(.*)",
@@ -24,7 +25,9 @@ const isProtectedRoute = createRouteMatcher([
   "/admin(.*)",
   "/suspended",
   "/beta-agree",
+  "/terms-agree",
   "/api/beta-nda(.*)",
+  "/api/terms(.*)",
   "/api/upload-url",
   "/api/upload(.*)",
   "/api/documents(.*)",
@@ -40,9 +43,11 @@ const isProtectedRoute = createRouteMatcher([
   "/api/movies(.*)",
   "/api/notifications(.*)",
   "/api/onboarding(.*)",
+  "/api/journey(.*)",
   "/api/ava(.*)",
   "/api/assistant(.*)",
   "/api/settings(.*)",
+  "/api/push(.*)",
 ]);
 
 function makeRequestId(): string {

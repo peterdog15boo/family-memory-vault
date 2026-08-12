@@ -27,6 +27,7 @@ A private, family-safe place to preserve photos, videos, and memories — with p
 - **Family sharing** — invites, roles, household privacy model ([FAMILY_SHARING.md](./FAMILY_SHARING.md))
 - **Movies** — themed films from clean memory photos ([MOVIES.md](./MOVIES.md))
 - **Ask AI** — natural-language search and memory/movie creation with strict clean-media + ownership rules ([ASSISTANT.md](./ASSISTANT.md))
+- **Languages** — English (US) default; Spanish, French, German, and more, with safe English fallbacks ([docs/README.md](./docs/README.md#languages-i18n))
 - **Private Documents** — owner-only document vault with categories, reminder dates, secure download links, and business / estate paperwork workflows
 - **Digital Legacy** — message, contacts, practical instructions, business continuity notes, secure items, emergency access, and readiness progress
 - **Plans & quotas** — storage and feature gates; optional Stripe checkout ([BILLING.md](./BILLING.md))
@@ -169,6 +170,7 @@ See also:
 - [docs/PRIVATE_VAULT_SECURITY.md](./docs/PRIVATE_VAULT_SECURITY.md)
 - [docs/DIGITAL_LEGACY_VIDEOS.md](./docs/DIGITAL_LEGACY_VIDEOS.md)
 - [docs/APP_THEMES.md](./docs/APP_THEMES.md)
+- [docs/README.md](./docs/README.md) — docs index + **how to add a language**
 
 ## Project structure
 
@@ -190,6 +192,7 @@ src/
 
 | Doc | Topic |
 | --- | --- |
+| [docs/README.md](./docs/README.md) | Docs index + adding a language |
 | [DEPLOYMENT.md](./DEPLOYMENT.md) | Production checklist |
 | [SAFETY.md](./SAFETY.md) | Moderation & NCMEC |
 | [MONITORING.md](./MONITORING.md) | Health & log events |

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { FeedbackButton } from "@/components/feedback/FeedbackButton";
 import { ADMIN_NAV } from "@/lib/admin/nav";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +30,7 @@ export function AdminShell({ children, displayName }: AdminShellProps) {
             </span>
           </div>
           <div className="flex items-center gap-3 text-sm">
+            <FeedbackButton collapseLabel={false} placement="header" />
             {displayName ? (
               <span className="text-ink-muted">{displayName}</span>
             ) : null}

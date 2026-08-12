@@ -10,6 +10,7 @@ import {
   ClipboardCheck,
   Film,
   LayoutDashboard,
+  MessageSquareHeart,
   Package,
   ScrollText,
   Shield,
@@ -38,6 +39,12 @@ export const ADMIN_NAV: readonly AdminNavItem[] = [
     label: "Users",
     description: "Search accounts, change plans, suspend, grant admin.",
     icon: Users,
+  },
+  {
+    href: "/admin/feedback",
+    label: "Feedback",
+    description: "Beta bug reports and feature requests.",
+    icon: MessageSquareHeart,
   },
   {
     href: "/admin/memory-box",

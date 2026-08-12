@@ -11,6 +11,7 @@ import {
   type StorageQuotaSnapshot,
 } from "@/lib/billing/quotas";
 import { countMoviesCreatedThisMonth, getUserPlan } from "@/lib/plans";
+import { resolveUserLocale } from "@/lib/i18n/user-locale";
 
 export type UsageMeter = {
   used: number;
@@ -147,10 +148,11 @@ function buildWarnings(
 export async function getAccountUsageSummary(
   userId: string,
 ): Promise<AccountUsageSummary> {
-  const [planCtx, storage, moviesUsed] = await Promise.all([
+  const [planCtx, storage, moviesUsed, locale] = await Promise.all([
     getUserPlan(userId),
     getStorageQuotaForUser(userId),
     countMoviesCreatedThisMonth(userId),
+    resolveUserLocale(userId),
   ]);
 
   const storageMeter = buildStorageMeter(storage);
@@ -171,7 +173,7 @@ export async function getAccountUsageSummary(
     nextBillingDate,
     nextBillingLabel:
       nextBillingDate && isPaid
-        ? formatBillingDate(nextBillingDate)
+        ? formatBillingDate(nextBillingDate, locale)
         : null,
     canManageBilling: Boolean(
       planCtx.subscription?.stripeCustomerId ||
@@ -180,7 +182,7 @@ export async function getAccountUsageSummary(
     storage,
     storageMeter,
     movies,
-    moviesPeriodResetLabel: formatUsagePeriodReset(),
+    moviesPeriodResetLabel: formatUsagePeriodReset(undefined, locale),
     warnings: buildWarnings(storageMeter, movies, planCtx.plan.name),
   };
 }

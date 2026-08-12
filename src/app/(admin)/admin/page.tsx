@@ -3,7 +3,7 @@ import { count, eq } from "drizzle-orm";
 import { ADMIN_TOOLS } from "@/lib/admin/nav";
 import { requireAdmin } from "@/lib/auth/admin";
 import { getDb } from "@/lib/db";
-import { media, users } from "@/lib/db/schema";
+import { feedbackSubmissions, media, users } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -11,17 +11,22 @@ export default async function AdminHomePage() {
   await requireAdmin();
 
   const db = getDb();
-  const [[userCount], [reviewCount], [adminCount]] = await Promise.all([
-    db.select({ value: count() }).from(users),
-    db
-      .select({ value: count() })
-      .from(media)
-      .where(eq(media.moderationStatus, "needs_human_review")),
-    db
-      .select({ value: count() })
-      .from(users)
-      .where(eq(users.isAdmin, true)),
-  ]);
+  const [[userCount], [reviewCount], [adminCount], [feedbackNewCount]] =
+    await Promise.all([
+      db.select({ value: count() }).from(users),
+      db
+        .select({ value: count() })
+        .from(media)
+        .where(eq(media.moderationStatus, "needs_human_review")),
+      db
+        .select({ value: count() })
+        .from(users)
+        .where(eq(users.isAdmin, true)),
+      db
+        .select({ value: count() })
+        .from(feedbackSubmissions)
+        .where(eq(feedbackSubmissions.status, "new")),
+    ]);
 
   return (
     <div>
@@ -33,7 +38,7 @@ export default async function AdminHomePage() {
         customer-facing.
       </p>
 
-      <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-lg border border-ink/10 bg-canvas-deep/40 px-4 py-3">
           <p className="text-[11px] uppercase tracking-wide text-ink-muted">
             Users
@@ -59,6 +64,17 @@ export default async function AdminHomePage() {
           </p>
           <p className="mt-1 font-display text-2xl text-ink">
             {reviewCount?.value ?? 0}
+          </p>
+        </Link>
+        <Link
+          href="/admin/feedback?status=new"
+          className="rounded-lg border border-ink/10 bg-canvas-deep/40 px-4 py-3 transition hover:border-accent/30"
+        >
+          <p className="text-[11px] uppercase tracking-wide text-ink-muted">
+            New feedback
+          </p>
+          <p className="mt-1 font-display text-2xl text-ink">
+            {feedbackNewCount?.value ?? 0}
           </p>
         </Link>
       </div>

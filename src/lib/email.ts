@@ -12,6 +12,7 @@
 import { Resend } from "resend";
 import {
   familyInviteEmail,
+  milestoneEmail,
   movieReadyEmail,
   paymentFailedEmail,
   paymentSuccessEmail,
@@ -32,6 +33,8 @@ export {
   paymentSuccessEmail,
   paymentFailedEmail,
   memoryBoxOrderAdminEmail,
+  feedbackSubmissionAdminEmail,
+  milestoneEmail,
   emailAppUrl,
 } from "@/lib/email/templates";
 
@@ -191,6 +194,7 @@ export async function sendFamilyInviteEmail(input: {
   familyName: string;
   role?: string | null;
   inviteUrl: string;
+  locale?: import("@/lib/i18n").AppLocale;
 }): Promise<SendEmailResult> {
   return sendTemplated(
     input.to,
@@ -253,4 +257,14 @@ export async function sendPaymentFailedEmail(input: {
     paymentFailedEmail(input),
     "payment_failed",
   );
+}
+
+export async function sendMilestoneEmail(input: {
+  to: string;
+  firstName?: string | null;
+  badgeTitle: string;
+  badgeBody?: string | null;
+  href?: string;
+}): Promise<SendEmailResult> {
+  return sendTemplated(input.to, milestoneEmail(input), "milestone");
 }

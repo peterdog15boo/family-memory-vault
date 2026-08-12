@@ -17,11 +17,20 @@ import { useUser } from "@clerk/nextjs";
 import { Loader2, Upload, X } from "lucide-react";
 import { Ava } from "@/components/ava/Ava";
 import { useAskAiOptional } from "@/components/assistant/AskAiContext";
-import { fileToAvaAvatarDataUrl } from "@/lib/ava/avatar-client";
 import {
-  AVA_AVATAR_PRESETS,
-  AVA_SCREEN_NAME_MAX,
+  useLocale,
+  useTranslations,
+} from "@/components/i18n/LocaleProvider";
+import {
+  AvaAvatarClientError,
+  avaAvatarClientErrorKey,
+  fileToAvaAvatarDataUrl,
+} from "@/lib/ava/avatar-client";
+import { useOverlayA11y } from "@/hooks/useOverlayA11y";
+import {
+  AVA_AVATAR_PRESETS,  AVA_SCREEN_NAME_MAX,
   AVA_SCREEN_NAME_MIN,
+  avaScreenNameErrorKey,
   validateAvaScreenName,
 } from "@/lib/ava/setup";
 import type { AvaAutoOpenReason, AvaProgress, AvaStep } from "@/lib/ava/types";
@@ -91,6 +100,7 @@ function StepExtras({
   onAction: (body: Record<string, unknown>) => void;
   onLocalError: (message: string | null) => void;
 }) {
+  const t = useTranslations();
   const fileRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(progress.screenName ?? "");
   const [nameError, setNameError] = useState<string | null>(null);
@@ -115,18 +125,29 @@ function StepExtras({
           event.preventDefault();
           const validated = validateAvaScreenName(name);
           if (!validated.ok) {
-            setNameError(validated.error);
+            setNameError(
+              t(avaScreenNameErrorKey(validated.code), {
+                min: AVA_SCREEN_NAME_MIN,
+                max: AVA_SCREEN_NAME_MAX,
+              }),
+            );
             return;
           }
           setNameError(null);
           onAction({ action: "set_screen_name", screenName: validated.value });
         }}
       >
-        <label className="block text-left text-sm text-ink">
+        <label className="block text-left text-sm text-ink" htmlFor="ava-screen-name">
           <span className="mb-1.5 block text-xs font-medium text-ink-muted">
-            Screen name
+            {t("ava.screenNameLabel")}
+            <span className="text-red-700" aria-hidden="true">
+              {" "}
+              *
+            </span>
+            <span className="sr-only"> ({t("common.required")})</span>
           </span>
           <input
+            id="ava-screen-name"
             value={name}
             onChange={(e) => {
               setName(e.target.value);
@@ -134,19 +155,32 @@ function StepExtras({
             }}
             maxLength={AVA_SCREEN_NAME_MAX}
             minLength={AVA_SCREEN_NAME_MIN}
-            placeholder="e.g. Jeff"
+            required
+            aria-required="true"
+            aria-invalid={nameError ? true : undefined}
+            aria-describedby={
+              nameError ? "ava-screen-name-error" : "ava-screen-name-hint"
+            }
+            placeholder={t("ava.screenNamePlaceholder")}
             autoComplete="nickname"
             className="w-full rounded-lg border border-ink/15 bg-canvas px-3 py-2.5 text-sm text-ink outline-none transition focus-visible:ring-2 focus-visible:ring-accent/40"
             autoFocus
           />
         </label>
         {nameError ? (
-          <p className="text-left text-xs text-red-700" role="alert">
+          <p
+            id="ava-screen-name-error"
+            className="text-left text-xs text-red-700"
+            role="alert"
+          >
             {nameError}
           </p>
         ) : (
-          <p className="text-left text-xs text-ink-muted">
-            {AVA_SCREEN_NAME_MIN}–{AVA_SCREEN_NAME_MAX} characters
+          <p id="ava-screen-name-hint" className="text-left text-xs text-ink-muted">
+            {t("ava.screenNameHint", {
+              min: AVA_SCREEN_NAME_MIN,
+              max: AVA_SCREEN_NAME_MAX,
+            })}
           </p>
         )}
         <button
@@ -157,7 +191,7 @@ function StepExtras({
           {pending ? (
             <Loader2 className="size-4 animate-spin" aria-hidden />
           ) : null}
-          {step.ctaLabel || "Continue"}
+          {step.ctaLabel || t("ava.continue")}
         </button>
       </form>
     );
@@ -177,9 +211,11 @@ function StepExtras({
         setSelectedUrl(dataUrl);
         onAction({ action: "set_avatar", avatarUrl: dataUrl });
       } catch (err) {
-        onLocalError(
-          err instanceof Error ? err.message : "Could not use that image.",
-        );
+        if (err instanceof AvaAvatarClientError) {
+          onLocalError(t(avaAvatarClientErrorKey(err.code)));
+        } else {
+          onLocalError(t("ava.couldNotUseImage"));
+        }
       } finally {
         setUploading(false);
       }
@@ -200,39 +236,42 @@ function StepExtras({
 
         <div>
           <p className="mb-2 text-left text-xs font-medium text-ink-muted">
-            Friendly presets
+            {t("ava.friendlyPresets")}
           </p>
           <ul className="grid grid-cols-6 gap-2">
-            {AVA_AVATAR_PRESETS.map((preset) => (
-              <li key={preset.id}>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => {
-                    onLocalError(null);
-                    setSelectedUrl(preset.url);
-                    onAction({ action: "set_avatar", avatarUrl: preset.url });
-                  }}
-                  className={cn(
-                    "aspect-square w-full overflow-hidden rounded-full border-2 bg-canvas-deep transition",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
-                    selectedUrl === preset.url
-                      ? "border-accent"
-                      : "border-transparent hover:border-ink/20",
-                  )}
-                  aria-label={`Use ${preset.label} avatar`}
-                  aria-pressed={selectedUrl === preset.url}
-                  title={preset.label}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={preset.url}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
-                </button>
-              </li>
-            ))}
+            {AVA_AVATAR_PRESETS.map((preset) => {
+              const label = t(preset.labelKey);
+              return (
+                <li key={preset.id}>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      onLocalError(null);
+                      setSelectedUrl(preset.url);
+                      onAction({ action: "set_avatar", avatarUrl: preset.url });
+                    }}
+                    className={cn(
+                      "aspect-square w-full overflow-hidden rounded-full border-2 bg-canvas-deep transition",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
+                      selectedUrl === preset.url
+                        ? "border-accent"
+                        : "border-transparent hover:border-ink/20",
+                    )}
+                    aria-label={t("ava.usePresetAvatar", { label })}
+                    aria-pressed={selectedUrl === preset.url}
+                    title={label}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={preset.url}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </div>
 
@@ -241,6 +280,7 @@ function StepExtras({
           type="file"
           accept="image/jpeg,image/png,image/webp,image/*"
           className="sr-only"
+          aria-label={t("ava.uploadPhoto")}
           onChange={onFileChange}
         />
         <button
@@ -254,7 +294,7 @@ function StepExtras({
           ) : (
             <Upload className="size-4" aria-hidden />
           )}
-          Upload a photo
+          {t("ava.uploadPhoto")}
         </button>
       </div>
     );
@@ -268,6 +308,8 @@ function StepExtras({
  * Auto-opens only for first-run / quiet milestones; stays quiet after cancel.
  */
 export function AvaHelper({ initialProgress }: AvaHelperProps) {
+  const t = useTranslations();
+  const { locale } = useLocale();
   const router = useRouter();
   const pathname = usePathname();
   const askAi = useAskAiOptional();
@@ -329,10 +371,10 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
     [pathname, tryAutoOpen],
   );
 
-  // Silent refresh on navigation — hard-trigger identity when incomplete.
+  // Silent refresh on navigation or locale change — hard-trigger identity when incomplete.
   useEffect(() => {
     void refresh({ allowAutoOpen: true, source: "pathname" });
-  }, [pathname, refresh]);
+  }, [pathname, locale, refresh]);
 
   // First paint from SSR progress.
   useEffect(() => {
@@ -446,59 +488,6 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
     }
   }, [pathname, open]);
 
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-
-    const focusTimer = window.setTimeout(() => {
-      const root = dialogRef.current;
-      if (!root) return;
-      const preferred =
-        root.querySelector<HTMLElement>("[data-ava-primary]") ||
-        closeBtnRef.current ||
-        root.querySelector<HTMLElement>(
-          'button:not([disabled]), a[href], input:not([disabled])',
-        );
-      preferred?.focus();
-    }, 0);
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        dismissQuietly();
-        return;
-      }
-      if (event.key !== "Tab" || !dialogRef.current) return;
-      const focusable = Array.from(
-        dialogRef.current.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ),
-      ).filter((el) => !el.hasAttribute("disabled") && el.tabIndex !== -1);
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    }
-
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.clearTimeout(focusTimer);
-      document.body.style.overflow = prev;
-      document.removeEventListener("keydown", onKeyDown);
-      previouslyFocused?.focus?.();
-    };
-    // dismissQuietly closes via latest progressRef — intentional mount-on-open.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
   function applyProgress(next: AvaProgress, opts?: { open?: boolean }) {
     setProgress(next);
     if (opts?.open !== undefined) setOpen(opts.open);
@@ -530,7 +519,11 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
         // Fire-and-forget — awaiting refresh can leave the dialog stuck pending.
         router.refresh();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Something went wrong.");
+        setError(
+          err instanceof Error && err.message !== "Could not update Ava."
+            ? err.message
+            : t("ava.couldNotUpdate"),
+        );
       } finally {
         setPending(false);
       }
@@ -574,6 +567,14 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
       runAction({ action: "dismiss" }, { closeAfter: true });
     }
   }
+
+  useOverlayA11y({
+    open,
+    onClose: dismissQuietly,
+    containerRef: dialogRef,
+    initialFocus: closeBtnRef,
+    initialFocusSelector: "[data-ava-primary]",
+  });
 
   function openHelper() {
     setError(null);
@@ -625,8 +626,8 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
         )}
         aria-label={
           progress.hasRecommendedAction
-            ? "Open Ava — she has a next tip for you"
-            : "Open Ava"
+            ? t("ava.openWithTip")
+            : t("ava.open")
         }
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -663,7 +664,7 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
                 type="button"
                 onClick={dismissQuietly}
                 className="absolute right-3 top-3 rounded-md p-1.5 text-ink-muted transition hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-                aria-label="Close Ava for now"
+                aria-label={t("ava.closeForNow")}
               >
                 <X className="size-4" aria-hidden />
               </button>
@@ -674,31 +675,34 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
                 </div>
 
                 <p className="mt-3 text-xs font-medium uppercase tracking-[0.14em] text-accent-deep">
-                  Ava
+                  {t("ava.name")}
                 </p>
                 <h2
                   id="ava-helper-title"
                   className="mt-1 font-display text-2xl tracking-tight text-ink"
                 >
                   {active?.title ||
-                    (firstName ? `Nice work, ${firstName}` : "Nice work")}
+                    (firstName
+                      ? t("ava.niceWorkName", { name: firstName })
+                      : t("ava.niceWork"))}
                 </h2>
                 <p
                   id="ava-helper-desc"
                   className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-ink-muted"
                 >
-                  {active?.description ||
-                    "I’m here in the header if you want a tip."}
+                  {active?.description || t("ava.idleTip")}
                 </p>
 
                 {active?.optional ? (
-                  <p className="mt-2 text-xs text-ink-muted/80">Optional</p>
+                  <p className="mt-2 text-xs text-ink-muted/80">
+                    {t("ava.optional")}
+                  </p>
                 ) : null}
 
                 {active?.examples && active.examples.length > 0 ? (
                   <ul
                     className="mx-auto mt-4 w-full max-w-sm space-y-2 text-left"
-                    aria-label="Example searches"
+                    aria-label={t("ava.examplesAria")}
                   >
                     {active.examples.map((example) => (
                       <li
@@ -747,7 +751,7 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
                           setOpen(false);
                         }}
                       >
-                        {active.ctaLabel || "View Photos"}
+                        {active.ctaLabel || t("ava.viewPhotos")}
                       </Link>
                     ) : active.id === "create_memory" &&
                       progress.signals.memoryCount > 0 &&
@@ -764,7 +768,7 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
                           setOpen(false);
                         }}
                       >
-                        {active.ctaLabel || "View Memories"}
+                        {active.ctaLabel || t("ava.viewMemories")}
                       </Link>
                     ) : active.id === "encourage_memory" && active.href ? (
                       <>
@@ -780,7 +784,7 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
                             setOpen(false);
                           }}
                         >
-                          {active.ctaLabel || "Create Memory"}
+                          {active.ctaLabel || t("ava.createMemory")}
                         </Link>
                         <button
                           type="button"
@@ -793,7 +797,7 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
                           }
                           className="ui-btn ui-btn-secondary w-full justify-center focus-visible:ring-2 focus-visible:ring-accent/40"
                         >
-                          Maybe later
+                          {t("ava.maybeLater")}
                         </button>
                       </>
                     ) : active.inline === "acknowledge" ? (
@@ -820,7 +824,7 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
                             aria-hidden
                           />
                         ) : null}
-                        {active.ctaLabel || "Continue"}
+                        {active.ctaLabel || t("ava.continue")}
                       </button>
                     ) : active.href && active.ctaLabel ? (
                       <>
@@ -870,7 +874,7 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
                             }
                             className="ui-btn ui-btn-secondary w-full justify-center focus-visible:ring-2 focus-visible:ring-accent/40"
                           >
-                            Maybe later
+                            {t("ava.maybeLater")}
                           </button>
                         ) : null}
                       </>
@@ -878,7 +882,7 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
 
                     {active.id === "moderation" ? (
                       <p className="text-xs text-ink-muted">
-                        Keep browsing — I’ll nudge you when Photos is ready.
+                        {t("ava.moderationBrowse")}
                       </p>
                     ) : null}
 
@@ -892,7 +896,7 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
                         onClick={dismissQuietly}
                         className="mt-1 text-sm font-medium text-ink-muted transition hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 rounded-md"
                       >
-                        Not now
+                        {t("ava.notNow")}
                       </button>
                     )}
                   </div>
@@ -904,7 +908,7 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
                     onClick={dismissQuietly}
                     className="mt-4 text-sm font-medium text-ink-muted transition hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 rounded-md"
                   >
-                    Not now
+                    {t("ava.notNow")}
                   </button>
                 ) : (
                   <button
@@ -912,7 +916,7 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
                     onClick={dismissQuietly}
                     className="ui-btn ui-btn-secondary mt-6 w-full justify-center focus-visible:ring-2 focus-visible:ring-accent/40"
                   >
-                    Close
+                    {t("ava.close")}
                   </button>
                 )}
               </div>

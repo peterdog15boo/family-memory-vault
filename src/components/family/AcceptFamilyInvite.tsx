@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { CheckCircle2, Loader2, ShieldAlert } from "lucide-react";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 
 type AcceptFamilyInviteProps = {
   token: string | null;
@@ -13,11 +14,10 @@ type AcceptFamilyInviteProps = {
  * Accept a family invite from /family/accept?token=…
  */
 export function AcceptFamilyInvite({ token }: AcceptFamilyInviteProps) {
+  const t = useTranslations();
   const router = useRouter();
   const [error, setError] = useState<string | null>(
-    token
-      ? null
-      : "This invite link is incomplete. Ask the family owner to send a fresh invite.",
+    token ? null : t("family.acceptIncomplete"),
   );
   const [done, setDone] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -37,22 +37,24 @@ export function AcceptFamilyInvite({ token }: AcceptFamilyInviteProps) {
           error?: string;
         };
         if (!response.ok) {
-          throw new Error(data.error || "Could not accept invite.");
+          throw new Error(data.error || t("family.acceptFailed"));
         }
         setDone(true);
         router.refresh();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Accept failed.");
+        setError(
+          err instanceof Error ? err.message : t("family.acceptFailedGeneric"),
+        );
       }
     });
-  }, [token, started, router]);
+  }, [token, started, router, t]);
 
   if (error) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50/80 px-6 py-10 text-center">
         <ShieldAlert className="mx-auto size-8 text-red-700/80" aria-hidden />
         <h1 className="mt-4 font-display text-2xl tracking-tight text-ink">
-          Invite unavailable
+          {t("family.inviteUnavailable")}
         </h1>
         <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-ink-muted">
           {error}
@@ -61,7 +63,7 @@ export function AcceptFamilyInvite({ token }: AcceptFamilyInviteProps) {
           href="/family"
           className="ui-btn ui-btn-primary mt-6 inline-flex"
         >
-          Go to Family settings
+          {t("family.goToFamilySettings")}
         </Link>
       </div>
     );
@@ -72,24 +74,23 @@ export function AcceptFamilyInvite({ token }: AcceptFamilyInviteProps) {
       <div className="rounded-2xl border border-accent/25 bg-accent/10 px-6 py-10 text-center">
         <CheckCircle2 className="mx-auto size-8 text-accent-deep" aria-hidden />
         <h1 className="mt-4 font-display text-2xl tracking-tight text-ink">
-          You’re in
+          {t("family.youreIn")}
         </h1>
         <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-ink-muted">
-          Welcome to the family. Shared photos and memories will appear when
-          they’re ready.
+          {t("family.welcomeToFamily")}
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <Link
             href="/family"
             className="ui-btn ui-btn-primary inline-flex"
           >
-            View family
+            {t("family.viewFamily")}
           </Link>
           <Link
             href="/dashboard"
             className="ui-btn ui-btn-secondary inline-flex"
           >
-            Open vault
+            {t("nav.openVault")}
           </Link>
         </div>
       </div>
@@ -103,12 +104,12 @@ export function AcceptFamilyInvite({ token }: AcceptFamilyInviteProps) {
         aria-hidden
       />
       <h1 className="page-title mt-4 font-display text-2xl tracking-tight text-ink">
-        Joining family…
+        {t("family.joiningFamily")}
       </h1>
       <p className="mx-auto mt-2 max-w-md text-sm text-ink-muted">
         {pending
-          ? "Confirming your invite."
-          : "One moment while we connect your account."}
+          ? t("family.confirmingInvite")
+          : t("family.connectingAccount")}
       </p>
     </div>
   );

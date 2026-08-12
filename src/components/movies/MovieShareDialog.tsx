@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Check,
@@ -10,6 +10,7 @@ import {
   Share2,
   X,
 } from "lucide-react";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 import type { SerializedMovie } from "@/lib/movies/serialize";
 import {
   copyMovieShareLink,
@@ -19,6 +20,7 @@ import {
   shareMovieFile,
   type MovieSocialNetwork,
 } from "@/lib/movies/share";
+import { useOverlayA11y } from "@/hooks/useOverlayA11y";
 import { cn } from "@/lib/utils";
 
 type MovieShareDialogProps = {
@@ -28,8 +30,8 @@ type MovieShareDialogProps = {
 
 type SocialOption = {
   id: MovieSocialNetwork;
-  label: string;
-  hint: string;
+  labelKey: string;
+  hintKey: string;
   /** Simple brand mark drawn with CSS (no icon pack dependency). */
   mark: string;
   tone: string;
@@ -38,36 +40,36 @@ type SocialOption = {
 const SOCIAL_OPTIONS: SocialOption[] = [
   {
     id: "facebook",
-    label: "Facebook",
-    hint: "Share a link",
+    labelKey: "movie.socialFacebook",
+    hintKey: "movie.socialFacebookHint",
     mark: "f",
     tone: "bg-[#1877F2] text-white",
   },
   {
     id: "instagram",
-    label: "Instagram",
-    hint: "Download, then post",
+    labelKey: "movie.socialInstagram",
+    hintKey: "movie.socialInstagramHint",
     mark: "Ig",
     tone: "bg-gradient-to-br from-[#F58529] via-[#DD2A7B] to-[#8134AF] text-white",
   },
   {
     id: "tiktok",
-    label: "TikTok",
-    hint: "Download, then post",
+    labelKey: "movie.socialTiktok",
+    hintKey: "movie.socialTiktokHint",
     mark: "Tk",
     tone: "bg-ink text-white",
   },
   {
     id: "pinterest",
-    label: "Pinterest",
-    hint: "Pin with preview",
+    labelKey: "movie.socialPinterest",
+    hintKey: "movie.socialPinterestHint",
     mark: "P",
     tone: "bg-[#E60023] text-white",
   },
   {
     id: "x",
-    label: "X",
-    hint: "Post a link",
+    labelKey: "movie.socialX",
+    hintKey: "movie.socialXHint",
     mark: "𝕏",
     tone: "bg-ink text-white",
   },
@@ -79,25 +81,20 @@ const SOCIAL_OPTIONS: SocialOption[] = [
  * links open in a popup; Instagram / TikTok guide a download-first flow.
  */
 export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
+  const t = useTranslations();
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const shareUrl = movieShareUrl(movie);
   const canSystemShare =
     typeof navigator !== "undefined" && typeof navigator.share === "function";
 
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = prev;
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [onClose]);
+  useOverlayA11y({
+    open: true,
+    onClose,
+    containerRef: dialogRef,
+  });
 
   async function handleCopy() {
     setBusy("copy");
@@ -106,10 +103,10 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
     setBusy(null);
     if (ok) {
       setCopied(true);
-      setNote("Link copied. Links expire after a while — download for lasting shares.");
+      setNote(t("movie.noteCopied"));
       window.setTimeout(() => setCopied(false), 2200);
     } else {
-      setNote("Couldn’t copy the link. Try Download instead.");
+      setNote(t("movie.noteCopyFailed"));
     }
   }
 
@@ -129,15 +126,15 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
     const ok = downloadMovieFile(movie);
     setBusy(null);
     if (!ok) {
-      setNote("Download isn’t available for this movie yet.");
+      setNote(t("movie.noteDownloadUnavailable"));
       return;
     }
     if (forNetwork === "instagram") {
-      setNote("Video saved. Open Instagram and post it from your camera roll or drafts.");
+      setNote(t("movie.noteInstagram"));
     } else if (forNetwork === "tiktok") {
-      setNote("Video saved. Open TikTok and upload it from your device.");
+      setNote(t("movie.noteTikTok"));
     } else {
-      setNote("Download started.");
+      setNote(t("movie.noteDownloadStarted"));
     }
   }
 
@@ -149,33 +146,40 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
     }
     const ok = openMovieSocialShare(network, movie);
     if (!ok) {
-      setNote("Couldn’t open that share page. Try Copy link or Download.");
+      setNote(t("movie.noteSocialFailed"));
     }
   }
 
   if (!shareUrl) {
     return createPortal(
       <div
+        ref={dialogRef}
         className="movie-share-dialog fixed inset-0 z-[100] flex items-end justify-center bg-ink/50 p-4 backdrop-blur-sm sm:items-center"
         role="dialog"
         aria-modal="true"
-        aria-label="Share movie"
+        aria-labelledby="movie-share-unavailable-title"
+        tabIndex={-1}
         onClick={onClose}
       >
         <div
           className="w-full max-w-md rounded-2xl bg-canvas p-6 shadow-2xl"
           onClick={(event) => event.stopPropagation()}
         >
-          <p className="font-display text-xl text-ink">Not ready to share</p>
+          <p
+            id="movie-share-unavailable-title"
+            className="font-display text-xl text-ink"
+          >
+            {t("movie.notReadyTitle")}
+          </p>
           <p className="mt-2 text-sm text-ink-muted">
-            This movie doesn’t have a shareable file yet.
+            {t("movie.notReadyBody")}
           </p>
           <button
             type="button"
             onClick={onClose}
             className="ui-btn ui-btn-primary mt-5"
           >
-            Close
+            {t("common.close")}
           </button>
         </div>
       </div>,
@@ -185,10 +189,12 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
 
   return createPortal(
     <div
+      ref={dialogRef}
       className="movie-share-dialog fixed inset-0 z-[100] flex items-end justify-center bg-ink/50 p-0 backdrop-blur-sm sm:items-center sm:p-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby="movie-share-title"
+      tabIndex={-1}
       onClick={onClose}
     >
       <div
@@ -198,7 +204,7 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
         <header className="flex items-start justify-between gap-3 border-b border-ink/8 px-5 py-4">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent-deep">
-              Share movie
+              {t("movie.shareEyebrow")}
             </p>
             <h2
               id="movie-share-title"
@@ -207,16 +213,16 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
               {movie.title}
             </h2>
             <p className="mt-1 text-sm text-ink-muted">
-              Send a link or download the video for social apps.
+              {t("movie.shareLead")}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-2 text-ink-muted transition hover:bg-ink/5 hover:text-ink"
-            aria-label="Close share"
+            className="rounded-md p-2 text-ink-muted transition hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            aria-label={t("movie.closeShare")}
           >
-            <X className="size-5" />
+            <X className="size-5" aria-hidden />
           </button>
         </header>
 
@@ -245,10 +251,10 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
                   </span>
                   <span className="min-w-0">
                     <span className="block text-sm font-semibold text-ink">
-                      {option.label}
+                      {t(option.labelKey)}
                     </span>
                     <span className="block text-xs text-ink-muted">
-                      {option.hint}
+                      {t(option.hintKey)}
                     </span>
                   </span>
                 </button>
@@ -270,7 +276,7 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
               ) : (
                 <Copy className="size-4" aria-hidden />
               )}
-              {copied ? "Link copied" : "Copy link"}
+              {copied ? t("movie.linkCopied") : t("movie.copyLink")}
             </button>
 
             {movie.downloadUrl || movie.playUrl ? (
@@ -285,7 +291,7 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
                 ) : (
                   <Download className="size-4" aria-hidden />
                 )}
-                Download MP4
+                {t("movie.downloadMp4")}
               </button>
             ) : null}
 
@@ -301,7 +307,7 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
                 ) : (
                   <Share2 className="size-4" aria-hidden />
                 )}
-                More sharing options…
+                {t("movie.moreSharing")}
               </button>
             ) : null}
           </div>
@@ -315,9 +321,7 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
             </p>
           ) : (
             <p className="mt-4 text-xs leading-relaxed text-ink-muted">
-              Instagram and TikTok don’t accept video links from the web — we
-              download the file so you can upload it in those apps. Share links
-              are temporary.
+              {t("movie.shareFootnote")}
             </p>
           )}
         </div>

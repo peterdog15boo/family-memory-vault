@@ -8,6 +8,7 @@ import {
 import { requireApiUser } from "@/lib/auth/api";
 import { ensureAppUser } from "@/lib/users";
 import { apiError, apiErrorFromUnknown } from "@/lib/http/api-error";
+import { APP_LOCALES } from "@/lib/i18n/locales";
 import { rejectUntrustedOrigin } from "@/lib/security/origin";
 
 export const runtime = "nodejs";
@@ -23,7 +24,10 @@ const prefsPatchSchema = z
     inAppMediaReady: z.boolean().optional(),
     inAppEmergencyAccess: z.boolean().optional(),
     notificationSoundEnabled: z.boolean().optional(),
+    celebrationSoundEnabled: z.boolean().optional(),
+    emailMilestoneCelebrations: z.boolean().optional(),
     productUpdatesEmail: z.boolean().optional(),
+    locale: z.enum(APP_LOCALES).optional(),
   })
   .strict();
 
@@ -71,7 +75,9 @@ export async function PATCH(request: Request) {
   }
 
   const patch = Object.fromEntries(
-    Object.entries(parsed.data).filter(([, value]) => typeof value === "boolean"),
+    Object.entries(parsed.data).filter(
+      ([, value]) => typeof value === "boolean" || typeof value === "string",
+    ),
   );
   if (Object.keys(patch).length === 0) {
     return apiError("No preference changes provided", {

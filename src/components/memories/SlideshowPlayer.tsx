@@ -11,6 +11,7 @@ import {
   Settings2,
   X,
 } from "lucide-react";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 import {
   normalizeSlideshowSettings,
   SLIDESHOW_TRANSITIONS,
@@ -22,6 +23,7 @@ import type {
 } from "@/lib/memories/types";
 import { MediaViewerMedia } from "@/components/media/MediaViewerMedia";
 import { preloadMediaViewerUrls } from "@/components/media/useMediaViewerSrc";
+import { useOverlayA11y } from "@/hooks/useOverlayA11y";
 import { cn } from "@/lib/utils";
 
 type SlideshowPlayerProps = {
@@ -37,6 +39,7 @@ export function SlideshowPlayer({
   onClose,
   onSettingsSaved,
 }: SlideshowPlayerProps) {
+  const t = useTranslations();
   const items = memory.media;
   const initial = normalizeSlideshowSettings(memory.settings);
 
@@ -54,12 +57,29 @@ export function SlideshowPlayer({
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const settingsRef = useRef<HTMLDivElement>(null);
   const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const indexRef = useRef(index);
   indexRef.current = index;
 
   const current = items[index] ?? null;
   const isVideo = current?.type === "video";
+
+  useOverlayA11y({
+    open: true,
+    onClose,
+    containerRef: dialogRef,
+    escapeEnabled: !showSettings,
+    trapFocus: !showSettings,
+  });
+
+  useOverlayA11y({
+    open: showSettings,
+    onClose: () => setShowSettings(false),
+    containerRef: settingsRef,
+    lockScroll: false,
+  });
 
   const clearAdvanceTimer = useCallback(() => {
     if (advanceTimer.current) {
@@ -140,13 +160,10 @@ export function SlideshowPlayer({
     preloadMediaViewerUrls(upcoming);
   }, [index, items, current?.id]);
 
-  // Keyboard
+  // Keyboard navigation (Escape + focus trap via useOverlayA11y)
   useEffect(() => {
+    if (showSettings) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-        return;
-      }
       if (event.key === "ArrowRight") {
         event.preventDefault();
         goNext();
@@ -160,16 +177,7 @@ export function SlideshowPlayer({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [goNext, goPrev, onClose]);
-
-  // Lock body scroll
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, []);
+  }, [goNext, goPrev, showSettings]);
 
   function saveSettings() {
     if (!canEdit) return;
@@ -193,13 +201,15 @@ export function SlideshowPlayer({
           memory?: SerializedMemoryWithMedia;
         };
         if (!response.ok || !data.memory) {
-          throw new Error(data.error || "Could not save slideshow settings.");
+          throw new Error(data.error || t("memories.errorSaveSlideshow"));
         }
         onSettingsSaved?.(data.memory);
         setShowSettings(false);
       } catch (error) {
         setSaveError(
-          error instanceof Error ? error.message : "Could not save settings.",
+          error instanceof Error
+            ? error.message
+            : t("memories.errorSaveSettings"),
         );
       }
     });
@@ -207,18 +217,30 @@ export function SlideshowPlayer({
 
   if (items.length === 0) {
     return createPortal(
-      <div className="slideshow-player fixed inset-0 z-[80] flex items-center justify-center bg-ink/90 p-6">
+      <div
+        ref={dialogRef}
+        className="slideshow-player fixed inset-0 z-[80] flex items-center justify-center bg-ink/90 p-6"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="slideshow-empty-title"
+        tabIndex={-1}
+      >
         <div className="max-w-sm rounded-xl bg-canvas p-6 text-center">
-          <p className="font-display text-xl text-ink">Nothing to play yet</p>
+          <p
+            id="slideshow-empty-title"
+            className="font-display text-xl text-ink"
+          >
+            {t("memories.slideshowEmptyTitle")}
+          </p>
           <p className="mt-2 text-sm text-ink-muted">
-            Add photos or videos to this memory first.
+            {t("memories.slideshowEmptyBody")}
           </p>
           <button
             type="button"
             onClick={onClose}
-            className="mt-5 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground"
+            className="mt-5 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
           >
-            Close
+            {t("common.close")}
           </button>
         </div>
       </div>,
@@ -228,18 +250,23 @@ export function SlideshowPlayer({
 
   return createPortal(
     <div
+      ref={dialogRef}
       className="slideshow-player fixed inset-0 z-[80] flex flex-col bg-[#1a1816]"
       role="dialog"
       aria-modal="true"
-      aria-label={`Slideshow: ${memory.title}`}
+      aria-labelledby="slideshow-title"
+      tabIndex={-1}
     >
       {/* Top bar */}
-      <div className="relative z-20 flex items-center justify-between gap-3 px-4 py-3 text-accent-foreground/90">
+      <div className="relative z-20 flex items-center justify-between gap-3 px-4 py-3 text-white">
         <div className="min-w-0">
-          <p className="truncate font-display text-lg tracking-tight">
+          <p
+            id="slideshow-title"
+            className="truncate font-display text-lg tracking-tight"
+          >
             {memory.title}
           </p>
-          <p className="text-xs text-accent-foreground/55">
+          <p className="text-xs text-white/85">
             {index + 1} / {items.length}
             {current?.originalFilename
               ? ` · ${current.originalFilename}`
@@ -251,19 +278,22 @@ export function SlideshowPlayer({
             <button
               type="button"
               onClick={() => setShowSettings((v) => !v)}
-              className="rounded-md p-2 transition hover:bg-white/10"
-              aria-label="Slideshow settings"
+              className="rounded-md p-2 text-white/95 transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              aria-label={t("memories.slideshowSettingsAria")}
+              aria-expanded={showSettings}
+              aria-controls="slideshow-settings"
+              aria-haspopup="dialog"
             >
-              <Settings2 className="size-5" />
+              <Settings2 className="size-5" aria-hidden />
             </button>
           ) : null}
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-2 transition hover:bg-white/10"
-            aria-label="Close slideshow"
+            className="rounded-md p-2 text-white/95 transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            aria-label={t("memories.closeSlideshow")}
           >
-            <X className="size-5" />
+            <X className="size-5" aria-hidden />
           </button>
         </div>
       </div>
@@ -279,10 +309,10 @@ export function SlideshowPlayer({
             event.stopPropagation();
             goPrev();
           }}
-          className="absolute left-2 z-10 rounded-full bg-black/35 p-2 text-accent-foreground backdrop-blur-sm transition hover:bg-black/55 sm:left-4"
-          aria-label="Previous"
+          className="absolute left-2 z-10 rounded-full bg-black/60 p-2 text-white backdrop-blur-sm transition hover:bg-black/75 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:left-4"
+          aria-label={t("common.previous")}
         >
-          <ChevronLeft className="size-6" />
+          <ChevronLeft className="size-6" aria-hidden />
         </button>
         <button
           type="button"
@@ -290,10 +320,10 @@ export function SlideshowPlayer({
             event.stopPropagation();
             goNext();
           }}
-          className="absolute right-2 z-10 rounded-full bg-black/35 p-2 text-accent-foreground backdrop-blur-sm transition hover:bg-black/55 sm:right-4"
-          aria-label="Next"
+          className="absolute right-2 z-10 rounded-full bg-black/60 p-2 text-white backdrop-blur-sm transition hover:bg-black/75 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:right-4"
+          aria-label={t("common.next")}
         >
-          <ChevronRight className="size-6" />
+          <ChevronRight className="size-6" aria-hidden />
         </button>
 
         <div
@@ -309,6 +339,7 @@ export function SlideshowPlayer({
             <SlideMedia
               item={current}
               videoRef={videoRef}
+              familyPhotoAlt={t("memories.familyPhotoAlt")}
               onVideoEnded={() => {
                 if (playing) goNext();
               }}
@@ -329,7 +360,7 @@ export function SlideshowPlayer({
                 key={item.id}
                 type="button"
                 onClick={() => goTo(i)}
-                aria-label={`Go to slide ${i + 1}`}
+                aria-label={t("memories.goToSlide", { n: i + 1 })}
                 className={cn(
                   "h-1 flex-1 rounded-full transition",
                   i === index ? "bg-accent" : "bg-white/25 hover:bg-white/40",
@@ -342,30 +373,30 @@ export function SlideshowPlayer({
             <button
               type="button"
               onClick={goPrev}
-              className="rounded-full p-2 text-accent-foreground/80 hover:bg-white/10"
-              aria-label="Previous"
+              className="rounded-full p-2 text-white/95 hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              aria-label={t("common.previous")}
             >
-              <ChevronLeft className="size-5" />
+              <ChevronLeft className="size-5" aria-hidden />
             </button>
             <button
               type="button"
               onClick={() => setPlaying((p) => !p)}
-              className="flex size-12 items-center justify-center rounded-full bg-accent text-accent-foreground shadow-lg transition hover:bg-accent-deep"
-              aria-label={playing ? "Pause" : "Play"}
+              className="flex size-12 items-center justify-center rounded-full bg-accent-deep text-white shadow-lg transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              aria-label={playing ? t("common.pause") : t("common.play")}
             >
               {playing ? (
-                <Pause className="size-5 fill-current" />
+                <Pause className="size-5 fill-current" aria-hidden />
               ) : (
-                <Play className="size-5 fill-current pl-0.5" />
+                <Play className="size-5 fill-current pl-0.5" aria-hidden />
               )}
             </button>
             <button
               type="button"
               onClick={goNext}
-              className="rounded-full p-2 text-accent-foreground/80 hover:bg-white/10"
-              aria-label="Next"
+              className="rounded-full p-2 text-white/95 hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              aria-label={t("common.next")}
             >
-              <ChevronRight className="size-5" />
+              <ChevronRight className="size-5" aria-hidden />
             </button>
           </div>
         </div>
@@ -373,42 +404,54 @@ export function SlideshowPlayer({
 
       {/* Settings sheet */}
       {showSettings ? (
-        <div className="absolute inset-x-0 bottom-0 z-30 rounded-t-2xl border border-white/10 bg-[#2a2623] p-5 text-accent-foreground shadow-2xl sm:inset-x-auto sm:bottom-24 sm:right-4 sm:w-80 sm:rounded-xl">
+        <div
+          ref={settingsRef}
+          id="slideshow-settings"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="slideshow-settings-title"
+          tabIndex={-1}
+          className="absolute inset-x-0 bottom-0 z-30 rounded-t-2xl border border-white/10 bg-[#2a2623] p-5 text-accent-foreground shadow-2xl sm:inset-x-auto sm:bottom-24 sm:right-4 sm:w-80 sm:rounded-xl"
+        >
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="font-display text-lg">Slideshow settings</h3>
+            <h3 id="slideshow-settings-title" className="font-display text-lg">
+              {t("memories.slideshowSettingsTitle")}
+            </h3>
             <button
               type="button"
               onClick={() => setShowSettings(false)}
-              className="rounded-md p-1 hover:bg-white/10"
-              aria-label="Close settings"
+              className="rounded-md p-1 text-white/95 hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              aria-label={t("memories.closeSettings")}
             >
-              <X className="size-4" />
+              <X className="size-4" aria-hidden />
             </button>
           </div>
 
-          <label className="block text-xs text-accent-foreground/70">
-            Transition
+          <label className="block text-xs text-white/85">
+            {t("memories.transition")}
             <select
               value={transition}
               onChange={(event) =>
                 setTransition(event.target.value as SlideshowTransition)
               }
-              className="mt-1.5 w-full rounded-md border border-white/15 bg-black/30 px-3 py-2 text-sm text-accent-foreground outline-none focus:border-accent"
+              className="mt-1.5 w-full rounded-md border border-white/25 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-white focus-visible:ring-2 focus-visible:ring-white/70"
             >
               {SLIDESHOW_TRANSITIONS.map((value) => (
                 <option key={value} value={value}>
                   {value === "fade"
-                    ? "Fade"
+                    ? t("memories.transitionFade")
                     : value === "slide"
-                      ? "Slide"
-                      : "None"}
+                      ? t("memories.transitionSlide")
+                      : t("memories.transitionNone")}
                 </option>
               ))}
             </select>
           </label>
 
-          <label className="mt-4 block text-xs text-accent-foreground/70">
-            Photo duration ({(photoDurationMs / 1000).toFixed(1)}s)
+          <label className="mt-4 block text-xs text-white/85">
+            {t("memories.photoDuration", {
+              seconds: (photoDurationMs / 1000).toFixed(1),
+            })}
             <input
               type="range"
               min={2000}
@@ -418,13 +461,12 @@ export function SlideshowPlayer({
               onChange={(event) =>
                 setPhotoDurationMs(Number(event.target.value))
               }
-              className="mt-2 w-full accent-[var(--accent)]"
+              className="mt-2 w-full accent-[var(--accent-deep)]"
             />
           </label>
 
-          <p className="mt-4 text-xs leading-relaxed text-accent-foreground/50">
-            Background music can be added in a later update. Videos always play
-            through before advancing.
+          <p className="mt-4 text-xs leading-relaxed text-white/80">
+            {t("memories.slideshowSettingsHint")}
           </p>
 
           {saveError ? (
@@ -437,12 +479,12 @@ export function SlideshowPlayer({
             type="button"
             onClick={saveSettings}
             disabled={pending}
-            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md bg-accent px-3 py-2.5 text-sm font-medium text-accent-foreground hover:bg-accent-deep disabled:opacity-60"
+            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md bg-accent-deep px-3 py-2.5 text-sm font-medium text-white hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:opacity-60"
           >
             {pending ? (
               <Loader2 className="size-4 animate-spin" aria-hidden />
             ) : null}
-            Save preferences
+            {t("memories.savePreferences")}
           </button>
         </div>
       ) : null}
@@ -455,16 +497,18 @@ function SlideMedia({
   item,
   videoRef,
   onVideoEnded,
+  familyPhotoAlt,
 }: {
   item: SerializedMemoryMediaItem;
   videoRef: React.RefObject<HTMLVideoElement | null>;
   onVideoEnded: () => void;
+  familyPhotoAlt: string;
 }) {
   return (
     <MediaViewerMedia
       mediaId={item.id}
       type={item.type}
-      alt={item.originalFilename || "Family photo"}
+      alt={item.originalFilename || familyPhotoAlt}
       className="max-h-[70vh] sm:max-h-[75vh]"
       videoRef={videoRef}
       onVideoEnded={onVideoEnded}

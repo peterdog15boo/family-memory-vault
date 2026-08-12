@@ -1,7 +1,7 @@
 /**
  * Shared Clerk auth for user-facing API routes.
  * Enforces authentication + blocks suspended accounts (layouts alone are not enough).
- * Optionally enforces Beta NDA acceptance when BETA_NDA_REQUIRED=true.
+ * Optionally enforces Beta NDA and Terms of Service acceptance when required.
  */
 
 import { auth } from "@clerk/nextjs/server";
@@ -13,8 +13,10 @@ export type ApiAuthFail = { ok: false; response: NextResponse };
 export type ApiAuthResult = ApiAuthOk | ApiAuthFail;
 
 export type RequireApiUserOptions = {
-  /** Skip Beta NDA gate (for the accept endpoint itself). */
+  /** Skip Beta NDA gate (for the NDA accept endpoint itself). */
   skipBetaNda?: boolean;
+  /** Skip Terms of Service gate (for the Terms accept endpoint itself). */
+  skipTerms?: boolean;
 };
 
 const checkSuspendedCached = cache(async (userId: string): Promise<boolean> => {
@@ -28,6 +30,12 @@ const checkBetaNdaCached = cache(async (userId: string): Promise<boolean> => {
   );
   if (!isBetaNdaRequired()) return true;
   return hasAcceptedBetaNda(userId);
+});
+
+const checkTermsCached = cache(async (userId: string): Promise<boolean> => {
+  const { hasAcceptedTerms, isTermsRequired } = await import("@/lib/terms");
+  if (!isTermsRequired()) return true;
+  return hasAcceptedTerms(userId);
 });
 
 /**
@@ -87,6 +95,32 @@ export async function requireApiUser(
         ok: false,
         response: NextResponse.json(
           { error: "Unable to verify beta agreement status" },
+          { status: 503 },
+        ),
+      };
+    }
+  }
+
+  if (!options.skipTerms) {
+    try {
+      if (!(await checkTermsCached(userId))) {
+        return {
+          ok: false,
+          response: NextResponse.json(
+            {
+              error: "Terms of Service acceptance required",
+              code: "terms_required",
+            },
+            { status: 403 },
+          ),
+        };
+      }
+    } catch (error) {
+      console.error("[auth.api] terms check failed", error);
+      return {
+        ok: false,
+        response: NextResponse.json(
+          { error: "Unable to verify terms acceptance status" },
           { status: 503 },
         ),
       };

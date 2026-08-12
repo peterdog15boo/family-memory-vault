@@ -132,11 +132,30 @@ export async function POST(request: Request) {
       );
     }
 
+    const isNewInvite =
+      member.createdAt.getTime() === member.invitedAt.getTime();
+    let celebration: import("@/lib/gamification/types").JourneyCelebrationPayload | null =
+      null;
+    try {
+      const { afterInviteSent } = await import(
+        "@/lib/gamification/family-invite"
+      );
+      celebration = await afterInviteSent({
+        userId,
+        familyId: member.familyId,
+        memberId: member.id,
+        isNewInvite,
+      });
+    } catch (error) {
+      console.error("[family.invite] gamification failed", error);
+    }
+
     return NextResponse.json(
       {
         member: serializeFamilyMember(member),
         inviteLink,
         emailSent: true,
+        celebration,
       },
       { status: 201 },
     );

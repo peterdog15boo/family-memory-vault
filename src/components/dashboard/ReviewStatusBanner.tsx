@@ -1,6 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { Clock3, Shield } from "lucide-react";
-import { COPY } from "@/lib/copy";
+import { useCopy, useTranslations } from "@/components/i18n/LocaleProvider";
 import type { MediaReviewSummary } from "@/lib/media/queries";
 
 type ReviewStatusBannerProps = {
@@ -11,19 +13,21 @@ type ReviewStatusBannerProps = {
  * Subtle status only — never reveal CSAM / quarantine details to end users.
  */
 export function ReviewStatusBanner({ summary }: ReviewStatusBannerProps) {
+  const copy = useCopy();
+  const t = useTranslations();
   const { pendingCount, quarantinedCount, rejectedCount } = summary;
   const needsAttention = pendingCount + quarantinedCount + rejectedCount;
 
   if (needsAttention === 0) return null;
 
-  let message: string = COPY.review.mixed;
+  let message: string = copy.review.mixed;
   if (pendingCount > 0 && quarantinedCount + rejectedCount === 0) {
     message =
       pendingCount === 1
-        ? COPY.review.pendingOne
-        : COPY.review.pendingMany(pendingCount);
+        ? copy.review.pendingOne
+        : copy.review.pendingMany(pendingCount);
   } else if (pendingCount === 0 && (quarantinedCount > 0 || rejectedCount > 0)) {
-    message = COPY.review.attention;
+    message = copy.review.attention;
   }
 
   return (
@@ -40,7 +44,7 @@ export function ReviewStatusBanner({ summary }: ReviewStatusBannerProps) {
             href="/media"
             className="mt-1 inline-flex text-xs font-medium text-accent-deep hover:text-accent"
           >
-            View Photos
+            {t("pages.viewPhotos")}
           </Link>
         ) : null}
       </div>

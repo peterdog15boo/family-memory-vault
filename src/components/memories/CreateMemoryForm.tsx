@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, ImagePlus, Loader2, Star } from "lucide-react";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { MediaThumb } from "@/components/memories/MediaThumb";
 import { userFacingApiError } from "@/lib/http/user-messages";
 import type { SafeMediaItem } from "@/lib/media/queries";
@@ -28,6 +29,7 @@ export function CreateMemoryForm({
   initialCoverMediaId = null,
   sourceHint = null,
 }: CreateMemoryFormProps) {
+  const t = useTranslations();
   const router = useRouter();
   const libraryIds = useMemo(() => new Set(library.map((item) => item.id)), [library]);
 
@@ -70,11 +72,11 @@ export function CreateMemoryForm({
 
     const trimmed = title.trim();
     if (!trimmed) {
-      setError("Please enter a title.");
+      setError(t("memories.errorTitleRequired"));
       return;
     }
     if (selectedIds.length === 0) {
-      setError("Select at least one photo or video.");
+      setError(t("memories.errorSelectMedia"));
       return;
     }
 
@@ -104,7 +106,7 @@ export function CreateMemoryForm({
 
         if (!response.ok || !data.memory?.id) {
           setError(
-            userFacingApiError(data, "Could not create memory. Try again."),
+            userFacingApiError(data, t("memories.errorCreate")),
           );
           return;
         }
@@ -112,7 +114,7 @@ export function CreateMemoryForm({
         router.push(`/memories/${data.memory.id}`);
         router.refresh();
       } catch {
-        setError("Could not create memory. Check your connection and try again.");
+        setError(t("memories.errorCreateNetwork"));
       }
     });
   }
@@ -121,29 +123,33 @@ export function CreateMemoryForm({
     <form onSubmit={onSubmit} className="mx-auto max-w-3xl space-y-8">
       <div className="space-y-4">
         <label className="block">
-          <span className="text-sm font-medium text-ink">Title</span>
+          <span className="text-sm font-medium text-ink">
+            {t("memories.fieldTitle")}
+          </span>
           <input
             type="text"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             maxLength={200}
             required
-            placeholder="Summer at the lake"
+            placeholder={t("memories.titlePlaceholder")}
             className="mt-1.5 w-full rounded-md border border-ink/12 bg-canvas px-3 py-2.5 text-ink outline-none transition placeholder:text-ink/35 focus:border-accent/50 focus:ring-2 focus:ring-accent/20"
           />
         </label>
 
         <label className="block">
           <span className="text-sm font-medium text-ink">
-            Description{" "}
-            <span className="font-normal text-ink-muted">(optional)</span>
+            {t("memories.fieldDescription")}{" "}
+            <span className="font-normal text-ink-muted">
+              ({t("common.optional")})
+            </span>
           </span>
           <textarea
             value={description}
             onChange={(event) => setDescription(event.target.value)}
             maxLength={5000}
             rows={3}
-            placeholder="A few words about this collection…"
+            placeholder={t("memories.descriptionPlaceholder")}
             className="mt-1.5 w-full resize-y rounded-md border border-ink/12 bg-canvas px-3 py-2.5 text-ink outline-none transition placeholder:text-ink/35 focus:border-accent/50 focus:ring-2 focus:ring-accent/20"
           />
         </label>
@@ -153,17 +159,16 @@ export function CreateMemoryForm({
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <h2 className="font-display text-xl tracking-tight text-ink">
-              Choose photos
+              {t("memories.choosePhotos")}
             </h2>
             <p className="mt-1 text-sm text-ink-muted">
-              {sourceHint ??
-                "Tap to select. Use the star to choose a cover photo."}
+              {sourceHint ?? t("memories.choosePhotosHint")}
             </p>
           </div>
           <p className="text-xs text-ink-muted">
             {selectedIds.length === 0
-              ? "None selected"
-              : `${selectedIds.length} selected`}
+              ? t("memories.noneSelected")
+              : t("memories.selectedCount", { count: selectedIds.length })}
           </p>
         </div>
 
@@ -171,14 +176,13 @@ export function CreateMemoryForm({
           <div className="mt-4 rounded-lg border border-dashed border-ink/15 bg-canvas-deep/50 px-5 py-12 text-center">
             <ImagePlus className="mx-auto size-8 text-ink/30" aria-hidden />
             <p className="mt-3 text-sm text-ink-muted">
-              No photos ready yet. Upload a few, then come back to build your
-              album.
+              {t("memories.noPhotosReadyBody")}
             </p>
             <Link
               href="/upload"
               className="ui-btn ui-btn-primary mt-4 inline-flex"
             >
-              Upload photos
+              {t("memories.uploadPhotos")}
             </Link>
           </div>
         ) : (
@@ -231,14 +235,16 @@ export function CreateMemoryForm({
                             : "bg-canvas/90 text-ink-muted hover:bg-canvas hover:text-ink",
                         )}
                         aria-label={
-                          isCover ? "Current cover" : "Set as cover image"
+                          isCover
+                            ? t("memories.currentCover")
+                            : t("memories.setCoverImage")
                         }
                       >
                         <Star
                           className={cn("size-3", isCover && "fill-current")}
                           aria-hidden
                         />
-                        Cover
+                        {t("memories.cover")}
                       </button>
                     ) : null}
                   </div>
@@ -264,13 +270,13 @@ export function CreateMemoryForm({
           {pending ? (
             <Loader2 className="size-4 animate-spin" aria-hidden />
           ) : null}
-          {pending ? "Saving…" : "Save memory"}
+          {pending ? t("common.saving") : t("memories.saveMemory")}
         </button>
         <Link
           href="/memories"
           className="text-sm text-ink-muted transition hover:text-ink"
         >
-          Cancel
+          {t("common.cancel")}
         </Link>
       </div>
     </form>

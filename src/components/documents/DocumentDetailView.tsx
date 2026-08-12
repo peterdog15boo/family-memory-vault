@@ -25,7 +25,7 @@ import {
 } from "@/lib/documents/types";
 import { getDocumentViewKind } from "@/lib/documents/view";
 import { formatBytes } from "@/lib/billing/quotas";
-import { COPY } from "@/lib/copy";
+import { useCopy, useFormat } from "@/components/i18n/LocaleProvider";
 import { cn } from "@/lib/utils";
 import { DocumentViewerDialog } from "@/components/documents/DocumentViewerDialog";
 
@@ -35,25 +35,14 @@ type DocumentDetailViewProps = {
   r2Configured: boolean;
 };
 
-function formatDate(iso: string | null): string {
-  if (!iso) return "—";
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    }).format(new Date(iso));
-  } catch {
-    return iso.slice(0, 10);
-  }
-}
-
 export function DocumentDetailView({
   document: initial,
   categories,
   r2Configured,
 }: DocumentDetailViewProps) {
   const router = useRouter();
+  const copy = useCopy();
+  const format = useFormat();
   const [doc, setDoc] = useState(initial);
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(initial.title);
@@ -127,13 +116,13 @@ export function DocumentDetailView({
   );
 
   function openViewer() {
-    if (!window.confirm(COPY.legacy.documentViewConfirm)) return;
+    if (!window.confirm(copy.legacy.documentViewConfirm)) return;
     setError(null);
     setViewerOpen(true);
   }
 
   async function downloadDocument() {
-    if (!window.confirm(COPY.legacy.documentDownloadConfirm)) return;
+    if (!window.confirm(copy.legacy.documentDownloadConfirm)) return;
 
     setError(null);
     setBusy(true);
@@ -247,7 +236,12 @@ export function DocumentDetailView({
           {doc.title}
         </h1>
         <p className="mt-2 text-sm text-[color:var(--doc-muted)]">
-          {categoryName} · Uploaded {formatDate(doc.createdAt)}
+          {categoryName} · Uploaded{" "}
+          {format.date(doc.createdAt, {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          })}
           {doc.importantFlag ? " · Important" : ""}
         </p>
       </header>
@@ -305,7 +299,8 @@ export function DocumentDetailView({
                     File
                   </dt>
                   <dd className="mt-1 text-[color:var(--doc-ink)]">
-                    {doc.originalFilename} · {formatBytes(doc.sizeBytes)}
+                    {doc.originalFilename} ·{" "}
+                    {formatBytes(doc.sizeBytes, 0, format.locale)}
                   </dd>
                 </div>
                 <div>
@@ -313,7 +308,13 @@ export function DocumentDetailView({
                     Document date
                   </dt>
                   <dd className="mt-1 text-[color:var(--doc-ink)]">
-                    {formatDate(doc.documentDate)}
+                    {doc.documentDate
+                      ? format.date(doc.documentDate, {
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        })
+                      : "—"}
                   </dd>
                 </div>
                 <div>
@@ -324,7 +325,11 @@ export function DocumentDetailView({
                     {doc.reminderAt ? (
                       <span className="inline-flex flex-col gap-1">
                         <span>
-                          {formatDate(doc.reminderAt)}
+                          {format.date(doc.reminderAt, {
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                          })}
                           {doc.reminderKind
                             ? ` · ${DOCUMENT_REMINDER_KIND_LABELS[doc.reminderKind]}`
                             : ""}

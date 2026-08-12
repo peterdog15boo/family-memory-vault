@@ -18,6 +18,7 @@ import {
   Upload,
   Users,
 } from "lucide-react";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { useAskAiOptional } from "@/components/assistant/AskAiContext";
 import {
@@ -47,6 +48,7 @@ type NavItem = {
 export function DashboardSidebar({ isAdmin = false }: DashboardSidebarProps) {
   const pathname = usePathname();
   const { theme, ready } = useTheme();
+  const t = useTranslations();
   const askAi = useAskAiOptional();
   const [domTheme, setDomTheme] = useState<AppTheme | null>(null);
 
@@ -61,55 +63,56 @@ export function DashboardSidebar({ isAdmin = false }: DashboardSidebarProps) {
   const isModern = effective === "modern";
 
   const originalItems: NavItem[] = [
-    { href: "/assistant", label: "Ask AI", icon: Sparkles, openAskAi: true },
-    { href: "/memories", label: "Memories", icon: Images },
-    { href: "/movies", label: "Movies", icon: Film },
-    { href: "/media", label: "Photos", icon: ImageIcon },
-    { href: "/upload", label: "Upload", icon: Upload },
-    { href: "/documents", label: "Documents", icon: FileText },
-    { href: "/people", label: "People", icon: Users },
-    { href: "/family", label: "Family", icon: Home },
-    { href: "/family-memory-box", label: "Digitize", icon: Package },
-    { href: "/billing", label: "Billing", icon: CreditCard },
-    { href: "/settings", label: "Settings", icon: Settings },
+    { href: "/assistant", label: t("nav.askAi"), icon: Sparkles, openAskAi: true },
+    { href: "/memories", label: t("nav.memories"), icon: Images },
+    { href: "/movies", label: t("nav.movies"), icon: Film },
+    { href: "/media", label: t("nav.photos"), icon: ImageIcon },
+    { href: "/upload", label: t("nav.upload"), icon: Upload },
+    { href: "/documents", label: t("nav.documents"), icon: FileText },
+    { href: "/legacy", label: t("nav.legacy"), icon: Heart },
+    { href: "/people", label: t("nav.people"), icon: Users },
+    { href: "/family", label: t("nav.family"), icon: Home },
+    { href: "/family-memory-box", label: t("nav.digitize"), icon: Package },
+    { href: "/billing", label: t("nav.billing"), icon: CreditCard },
+    { href: "/settings", label: t("nav.settings"), icon: Settings },
     ...(isAdmin
-      ? [{ href: "/admin", label: "Admin", icon: Shield } as NavItem]
+      ? [{ href: "/admin", label: t("nav.admin"), icon: Shield } as NavItem]
       : []),
   ];
 
   const modernGroups: { label?: string; items: NavItem[] }[] = [
     {
       items: [
-        { href: "/dashboard", label: "Home", icon: Home, match: "exact" },
-        { href: "/memories", label: "Memories", icon: Images },
-        { href: "/movies", label: "Movies", icon: Film },
-        { href: "/media", label: "Photos", icon: ImageIcon },
-        { href: "/upload", label: "Upload", icon: Upload },
-        { href: "/people", label: "People", icon: Users },
-        { href: "/assistant", label: "Ask AI", icon: Sparkles, openAskAi: true },
+        { href: "/dashboard", label: t("nav.home"), icon: Home, match: "exact" },
+        { href: "/memories", label: t("nav.memories"), icon: Images },
+        { href: "/movies", label: t("nav.movies"), icon: Film },
+        { href: "/media", label: t("nav.photos"), icon: ImageIcon },
+        { href: "/upload", label: t("nav.upload"), icon: Upload },
+        { href: "/people", label: t("nav.people"), icon: Users },
+        { href: "/assistant", label: t("nav.askAi"), icon: Sparkles, openAskAi: true },
       ],
     },
     {
-      label: "Keep safe",
+      label: t("nav.keepSafe"),
       items: [
         {
           href: "/documents",
-          label: "Documents",
+          label: t("nav.documents"),
           icon: FileText,
           match: "exact",
         },
-        { href: "/documents/legacy", label: "Legacy", icon: Heart },
-        { href: "/family", label: "Family", icon: Users },
+        { href: "/legacy", label: t("nav.legacy"), icon: Heart },
+        { href: "/family", label: t("nav.family"), icon: Users },
       ],
     },
     {
-      label: "Account",
+      label: t("nav.account"),
       items: [
-        { href: "/family-memory-box", label: "Digitize", icon: Package },
-        { href: "/billing", label: "Plan", icon: CreditCard },
-        { href: "/settings", label: "Settings", icon: Settings },
+        { href: "/family-memory-box", label: t("nav.digitize"), icon: Package },
+        { href: "/billing", label: t("nav.plan"), icon: CreditCard },
+        { href: "/settings", label: t("nav.settings"), icon: Settings },
         ...(isAdmin
-          ? [{ href: "/admin", label: "Admin", icon: Shield } as NavItem]
+          ? [{ href: "/admin", label: t("nav.admin"), icon: Shield } as NavItem]
           : []),
       ],
     },
@@ -117,26 +120,25 @@ export function DashboardSidebar({ isAdmin = false }: DashboardSidebarProps) {
 
   function isActive(item: NavItem) {
     if (item.href === "/dashboard") return pathname === "/dashboard";
-    if (item.href === "/documents" && isModern) {
+    if (item.href === "/legacy") {
+      return (
+        pathname === "/legacy" ||
+        pathname.startsWith("/legacy/") ||
+        pathname.startsWith("/documents/legacy")
+      );
+    }
+    if (item.href === "/documents") {
       return (
         pathname === "/documents" ||
         (pathname.startsWith("/documents/") &&
           !pathname.startsWith("/documents/legacy"))
       );
     }
-    if (item.href === "/documents/legacy") {
-      return pathname.startsWith("/documents/legacy");
-    }
     if (item.href === "/family-memory-box") {
       return (
         pathname === "/family-memory-box" ||
         pathname.startsWith("/family-memory-box/") ||
         pathname.startsWith("/digitize")
-      );
-    }
-    if (item.href === "/documents") {
-      return (
-        pathname === "/documents" || pathname.startsWith("/documents/")
       );
     }
     return pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -159,7 +161,7 @@ export function DashboardSidebar({ isAdmin = false }: DashboardSidebarProps) {
             href="/dashboard"
             className="font-display text-lg tracking-tight text-ink transition-opacity hover:opacity-80"
           >
-            Family Memory Vault
+            {t("meta.appName")}
           </Link>
         </div>
       ) : null}
@@ -169,7 +171,7 @@ export function DashboardSidebar({ isAdmin = false }: DashboardSidebarProps) {
           "ui-nav flex gap-1 overflow-x-auto px-3 pb-3 lg:flex-col lg:overflow-visible lg:pb-0",
           isModern && "dashboard-sidebar-nav pt-1 lg:pt-0",
         )}
-        aria-label="App"
+        aria-label={t("nav.app")}
       >
         {groups.map((group, gi) => (
           <div key={group.label ?? `g-${gi}`} className="dashboard-nav-group">
@@ -219,7 +221,7 @@ export function DashboardSidebar({ isAdmin = false }: DashboardSidebarProps) {
 
       {isModern ? (
         <p className="dashboard-sidebar-whisper mt-auto hidden lg:block">
-          Kept private. Shared with care.
+          {t("nav.sidebarWhisper")}
         </p>
       ) : (
         <div className="mt-auto hidden border-t border-ink/8 p-4 lg:block">
@@ -228,10 +230,7 @@ export function DashboardSidebar({ isAdmin = false }: DashboardSidebarProps) {
               className="mt-0.5 size-3.5 shrink-0 text-accent"
               aria-hidden
             />
-            <p>
-              A family-safe space. Photos and videos are looked over before they
-              can be shared — for everyone’s peace of mind.
-            </p>
+            <p>{t("nav.sidebarSafety")}</p>
           </div>
         </div>
       )}

@@ -10,6 +10,11 @@ import { listMemoryLibrary } from "@/lib/memories";
 import { getOnboardingProgress } from "@/lib/onboarding";
 import { ensureFreeSubscription } from "@/lib/plans";
 import { isStripeConfigured } from "@/lib/stripe";
+import {
+  emptyJourneyBoard,
+  getUserJourney,
+  journeyBoardFromJourney,
+} from "@/lib/gamification";
 import { ensureAppUser } from "@/lib/users";
 
 export default async function DashboardPage() {
@@ -21,7 +26,7 @@ export default async function DashboardPage() {
   await ensureAppUser(userId);
   await ensureFreeSubscription(userId);
 
-  const [mediaLibrary, reviewSummary, memoryLibrary, usage, onboarding, user] =
+  const [mediaLibrary, reviewSummary, memoryLibrary, usage, onboarding, user, journey] =
     await Promise.all([
       getSafeMediaLibrary(userId, { ownLimit: 12, sharedLimit: 12 }),
       getMediaReviewSummary(userId),
@@ -29,6 +34,7 @@ export default async function DashboardPage() {
       getAccountUsageSummary(userId),
       getOnboardingProgress(userId),
       currentUser().catch(() => null),
+      getUserJourney(userId).catch(() => null),
     ]);
 
   const displayName =
@@ -51,6 +57,9 @@ export default async function DashboardPage() {
       usage={usage}
       onboarding={onboarding}
       stripeConfigured={isStripeConfigured()}
+      journeyBoard={
+        journey ? journeyBoardFromJourney(journey) : emptyJourneyBoard()
+      }
     />
   );
 }

@@ -1,11 +1,9 @@
 /**
- * Human review queue for items with moderation_status = needs_human_review.
- *
- * Reviewers (admins via isAdmin / assertAdminUser) can approve as clean, mark adult, quarantine CSAM,
- * or reject. Decisions are audited in moderation_events with actorId.
+ * Human review queue: borderline scores, scanner failures, and auto adult/reject
+ * (non-CSAM). Reviewers can approve as clean so false positives reach Photos.
  */
 
-import { asc, desc, eq } from "drizzle-orm";
+import { asc, desc, eq, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { logAdminAudit } from "@/lib/admin/audit";
 import { assertAdminUser } from "@/lib/auth/admin";
@@ -58,6 +56,19 @@ const ACTION_TO_STATUS: Record<HumanReviewAction, ModerationStatus> = {
   rejected: "rejected",
 };
 
+/** Non-CSAM holds a human can clear — auto-adult/reject used to hide these from Review. */
+export const HUMAN_REVIEW_QUEUE_STATUSES = [
+  "needs_human_review",
+  "adult",
+  "rejected",
+] as const satisfies readonly ModerationStatus[];
+
+export function isHumanReviewQueueStatus(
+  status: string,
+): status is (typeof HUMAN_REVIEW_QUEUE_STATUSES)[number] {
+  return (HUMAN_REVIEW_QUEUE_STATUSES as readonly string[]).includes(status);
+}
+
 /**
  * List media awaiting human review. Admin-only.
  * Preview URLs use internal signing (not the clean-only family gate).
@@ -74,7 +85,7 @@ export async function listMediaNeedingHumanReview(
   const rows = await db
     .select()
     .from(media)
-    .where(eq(media.moderationStatus, "needs_human_review"))
+    .where(inArray(media.moderationStatus, [...HUMAN_REVIEW_QUEUE_STATUSES]))
     .orderBy(asc(media.updatedAt), desc(media.createdAt))
     .limit(limit);
 
@@ -127,7 +138,7 @@ export async function countMediaNeedingHumanReview(
   const rows = await db
     .select({ id: media.id })
     .from(media)
-    .where(eq(media.moderationStatus, "needs_human_review"));
+    .where(inArray(media.moderationStatus, [...HUMAN_REVIEW_QUEUE_STATUSES]));
   return rows.length;
 }
 
@@ -173,7 +184,7 @@ export async function applyHumanReviewDecision(options: {
   }
 
   if (
-    existing.moderationStatus !== "needs_human_review" &&
+    !isHumanReviewQueueStatus(existing.moderationStatus) &&
     existing.moderationStatus !== "pending"
   ) {
     throw new Error(
@@ -290,13 +301,14 @@ export async function applyHumanReviewDecision(options: {
       source: "moderation.human_review.clean",
     });
 
-    const { queueMediaReadyNotification } = await import(
-      "@/lib/email/lifecycle"
+    const { afterPhotoBecameLibraryReady } = await import(
+      "@/lib/gamification/photo-ready"
     );
-    queueMediaReadyNotification({
+    await afterPhotoBecameLibraryReady({
       userId: updated.userId,
       mediaId: updated.id,
       filename: updated.originalFilename,
+      mediaType: updated.type,
     });
   }
 

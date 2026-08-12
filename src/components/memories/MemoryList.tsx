@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useCallback, useRef, useState, useTransition } from "react";
 import { Images, Loader2, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { MediaThumb } from "@/components/memories/MediaThumb";
-import { COPY } from "@/lib/copy";
+import { useCopy, useFormat, useTranslations } from "@/components/i18n/LocaleProvider";
+import { useOverlayA11y } from "@/hooks/useOverlayA11y";
 import type {
   MemoryListItem,
   SerializedMemoryListItem,
@@ -30,14 +31,6 @@ function asDate(value: Date | string): Date {
   return value instanceof Date ? value : new Date(value);
 }
 
-function formatCreatedDate(value: Date | string) {
-  return asDate(value).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
 export function MemoryList({
   memories,
   emptyVariant = "default",
@@ -46,9 +39,16 @@ export function MemoryList({
   className,
 }: MemoryListProps) {
   const router = useRouter();
+  const copy = useCopy();
+  const t = useTranslations();
+  const format = useFormat();
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  function formatCreatedDate(value: Date | string) {
+    return format.date(asDate(value));
+  }
 
   function confirmDelete(memory: MemoryListRow) {
     startTransition(async () => {
@@ -77,32 +77,32 @@ export function MemoryList({
   }
 
   if (memories.length === 0) {
-    const copy =
+    const emptyCopy =
       emptyVariant === "first"
-        ? COPY.empty.memoriesFirst
+        ? copy.empty.memoriesFirst
         : emptyVariant === "shared"
-          ? COPY.empty.memoriesShared
-          : COPY.empty.memoriesDefault;
+          ? copy.empty.memoriesShared
+          : copy.empty.memoriesDefault;
 
     return (
       <EmptyState
         icon={Images}
-        title={copy.title}
-        description={copy.description}
+        title={emptyCopy.title}
+        description={emptyCopy.description}
         action={
           emptyVariant !== "shared"
             ? {
                 href: "/memories/new",
-                label: "Create a memory",
+                label: t("pages.createMemory"),
                 icon: Plus,
               }
             : undefined
         }
         secondaryAction={
           emptyVariant === "shared"
-            ? { href: "/family", label: "Manage family sharing" }
+            ? { href: "/family", label: t("pages.manageFamily") }
             : emptyVariant === "first"
-              ? { href: "/upload", label: "Or upload photos first" }
+              ? { href: "/upload", label: t("pages.uploadPhotosFirst") }
               : undefined
         }
         className={className}
@@ -112,6 +112,22 @@ export function MemoryList({
   }
 
   const confirming = memories.find((m) => m.id === confirmId) ?? null;
+  const confirmRef = useRef<HTMLDivElement>(null);
+  const dismissConfirm = useCallback(() => {
+    if (pending) return;
+    setConfirmId(null);
+    setError(null);
+  }, [pending]);
+
+  useOverlayA11y({
+    open: Boolean(confirming),
+    onClose: dismissConfirm,
+    containerRef: confirmRef,
+    lockScroll: false,
+    // Inline non-modal confirm — Escape + initial focus only; don't trap Tab.
+    trapFocus: false,
+    initialFocusSelector: "button",
+  });
 
   return (
     <div className={className}>
@@ -126,9 +142,12 @@ export function MemoryList({
 
       {confirming ? (
         <div
+          ref={confirmRef}
           className="mb-5 rounded-xl border border-red-200 bg-red-50/60 px-4 py-4 sm:px-5"
           role="dialog"
+          aria-modal="false"
           aria-labelledby={`delete-album-${confirming.id}`}
+          tabIndex={-1}
         >
           <p
             id={`delete-album-${confirming.id}`}
@@ -147,7 +166,7 @@ export function MemoryList({
               type="button"
               onClick={() => confirmDelete(confirming)}
               disabled={pending}
-              className="inline-flex items-center justify-center gap-2 rounded-md bg-red-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-800 disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-red-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-800 disabled:opacity-60"
             >
               {pending ? (
                 <Loader2 className="size-3.5 animate-spin" aria-hidden />
@@ -158,12 +177,9 @@ export function MemoryList({
             </button>
             <button
               type="button"
-              onClick={() => {
-                setConfirmId(null);
-                setError(null);
-              }}
+              onClick={dismissConfirm}
               disabled={pending}
-              className="inline-flex items-center gap-2 rounded-md border border-ink/10 bg-canvas px-4 py-2.5 text-sm text-ink hover:bg-canvas-deep disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-md border border-ink/10 bg-canvas px-4 py-2.5 text-sm text-ink hover:bg-canvas-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-60"
             >
               Cancel
             </button>

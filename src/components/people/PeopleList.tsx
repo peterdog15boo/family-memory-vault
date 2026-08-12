@@ -7,7 +7,7 @@ import { Loader2, ScanFace, Trash2, Upload } from "lucide-react";
 import { FacePrivacyNote } from "@/components/people/FacePrivacyNote";
 import { PersonAvatar } from "@/components/people/PersonAvatar";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { COPY } from "@/lib/copy";
+import { useCopy, useTranslations } from "@/components/i18n/LocaleProvider";
 import type { SerializedPersonListItem } from "@/lib/people/queries";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +22,8 @@ function photoLabel(count: number) {
 
 export function PeopleList({ people: initialPeople, className }: PeopleListProps) {
   const router = useRouter();
+  const copy = useCopy();
+  const t = useTranslations();
   const [people, setPeople] = useState(initialPeople);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -58,11 +60,11 @@ export function PeopleList({ people: initialPeople, className }: PeopleListProps
       <div className={cn(className)}>
         <EmptyState
           icon={ScanFace}
-          title={COPY.empty.people.title}
-          description={COPY.empty.people.description}
+          title={copy.empty.people.title}
+          description={copy.empty.people.description}
           action={{
             href: "/upload",
-            label: "Upload photos",
+            label: t("pages.uploadPhotos"),
             icon: Upload,
           }}
           size="large"

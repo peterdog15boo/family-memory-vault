@@ -12,7 +12,7 @@ import {
 import { ALLOWED_UPLOAD_TYPES } from "@/lib/upload/constants";
 import { prepareUploadFile } from "@/lib/upload/prepare-upload-file";
 import { UpgradePrompt } from "@/components/billing/UpgradePrompt";
-import { COPY } from "@/lib/copy";
+import { useCopy, useTranslations } from "@/components/i18n/LocaleProvider";
 import { userFacingApiError } from "@/lib/http/user-messages";
 import { cn } from "@/lib/utils";
 
@@ -92,6 +92,7 @@ function uploadFailureMessage(error: unknown): string {
 function isLikelyCorsOrNetworkUploadError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const msg = error.message.toLowerCase();
+  if (/\(404\)/.test(error.message)) return true;
   // 403/405 from R2 often means missing bucket CORS (browser blocked the real PUT).
   return (
     msg.includes("network error while uploading to storage") ||
@@ -121,6 +122,8 @@ export function MediaUploader({
   storageBlocked = false,
   planName = "your",
 }: MediaUploaderProps) {
+  const copy = useCopy();
+  const t = useTranslations();
   const [items, setItems] = useState<UploadItem[]>([]);
   const [dragging, setDragging] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
@@ -197,38 +200,45 @@ export function MediaUploader({
 
         updateItem(item.id, { status: "uploading", progress: 5 });
 
+        if (typeof urlBody.key !== "string" || !urlBody.key.trim()) {
+          throw new Error("Could not get upload URL.");
+        }
+
         const proxyPutUrl =
-          typeof urlBody.proxyPutUrl === "string" && urlBody.proxyPutUrl
+          typeof urlBody.proxyPutUrl === "string" &&
+          urlBody.proxyPutUrl.startsWith("/api/upload/put")
             ? urlBody.proxyPutUrl
             : `/api/upload/put?key=${encodeURIComponent(urlBody.key)}`;
+        const directUrl =
+          typeof urlBody.uploadUrl === "string" &&
+          /^https?:\/\//i.test(urlBody.uploadUrl)
+            ? urlBody.uploadUrl
+            : null;
 
-        try {
-          await uploadWithProgress(
-            urlBody.uploadUrl,
-            file,
-            contentType,
-            (pct) => {
-              updateItem(item.id, {
-                progress: Math.max(5, Math.min(95, pct)),
-              });
-            },
-          );
-        } catch (directError) {
-          // iPhone on LAN often fails here: R2 CORS only allows localhost.
-          // Fall back to same-origin proxy (no browser↔R2 CORS needed).
-          if (!isLikelyCorsOrNetworkUploadError(directError)) {
-            throw directError;
-          }
-          console.warn(
-            "[MediaUploader] Direct R2 PUT failed; retrying via same-origin proxy",
-            directError,
-          );
-          updateItem(item.id, { progress: 5 });
-          await uploadWithProgress(proxyPutUrl, file, contentType, (pct) => {
-            updateItem(item.id, {
-              progress: Math.max(5, Math.min(95, pct)),
-            });
+        const onPct = (pct: number) => {
+          updateItem(item.id, {
+            progress: Math.max(5, Math.min(95, pct)),
           });
+        };
+
+        if (directUrl) {
+          try {
+            await uploadWithProgress(directUrl, file, contentType, onPct);
+          } catch (directError) {
+            // iPhone on LAN often fails here: R2 CORS only allows localhost.
+            // Fall back to same-origin proxy (no browser↔R2 CORS needed).
+            if (!isLikelyCorsOrNetworkUploadError(directError)) {
+              throw directError;
+            }
+            console.warn(
+              "[MediaUploader] Direct R2 PUT failed; retrying via same-origin proxy",
+              directError,
+            );
+            updateItem(item.id, { progress: 5 });
+            await uploadWithProgress(proxyPutUrl, file, contentType, onPct);
+          }
+        } else {
+          await uploadWithProgress(proxyPutUrl, file, contentType, onPct);
         }
 
         updateItem(item.id, { status: "finalizing", progress: 97 });
@@ -327,6 +337,7 @@ export function MediaUploader({
         }}
         className={cn(
           "upload-dropzone relative flex min-h-[220px] cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed px-6 py-10 text-center transition",
+          "focus-within:border-accent/50 focus-within:ring-2 focus-within:ring-accent/40",
           dragging
             ? "border-accent bg-accent/10"
             : "border-ink/15 bg-[color:var(--surface-elevated)]/80 hover:border-accent/40",
@@ -337,6 +348,7 @@ export function MediaUploader({
           accept={accept}
           multiple
           className="absolute inset-0 cursor-pointer opacity-0"
+          aria-label={t("upload.dropTitle")}
           onChange={(e) => {
             if (e.target.files?.length) {
               enqueueFiles(e.target.files);
@@ -348,7 +360,7 @@ export function MediaUploader({
           <Upload className="h-6 w-6" aria-hidden />
         </div>
         <div>
-          <p className="font-medium text-ink">Drop photos or videos here</p>
+          <p className="font-medium text-ink">{t("upload.dropTitle")}</p>
           <p className="mt-1 text-sm text-ink-muted">
             Or tap to choose from your camera roll. JPEG, PNG, WebP, HEIC, MP4,
             MOV, WebM — up to {formatBytes(25 * 1024 * 1024)} for photos.
@@ -374,7 +386,7 @@ export function MediaUploader({
 
       <div className="upload-safety-note flex gap-2 rounded-md border border-accent/20 bg-accent/10 px-4 py-3 text-sm text-accent-deep">
         <Shield className="mt-0.5 h-4 w-4 shrink-0" />
-        <p>Safety first: {COPY.upload.safetyNote}</p>
+        <p>{t("upload.safetyFirst", { note: copy.upload.safetyNote })}</p>
       </div>
 
       {items.length > 0 ? (
@@ -409,8 +421,7 @@ export function MediaUploader({
                 ) : null}
                 {item.status === "done" ? (
                   <p className="mt-1 text-xs text-ink-muted">
-                    Received — safety check in progress. It will appear in Photos
-                    when ready.
+                    {t("upload.received")}
                   </p>
                 ) : null}
               </div>

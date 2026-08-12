@@ -15,7 +15,7 @@ import {
 import { UpgradePrompt } from "@/components/billing/UpgradePrompt";
 import { HintTooltip } from "@/components/ui/HintTooltip";
 import { USAGE_WARNING_PERCENT } from "@/lib/billing/usage-thresholds";
-import { COPY } from "@/lib/copy";
+import { useCopy, useTranslations } from "@/components/i18n/LocaleProvider";
 import type { MovieStyle } from "@/lib/db/schema";
 import type { SerializedMovie } from "@/lib/movies/serialize";
 import {
@@ -58,6 +58,7 @@ import {
 } from "@/components/movies/MovieMusicPicker";
 import { MoviePlayer } from "@/components/movies/MoviePlayer";
 import { MovieShareDialog } from "@/components/movies/MovieShareDialog";
+import { useOverlayA11y } from "@/hooks/useOverlayA11y";
 import {
   getLibraryTrack,
   resolveSuggestionToLibraryId,
@@ -205,6 +206,8 @@ export function CreateMoviePanel({
   capabilities,
   onClose,
 }: CreateMoviePanelProps) {
+  const copy = useCopy();
+  const t = useTranslations();
   const [themeId, setThemeId] = useState<MovieStyle>("simple");
   const [title, setTitle] = useState(memoryTitle);
   const [includeTitles, setIncludeTitles] = useState(true);
@@ -295,21 +298,14 @@ export function CreateMoviePanel({
     setMounted(true);
   }, []);
 
-  // Portal + lock scroll so the dialog stays in the viewport (not mid-page).
-  useEffect(() => {
-    const prevOverflow = document.body.style.overflow;
-    const prevPaddingRight = document.body.style.paddingRight;
-    const scrollbarGap =
-      window.innerWidth - document.documentElement.clientWidth;
-    document.body.style.overflow = "hidden";
-    if (scrollbarGap > 0) {
-      document.body.style.paddingRight = `${scrollbarGap}px`;
-    }
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      document.body.style.paddingRight = prevPaddingRight;
-    };
-  }, []);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useOverlayA11y({
+    open: mounted,
+    onClose,
+    containerRef: panelRef,
+    lockScrollPadding: true,
+  });
 
   const pollMovie = useCallback(
     async (movieId: string) => {
@@ -320,7 +316,7 @@ export function CreateMoviePanel({
           error?: string;
         };
         if (!response.ok || !data.movie) {
-          throw new Error(data.error || "Could not check movie status.");
+          throw new Error(data.error || t("movie.errorCheckMovieStatus"));
         }
         setMovie(data.movie);
         if (data.movie.status === "ready") {
@@ -339,11 +335,13 @@ export function CreateMoviePanel({
         }
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : "Could not check movie status.",
+          err instanceof Error
+            ? err.message
+            : t("movie.errorCheckMovieStatus"),
         );
       }
     },
-    [stopPolling],
+    [stopPolling, t],
   );
 
   const startPolling = useCallback(
@@ -420,7 +418,7 @@ export function CreateMoviePanel({
 
   async function handleCreate() {
     if (mediaCount === 0) {
-      setError(COPY.movie.emptyMedia);
+      setError(copy.movie.emptyMedia);
       return;
     }
     if (!canCreate) {
@@ -507,13 +505,13 @@ export function CreateMoviePanel({
       if (!response.ok || !data.movie) {
         if (data.code === "plan_limit" || data.code === "quota_exceeded") {
           setUpgradeMessage(
-            userFacingApiError(data, "Plan limit reached."),
+            userFacingApiError(data, t("movie.errorPlanLimit")),
           );
           setError(null);
           return;
         }
         throw new Error(
-          userFacingApiError(data, "Could not start your movie."),
+          userFacingApiError(data, t("movie.errorStartMovie")),
         );
       }
       setMovie(data.movie);
@@ -522,7 +520,7 @@ export function CreateMoviePanel({
     } catch (err) {
       setPhase("compose");
       setError(
-        err instanceof Error ? err.message : "Could not start your movie.",
+        err instanceof Error ? err.message : t("movie.errorStartMovie"),
       );
     } finally {
       setSubmitting(false);
@@ -540,10 +538,12 @@ export function CreateMoviePanel({
 
   return createPortal(
     <div
+      ref={panelRef}
       className="fixed inset-0 z-[100] flex items-end justify-center overflow-y-auto bg-ink/45 p-0 backdrop-blur-[2px] sm:items-center sm:p-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby="create-movie-title"
+      tabIndex={-1}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -566,22 +566,22 @@ export function CreateMoviePanel({
         <header className="relative flex items-start justify-between gap-3 border-b border-ink/8 px-5 py-4 sm:px-6">
           <div>
             <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-ink-muted">
-              Production
+              {t("movie.production")}
             </p>
             <h2
               id="create-movie-title"
               className="mt-1 font-display text-2xl tracking-tight text-ink"
             >
               {phase === "ready"
-                ? COPY.movie.readyTitle
+                ? copy.movie.readyTitle
                 : phase === "crafting"
-                  ? COPY.movie.craftingTitle
+                  ? copy.movie.craftingTitle
                   : phase === "failed"
-                    ? COPY.movie.failedTitle
-                    : "Create a movie"}
+                    ? copy.movie.failedTitle
+                    : t("pages.createMovie")}
               {phase === "compose" ? (
                 <span className="ml-1.5 inline-flex align-middle">
-                  <HintTooltip tip={COPY.tips.createMovie} label="About movies" />
+                  <HintTooltip tip={copy.tips.createMovie} label={t("pages.aboutMovies")} />
                 </span>
               ) : null}
             </h2>
@@ -589,16 +589,19 @@ export function CreateMoviePanel({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-2 text-ink-muted transition hover:bg-ink/5 hover:text-ink"
-            aria-label="Close"
+            className="rounded-md p-2 text-ink-muted transition hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            aria-label={t("pages.close")}
           >
-            <X className="size-5" />
+            <X className="size-5" aria-hidden />
           </button>
         </header>
 
         <div className="relative overflow-y-auto px-5 py-5 sm:px-6">
           {error && phase !== "failed" ? (
-            <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+            <p
+              role="alert"
+              className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+            >
               {error}
             </p>
           ) : null}
@@ -644,9 +647,11 @@ export function CreateMoviePanel({
             <div className="space-y-6">
               {/* 1. Presets */}
               <section>
-                <h3 className="text-sm font-medium text-ink">Presets</h3>
+                <h3 className="text-sm font-medium text-ink">
+                  {t("movie.presets")}
+                </h3>
                 <p className="mt-1 text-sm text-ink-muted">
-                  One tap to set look, pacing, motion, and music.
+                  {t("movie.presetsLead")}
                 </p>
                 <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {MOVIE_PRESETS.map((preset) => {
@@ -763,8 +768,10 @@ export function CreateMoviePanel({
               <section>
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-sm font-medium text-ink">Title card</h3>
-                    <p className="mt-0.5 text-sm text-ink-muted">
+                    <h3 id="movie-title-card-label" className="text-sm font-medium text-ink">
+                      Title card
+                    </h3>
+                    <p id="movie-title-card-hint" className="mt-0.5 text-sm text-ink-muted">
                       Show a title at the start of the film.
                     </p>
                   </div>
@@ -772,6 +779,8 @@ export function CreateMoviePanel({
                     type="button"
                     role="switch"
                     aria-checked={includeTitles}
+                    aria-labelledby="movie-title-card-label"
+                    aria-describedby="movie-title-card-hint"
                     onClick={() => {
                       setIncludeTitles((prev) => !prev);
                       clearPreset();
@@ -788,18 +797,24 @@ export function CreateMoviePanel({
                         "absolute top-0.5 size-5 rounded-full bg-canvas shadow transition",
                         includeTitles ? "left-[22px]" : "left-0.5",
                       )}
+                      aria-hidden
                     />
                   </button>
                 </div>
                 {includeTitles ? (
-                  <input
-                    id="movie-title"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    maxLength={200}
-                    className="mt-3 w-full rounded-lg border border-ink/12 bg-canvas px-3 py-2.5 text-sm text-ink outline-none ring-accent/30 transition focus:border-accent/40 focus:ring-2"
-                    placeholder="Name this film"
-                  />
+                  <div className="mt-3">
+                    <label htmlFor="movie-title" className="sr-only">
+                      Movie title
+                    </label>
+                    <input
+                      id="movie-title"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      maxLength={200}
+                      className="w-full rounded-lg border border-ink/12 bg-canvas px-3 py-2.5 text-sm text-ink outline-none ring-accent/30 transition focus:border-accent/40 focus:ring-2"
+                      placeholder="Name this film"
+                    />
+                  </div>
                 ) : null}
               </section>
 
@@ -1124,7 +1139,7 @@ export function CreateMoviePanel({
                 ) : (
                   <Sparkles className="size-4" aria-hidden />
                 )}
-                {submitting ? "Starting…" : "Create movie"}
+                {submitting ? t("common.starting") : t("movie.createMovieCta")}
               </button>
             </div>
           ) : null}
@@ -1148,7 +1163,7 @@ export function CreateMoviePanel({
               message={
                 error ||
                 movie?.errorMessage ||
-                "We couldn’t finish this movie."
+                copy.movie.failedTitle
               }
               onRetry={handleReset}
             />
@@ -1173,12 +1188,13 @@ function CraftingState({
   qualityMode: QualityMode;
   hasMusic: boolean;
 }) {
+  const copy = useCopy();
   const statusLabel =
     movie?.status === "processing"
-      ? COPY.movie.rendering
+      ? copy.movie.rendering
       : movie?.status === "queued"
-        ? COPY.movie.waiting
-        : COPY.movie.preparing;
+        ? copy.movie.waiting
+        : copy.movie.preparing;
 
   const estimate = estimateMovieRenderTime({
     photoCount,
@@ -1195,7 +1211,7 @@ function CraftingState({
         <Film className="size-8 text-ink" style={{ color: accent }} />
       </div>
       <p className="mt-6 font-display text-xl text-ink">
-        {COPY.movie.craftingBody}
+        {copy.movie.craftingBody}
       </p>
       <p className="mt-2 max-w-xs text-sm text-ink-muted">{statusLabel}</p>
       <div className="mt-8 h-1 w-48 overflow-hidden rounded-full bg-ink/8">
@@ -1346,6 +1362,8 @@ function ReadyState({
             type="button"
             onClick={() => setShareOpen(true)}
             className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-ink/12 px-4 py-2.5 text-sm font-medium text-ink transition hover:border-accent/35 sm:flex-none"
+            aria-haspopup="dialog"
+            aria-expanded={shareOpen}
           >
             <Share2 className="size-3.5" aria-hidden />
             Share
@@ -1380,16 +1398,17 @@ function FailedState({
   message: string;
   onRetry: () => void;
 }) {
+  const copy = useCopy();
   return (
     <div className="py-6 text-center">
-      <p className="font-display text-xl text-ink">Couldn’t finish</p>
+      <p className="font-display text-xl text-ink">{copy.movie.failedTitle}</p>
       <p className="mx-auto mt-2 max-w-sm text-sm text-ink-muted">{message}</p>
       <button
         type="button"
         onClick={onRetry}
         className="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground hover:bg-accent-deep"
       >
-        Try again
+        {copy.movie.failedRetry}
       </button>
     </div>
   );

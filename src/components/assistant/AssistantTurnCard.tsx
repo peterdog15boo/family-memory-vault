@@ -21,6 +21,7 @@ import type {
   AssistantUnderstandingView,
 } from "@/components/assistant/types";
 import { formatMediaTypeCounts } from "@/lib/ai/media-preference";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 
 type AssistantTurnCardProps = {
   turn: AssistantTurnView;
@@ -54,6 +55,7 @@ export function AssistantTurnCard({
   onCreateMovieFromSearch,
   onNavigateAway,
 }: AssistantTurnCardProps) {
+  const t = useTranslations();
   const router = useRouter();
   const showPreviewActions = turn.status === "preview" && turn.mediaPreview;
   const proposalId = turn.mediaPreview?.proposalId;
@@ -171,7 +173,7 @@ export function AssistantTurnCard({
             ) : (
               <Check className="size-3.5" aria-hidden />
             )}
-            Confirm
+            {t("assistant.confirm")}
             {selectedMediaIds.length > 0 &&
             selectedMediaIds.length !== initialMediaIds.length
               ? ` (${selectedMediaIds.length})`
@@ -184,7 +186,7 @@ export function AssistantTurnCard({
             className="ui-btn ui-btn-secondary ui-btn-sm"
           >
             <Pencil className="size-3.5" aria-hidden />
-            Edit
+            {t("assistant.edit")}
           </button>
           <button
             type="button"
@@ -193,7 +195,7 @@ export function AssistantTurnCard({
             className="ui-btn ui-btn-ghost ui-btn-sm"
           >
             <X className="size-3.5" aria-hidden />
-            Cancel
+            {t("assistant.cancel")}
           </button>
         </div>
       ) : null}
@@ -218,6 +220,7 @@ function UnderstandingPanel({
 }: {
   understanding: AssistantUnderstandingView;
 }) {
+  const t = useTranslations();
   const actionLabel = formatAction(understanding.action);
   const bits: string[] = [];
   if (understanding.people.length) {
@@ -227,45 +230,59 @@ function UnderstandingPanel({
     bits.push(understanding.dateRange.label);
   }
   if (understanding.tone) {
-    bits.push(`${understanding.tone} tone`);
+    bits.push(t("assistant.toneBit", { tone: understanding.tone }));
   }
   if (understanding.qualities?.length) {
     bits.push(understanding.qualities.join(" · "));
   }
   if (understanding.visualQuery) {
-    bits.push(`looking for: ${understanding.visualQuery}`);
+    bits.push(t("assistant.lookingFor", { query: understanding.visualQuery }));
   } else {
     if (understanding.objects?.length) {
-      bits.push(`objects: ${understanding.objects.join(", ")}`);
+      bits.push(
+        t("assistant.objects", { list: understanding.objects.join(", ") }),
+      );
     }
     if (understanding.scenes?.length) {
-      bits.push(`scenes: ${understanding.scenes.join(", ")}`);
+      bits.push(
+        t("assistant.scenes", { list: understanding.scenes.join(", ") }),
+      );
     }
   }
   if (understanding.themePreference) {
-    bits.push(`${understanding.themePreference} theme`);
+    bits.push(
+      t("assistant.themeBit", { theme: understanding.themePreference }),
+    );
   }
   if (understanding.documentCategory) {
-    bits.push(`category: ${understanding.documentCategory}`);
+    bits.push(
+      t("assistant.categoryBit", { name: understanding.documentCategory }),
+    );
   }
   if (understanding.documentTitle) {
-    bits.push(`document: ${understanding.documentTitle}`);
+    bits.push(
+      t("assistant.documentBit", { name: understanding.documentTitle }),
+    );
   }
   if (understanding.legacyContactName) {
-    bits.push(`contact: ${understanding.legacyContactName}`);
+    bits.push(
+      t("assistant.contactBit", { name: understanding.legacyContactName }),
+    );
   }
   if (understanding.legacyContactCategory) {
     bits.push(understanding.legacyContactCategory.replace(/_/g, " "));
   }
   if (understanding.legacyInstructionTitle) {
-    bits.push(`draft: ${understanding.legacyInstructionTitle}`);
+    bits.push(
+      t("assistant.draftBit", { title: understanding.legacyInstructionTitle }),
+    );
   }
 
   return (
     <div className="rounded-lg border border-accent/20 bg-accent/8 px-3 py-2.5">
       <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-accent-deep">
         <Sparkles className="size-3" aria-hidden />
-        Understanding
+        {t("assistant.understanding")}
       </p>
       <p className="mt-1 text-sm text-ink">
         <span className="font-medium">{actionLabel}</span>
@@ -275,7 +292,9 @@ function UnderstandingPanel({
       </p>
       {understanding.titleSuggestion ? (
         <p className="mt-1 text-xs text-ink-muted">
-          Working title: “{understanding.titleSuggestion}”
+          {t("assistant.workingTitle", {
+            title: understanding.titleSuggestion,
+          })}
         </p>
       ) : null}
     </div>
@@ -297,6 +316,7 @@ function MediaPreviewStrip({
   onRestoreAll?: () => void;
   onNavLinkClick: (href: string) => (e: MouseEvent<HTMLAnchorElement>) => void;
 }) {
+  const t = useTranslations();
   const selectedSet = new Set(selectedMediaIds);
 
   if (
@@ -320,7 +340,7 @@ function MediaPreviewStrip({
   }
 
   const thumbs = preview.thumbnails.filter(
-    (t) => t.previewUrl && selectedSet.has(t.mediaId),
+    (thumb) => thumb.previewUrl && selectedSet.has(thumb.mediaId),
   );
   const removedCount = Math.max(
     0,
@@ -335,22 +355,22 @@ function MediaPreviewStrip({
       <div className="flex items-baseline justify-between gap-3">
         <p className="text-sm font-medium text-ink">
           {thumbs.length > 0
-            ? formatMediaTypeCounts(thumbs.map((t) => ({ type: t.type })))
+            ? formatMediaTypeCounts(thumbs.map((thumb) => ({ type: thumb.type })))
             : `${selectedMediaIds.length} item${
                 selectedMediaIds.length === 1 ? "" : "s"
               }`}
           {removedCount > 0 ? (
             <span className="font-normal text-ink-muted">
               {" "}
-              selected
+              {t("assistant.selected")}
               {preview.totalCount > selectedMediaIds.length
-                ? ` · ${removedCount} removed`
+                ? ` · ${t("assistant.removed", { count: removedCount })}`
                 : ""}
             </span>
           ) : preview.totalCount > selectedMediaIds.length ? (
             <span className="font-normal text-ink-muted">
               {" "}
-              of {preview.totalCount} matches
+              {t("assistant.ofMatches", { count: preview.totalCount })}
             </span>
           ) : null}
         </p>
@@ -361,7 +381,7 @@ function MediaPreviewStrip({
               onClick={onRestoreAll}
               className="text-xs font-medium text-accent transition hover:text-accent-deep"
             >
-              Restore all
+              {t("assistant.restoreAll")}
             </button>
           ) : null}
           {preview.title ? (
@@ -372,14 +392,14 @@ function MediaPreviewStrip({
               onClick={onNavLinkClick(viewHref)}
               className="text-xs font-medium text-accent transition hover:text-accent-deep"
             >
-              Open
+              {t("assistant.open")}
             </Link>
           )}
         </div>
       </div>
       {removable && thumbs.length > 0 ? (
         <p className="mt-1 text-xs text-ink-muted">
-          Remove mismatches with × before creating a memory or movie.
+          {t("assistant.removeMismatchHint")}
         </p>
       ) : null}
       {thumbs.length > 0 ? (
@@ -398,11 +418,11 @@ function MediaPreviewStrip({
               {thumb.type === "video" ? (
                 <span className="pointer-events-none absolute bottom-0.5 left-0.5 inline-flex items-center gap-0.5 rounded bg-ink/75 px-1 py-0.5 text-[9px] font-medium uppercase tracking-wide text-canvas">
                   <Film className="size-2.5" aria-hidden />
-                  Video
+                  {t("assistant.video")}
                 </span>
               ) : (
                 <span className="pointer-events-none absolute bottom-0.5 left-0.5 rounded bg-ink/60 px-1 py-0.5 text-[9px] font-medium uppercase tracking-wide text-canvas">
-                  Photo
+                  {t("assistant.photo")}
                 </span>
               )}
               {removable ? (
@@ -410,8 +430,13 @@ function MediaPreviewStrip({
                   type="button"
                   onClick={() => onRemove(thumb.mediaId)}
                   className="absolute right-0.5 top-0.5 flex size-5 items-center justify-center rounded-full bg-ink/75 text-canvas shadow-sm transition hover:bg-ink"
-                  aria-label={`Remove ${thumb.type === "video" ? "video" : "photo"} from results`}
-                  title="Remove from results"
+                  aria-label={t("assistant.removeMediaAria", {
+                    kind:
+                      thumb.type === "video"
+                        ? t("assistant.video")
+                        : t("assistant.photo"),
+                  })}
+                  title={t("assistant.removeFromResults")}
                 >
                   <X className="size-3" aria-hidden />
                 </button>
@@ -420,7 +445,7 @@ function MediaPreviewStrip({
                   href={viewHref}
                   onClick={onNavLinkClick(viewHref)}
                   className="absolute inset-0"
-                  aria-label="Open media library"
+                  aria-label={t("assistant.openMediaLibrary")}
                 />
               )}
             </div>
@@ -428,35 +453,37 @@ function MediaPreviewStrip({
         </div>
       ) : selectedMediaIds.length === 0 ? (
         <p className="mt-2 text-xs text-ink-muted">
-          All items were removed.{" "}
+          {t("assistant.allRemoved")}{" "}
           {onRestoreAll ? (
             <button
               type="button"
               onClick={onRestoreAll}
               className="font-medium text-accent hover:text-accent-deep"
             >
-              Restore all
+              {t("assistant.restoreAll")}
             </button>
           ) : (
-            "Search again to pick a new set."
+            t("assistant.searchAgainPick")
           )}
         </p>
       ) : (
         <p className="mt-2 text-xs text-ink-muted">
           {preview.people.length > 0 ? (
             <>
-              Previews aren’t ready yet —{" "}
+              {t("assistant.previewsNotReady")}{" "}
               <Link
                 href={viewHref}
                 onClick={onNavLinkClick(viewHref)}
                 className="font-medium text-accent hover:text-accent-deep"
               >
-                open {preview.people[0]!.name}&apos;s photos
+                {t("assistant.openPersonsPhotos", {
+                  name: preview.people[0]!.name,
+                })}
               </Link>{" "}
-              to view them.
+              {t("assistant.toViewThem")}
             </>
           ) : (
-            "Previews will appear here when thumbnails are ready."
+            t("assistant.previewsWhenReady")
           )}
         </p>
       )}

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Star, Trash2 } from "lucide-react";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 import type { SerializedLegacyContact } from "@/lib/legacy/serialize";
 import {
   LEGACY_CONTACT_CATEGORY_LABELS,
@@ -39,6 +40,7 @@ const EMPTY_DRAFT: ContactDraft = {
 };
 
 export function LegacyContactsPanel({ contacts: initial }: LegacyContactsPanelProps) {
+  const t = useTranslations();
   const router = useRouter();
   const [contacts, setContacts] = useState(initial);
   const [draft, setDraft] = useState<ContactDraft>(EMPTY_DRAFT);
@@ -76,13 +78,15 @@ export function LegacyContactsPanel({ contacts: initial }: LegacyContactsPanelPr
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not add contact.");
+      if (!res.ok) throw new Error(data.error || t("legacy.errorAddContact"));
       setContacts((prev) => [...prev, data.contact]);
       setDraft(EMPTY_DRAFT);
       setShowForm(false);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not add contact.");
+      setError(
+        err instanceof Error ? err.message : t("legacy.errorAddContact"),
+      );
     } finally {
       setFormBusy(false);
     }
@@ -98,20 +102,28 @@ export function LegacyContactsPanel({ contacts: initial }: LegacyContactsPanelPr
         body: JSON.stringify({ isPrimary: !contact.isPrimary }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not update contact.");
+      if (!res.ok) throw new Error(data.error || t("legacy.errorUpdateContact"));
       setContacts((prev) =>
         prev.map((c) => (c.id === contact.id ? data.contact : c)),
       );
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not update contact.");
+      setError(
+        err instanceof Error ? err.message : t("legacy.errorUpdateContact"),
+      );
     } finally {
       setBusyId(null);
     }
   }
 
   async function deleteContact(contact: SerializedLegacyContact) {
-    if (!window.confirm(`Remove ${contact.name} from your key contacts?`)) return;
+    if (
+      !window.confirm(
+        t("legacy.removeContactConfirm", { name: contact.name }),
+      )
+    ) {
+      return;
+    }
     setBusyId(contact.id);
     setError(null);
     try {
@@ -119,11 +131,13 @@ export function LegacyContactsPanel({ contacts: initial }: LegacyContactsPanelPr
         method: "DELETE",
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Could not remove contact.");
+      if (!res.ok) throw new Error(data.error || t("legacy.errorRemoveContact"));
       setContacts((prev) => prev.filter((c) => c.id !== contact.id));
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not remove contact.");
+      setError(
+        err instanceof Error ? err.message : t("legacy.errorRemoveContact"),
+      );
     } finally {
       setBusyId(null);
     }
@@ -133,11 +147,10 @@ export function LegacyContactsPanel({ contacts: initial }: LegacyContactsPanelPr
     <div className="space-y-5">
       <section className="legacy-vault-panel documents-vault-panel legacy-vault-in rounded-2xl p-5 sm:p-6">
         <h2 className="font-display text-xl tracking-tight text-[color:var(--legacy-ink)]">
-          Key Contacts
+          {t("legacy.navContacts")}
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-[color:var(--legacy-muted)]">
-          People who can help — attorneys, insurance agents, accountants, executors,
-          business partners, and trusted family members.
+          {t("legacy.contactsLead")}
         </p>
 
         {error ? (
@@ -162,7 +175,7 @@ export function LegacyContactsPanel({ contacts: initial }: LegacyContactsPanelPr
                       {contact.isPrimary ? (
                         <span className="inline-flex items-center gap-1 rounded-full bg-[color:var(--legacy-accent-soft)] px-2 py-0.5 text-[11px] font-medium text-[color:var(--legacy-accent-deep)]">
                           <Star className="size-3 fill-current" aria-hidden />
-                          Primary
+                          {t("legacy.primary")}
                         </span>
                       ) : null}
                       <span className="rounded-full border border-[color:var(--legacy-line)] px-2 py-0.5 text-[11px] text-[color:var(--legacy-muted)]">
@@ -196,14 +209,16 @@ export function LegacyContactsPanel({ contacts: initial }: LegacyContactsPanelPr
                           : "border-[color:var(--legacy-line)] text-[color:var(--legacy-muted)] hover:bg-[color:var(--legacy-accent-soft)]",
                       )}
                     >
-                      {contact.isPrimary ? "Primary contact" : "Mark primary"}
+                      {contact.isPrimary
+                        ? t("legacy.primaryContact")
+                        : t("legacy.markPrimary")}
                     </button>
                     <button
                       type="button"
                       onClick={() => deleteContact(contact)}
                       disabled={busyId === contact.id}
                       className="rounded-md border border-red-800/20 px-2.5 py-1.5 text-xs font-medium text-red-800 hover:bg-red-50 disabled:opacity-50"
-                      aria-label={`Remove ${contact.name}`}
+                      aria-label={t("common.remove") + ` ${contact.name}`}
                     >
                       <Trash2 className="size-3.5" aria-hidden />
                     </button>
@@ -214,7 +229,7 @@ export function LegacyContactsPanel({ contacts: initial }: LegacyContactsPanelPr
           </ul>
         ) : (
           <p className="mt-5 text-sm text-[color:var(--legacy-muted)]">
-            No contacts yet. Add someone you trust to call first.
+            {t("legacy.noContactsYet")}
           </p>
         )}
 
@@ -225,14 +240,14 @@ export function LegacyContactsPanel({ contacts: initial }: LegacyContactsPanelPr
             className="mt-5 inline-flex items-center gap-2 rounded-md border border-[color:var(--legacy-line)] bg-white/60 px-3.5 py-2.5 text-sm font-medium text-[color:var(--legacy-ink)] hover:bg-[color:var(--legacy-accent-soft)]"
           >
             <Plus className="size-4" aria-hidden />
-            Add contact
+            {t("legacy.addContact")}
           </button>
         ) : (
           <form onSubmit={createContact} className="mt-5 space-y-3 border-t border-[color:var(--legacy-line)] pt-5">
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block sm:col-span-2">
                 <span className="text-xs font-medium text-[color:var(--legacy-muted)]">
-                  Name
+                  {t("legacy.fieldName")}
                 </span>
                 <input
                   value={draft.name}
@@ -245,7 +260,7 @@ export function LegacyContactsPanel({ contacts: initial }: LegacyContactsPanelPr
               </label>
               <label className="block">
                 <span className="text-xs font-medium text-[color:var(--legacy-muted)]">
-                  Relationship / role
+                  {t("legacy.relationshipLabel")}
                 </span>
                 <input
                   value={draft.relationship}
@@ -254,13 +269,13 @@ export function LegacyContactsPanel({ contacts: initial }: LegacyContactsPanelPr
                   }
                   maxLength={200}
                   disabled={formBusy}
-                  placeholder="Executor, spouse, CPA…"
+                  placeholder={t("legacy.relationshipPlaceholder")}
                   className="mt-1.5 w-full rounded-lg border border-[color:var(--legacy-line)] bg-white/70 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[color:var(--legacy-accent)]"
                 />
               </label>
               <label className="block">
                 <span className="text-xs font-medium text-[color:var(--legacy-muted)]">
-                  Category
+                  {t("legacy.fieldCategory")}
                 </span>
                 <select
                   value={draft.category}
@@ -282,7 +297,7 @@ export function LegacyContactsPanel({ contacts: initial }: LegacyContactsPanelPr
               </label>
               <label className="block">
                 <span className="text-xs font-medium text-[color:var(--legacy-muted)]">
-                  Phone
+                  {t("legacy.fieldContactPhone")}
                 </span>
                 <input
                   value={draft.phone}
@@ -294,7 +309,7 @@ export function LegacyContactsPanel({ contacts: initial }: LegacyContactsPanelPr
               </label>
               <label className="block">
                 <span className="text-xs font-medium text-[color:var(--legacy-muted)]">
-                  Email
+                  {t("legacy.fieldContactEmail")}
                 </span>
                 <input
                   type="email"
@@ -308,7 +323,7 @@ export function LegacyContactsPanel({ contacts: initial }: LegacyContactsPanelPr
             </div>
             <label className="block">
               <span className="text-xs font-medium text-[color:var(--legacy-muted)]">
-                Notes
+                {t("legacy.fieldNotes")}
               </span>
               <textarea
                 value={draft.notes}
@@ -329,7 +344,7 @@ export function LegacyContactsPanel({ contacts: initial }: LegacyContactsPanelPr
                 disabled={formBusy}
                 className="size-4 rounded border-[color:var(--legacy-line)]"
               />
-              Mark as primary contact
+              {t("legacy.markAsPrimary")}
             </label>
             <div className="flex flex-wrap gap-2">
               <button
@@ -337,7 +352,7 @@ export function LegacyContactsPanel({ contacts: initial }: LegacyContactsPanelPr
                 disabled={formBusy}
                 className="inline-flex rounded-md bg-[color:var(--legacy-accent)] px-3.5 py-2.5 text-sm font-medium text-white hover:bg-[color:var(--legacy-accent-deep)] disabled:opacity-50"
               >
-                {formBusy ? "Saving…" : "Save contact"}
+                {formBusy ? t("common.saving") : t("legacy.saveContact")}
               </button>
               <button
                 type="button"
@@ -348,7 +363,7 @@ export function LegacyContactsPanel({ contacts: initial }: LegacyContactsPanelPr
                 disabled={formBusy}
                 className="inline-flex rounded-md border border-[color:var(--legacy-line)] px-3.5 py-2.5 text-sm font-medium text-[color:var(--legacy-muted)]"
               >
-                Cancel
+                {t("common.cancel")}
               </button>
             </div>
           </form>

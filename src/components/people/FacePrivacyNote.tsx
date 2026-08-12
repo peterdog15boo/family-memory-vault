@@ -1,4 +1,7 @@
+"use client";
+
 import { Shield } from "lucide-react";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { cn } from "@/lib/utils";
 
 type FacePrivacyNoteProps = {
@@ -14,6 +17,7 @@ export function FacePrivacyNote({
   className,
   compact = false,
 }: FacePrivacyNoteProps) {
+  const t = useTranslations();
   return (
     <p
       className={cn(
@@ -29,11 +33,7 @@ export function FacePrivacyNote({
         )}
         aria-hidden
       />
-      <span>
-        Face recognition stays private to your account — it helps you name the
-        people in your photos. It only runs on photos that are ready, and never
-        shares face data with others.
-      </span>
+      <span>{t("people.facePrivacyNote")}</span>
     </p>
   );
 }

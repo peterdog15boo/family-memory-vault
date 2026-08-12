@@ -51,6 +51,18 @@ export async function POST(request: Request) {
   try {
     await ensureAppUser(userId);
     const member = await acceptInvite(parsed.data.token, userId);
+    try {
+      const { afterInviteAccepted } = await import(
+        "@/lib/gamification/family-invite"
+      );
+      void afterInviteAccepted({
+        familyId: member.familyId,
+        memberId: member.id,
+        inviterUserId: member.invitedByUserId,
+      });
+    } catch (error) {
+      console.error("[family.accept] gamification failed", error);
+    }
     return NextResponse.json({ member: serializeFamilyMember(member) });
   } catch (error) {
     return familyApiErrorResponse(error, "Failed to accept family invite");

@@ -14,7 +14,11 @@ import {
   Users,
 } from "lucide-react";
 import { UpgradePrompt } from "@/components/billing/UpgradePrompt";
-import { COPY } from "@/lib/copy";
+import { celebrateFromJourney } from "@/lib/celebrations/bus";
+import { FamilyCircleStrength } from "@/components/family/FamilyCircleStrength";
+import type { JourneyCelebrationPayload } from "@/lib/gamification/types";
+import { useCopy, useFormat, useTranslations } from "@/components/i18n/LocaleProvider";
+import type { TranslateFn } from "@/lib/i18n";
 import type {
   SerializedFamily,
   SerializedFamilyMember,
@@ -32,19 +36,11 @@ type FamilySettingsPanelProps = {
   capabilities: PlanCapabilities;
 };
 
-function roleLabel(role: string) {
-  if (role === "owner") return "Owner";
-  if (role === "member") return "Member";
-  if (role === "viewer") return "Viewer";
+function roleLabel(t: TranslateFn, role: string) {
+  if (role === "owner") return t("family.roleOwner");
+  if (role === "member") return t("family.roleMember");
+  if (role === "viewer") return t("family.roleViewer");
   return role;
-}
-
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
 }
 
 export function FamilySettingsPanel({
@@ -54,6 +50,8 @@ export function FamilySettingsPanel({
   capabilities,
 }: FamilySettingsPanelProps) {
   const router = useRouter();
+  const copy = useCopy();
+  const t = useTranslations();
   const [families, setFamilies] = useState(initialFamilies);
   const [membersByFamilyId, setMembersByFamilyId] = useState(initialMembers);
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +80,9 @@ export function FamilySettingsPanel({
         await action();
         refresh();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Something went wrong.");
+        setError(
+          err instanceof Error ? err.message : t("family.errorGeneric"),
+        );
       } finally {
         setBusyKey(null);
       }
@@ -97,17 +97,18 @@ export function FamilySettingsPanel({
             <Users className="size-9 text-accent/70" aria-hidden />
           </span>
           <h2 className="ui-empty-title mt-4 text-center font-display text-2xl tracking-tight text-ink">
-            Family sharing
+            {t("family.familySharingTitle")}
           </h2>
           <p className="ui-empty-copy mx-auto mt-2 max-w-md text-center text-sm leading-relaxed text-ink-muted">
-            Invite people you trust to a shared household vault. Available on
-            Family plans and above.
+            {t("family.familySharingBody")}
           </p>
           <div className="mx-auto mt-6 max-w-md">
             <UpgradePrompt
-              title="Not on your current plan"
-              message={`You're on ${capabilities.planName}. Upgrade to create a family and send invites.`}
-              hint="Family plans include shared photos and member roles."
+              title={t("family.upgradeNotOnPlan")}
+              message={t("family.upgradeOnPlanMessage", {
+                plan: capabilities.planName,
+              })}
+              hint={t("family.upgradeFamilyHint")}
             />
           </div>
         </div>
@@ -131,9 +132,9 @@ export function FamilySettingsPanel({
               code?: string;
             };
             if (!response.ok) {
-              throw new Error(data.error || "Could not create family.");
+              throw new Error(data.error || t("family.errorCreate"));
             }
-            setNotice("Family created. You can invite people below.");
+            setNotice(t("family.createdInviteBelow"));
           })
         }
       />
@@ -143,16 +144,21 @@ export function FamilySettingsPanel({
   return (
     <div className="space-y-10">
       {error ? (
-        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+        <p
+          role="alert"
+          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+        >
           {error}
         </p>
       ) : null}
       {notice ? (
-        <p className="rounded-md border border-accent/25 bg-accent/10 px-3 py-2 text-sm text-accent-deep">
+        <p
+          role="status"
+          className="rounded-md border border-accent/25 bg-accent/10 px-3 py-2 text-sm text-accent-deep"
+        >
           {notice}
         </p>
       ) : null}
-
       {families.map((family) => {
         const members = membersByFamilyId[family.id] ?? [];
         const isOwner = family.membership.role === "owner";
@@ -177,17 +183,27 @@ export function FamilySettingsPanel({
                     {family.name}
                   </h2>
                   <span className="rounded-md bg-accent/15 px-2 py-0.5 text-[11px] font-medium text-accent-deep">
-                    {roleLabel(family.membership.role)}
+                    {roleLabel(t, family.membership.role)}
                   </span>
                 </div>
                 <p className="mt-1 text-sm text-ink-muted">
-                  {active.length} active member
-                  {active.length === 1 ? "" : "s"}
+                  {active.length === 1
+                    ? t("family.activeMembers", { count: active.length })
+                    : t("family.activeMembersPlural", { count: active.length })}
                   {pendingInvites.length > 0
-                    ? ` · ${pendingInvites.length} pending invite${pendingInvites.length === 1 ? "" : "s"}`
+                    ? pendingInvites.length === 1
+                      ? t("family.pendingInvitesSuffix", {
+                          count: pendingInvites.length,
+                        })
+                      : t("family.pendingInvitesSuffixPlural", {
+                          count: pendingInvites.length,
+                        })
                     : ""}
                   {isOwner
-                    ? ` · ${seatCount}/${capabilities.maxFamilyMembers} seats`
+                    ? t("family.seatsUsedSuffix", {
+                        used: seatCount,
+                        max: capabilities.maxFamilyMembers,
+                      })
                     : ""}
                 </p>
               </div>
@@ -199,7 +215,7 @@ export function FamilySettingsPanel({
                   onClick={() => {
                     if (
                       !window.confirm(
-                        `Leave “${family.name}”? You’ll lose access to shared family media and memories.`,
+                        t("family.leaveConfirm", { name: family.name }),
                       )
                     ) {
                       return;
@@ -213,12 +229,12 @@ export function FamilySettingsPanel({
                         error?: string;
                       };
                       if (!response.ok) {
-                        throw new Error(data.error || "Could not leave family.");
+                        throw new Error(data.error || t("family.errorLeave"));
                       }
                       setFamilies((prev) =>
                         prev.filter((f) => f.id !== family.id),
                       );
-                      setNotice("You left the family.");
+                      setNotice(t("family.leftNotice"));
                     });
                   }}
                   className="inline-flex items-center gap-1.5 rounded-md border border-ink/10 bg-canvas px-3 py-2 text-sm font-medium text-ink transition hover:border-red-300 hover:bg-red-50 hover:text-red-800 disabled:opacity-60"
@@ -228,10 +244,12 @@ export function FamilySettingsPanel({
                   ) : (
                     <LogOut className="size-3.5" aria-hidden />
                   )}
-                  Leave family
+                  {t("family.leaveFamily")}
                 </button>
               ) : null}
             </div>
+
+            <FamilyCircleStrength members={members} className="mt-5" />
 
             {isOwner ? (
               canInvite ? (
@@ -252,6 +270,7 @@ export function FamilySettingsPanel({
                         member?: SerializedFamilyMember;
                         inviteLink?: string;
                         emailSent?: boolean;
+                        celebration?: JourneyCelebrationPayload | null;
                       };
                       if (data.member) {
                         setMembersByFamilyId((prev) => {
@@ -277,11 +296,18 @@ export function FamilySettingsPanel({
                         throw new Error(
                           userFacingApiError(
                             data,
-                            "Could not send invite email.",
+                            t("family.errorSendInvite"),
                           ),
                         );
                       }
-                      setNotice(`Invite sent to ${payload.email}.`);
+                      setNotice(
+                        t("family.inviteSentTo", { email: payload.email }),
+                      );
+                      if (data.celebration) {
+                        celebrateFromJourney(data.celebration);
+                        window.dispatchEvent(new Event("fmv-journey-check"));
+                        window.dispatchEvent(new Event("fmv-journey-refresh"));
+                      }
                     })
                   }
                 />
@@ -290,18 +316,23 @@ export function FamilySettingsPanel({
                   <UpgradePrompt
                     title={
                       !capabilities.familySharing
-                        ? "Invites require Family"
-                        : "Family is full"
+                        ? t("family.invitesRequireFamily")
+                        : t("family.familyIsFull")
                     }
                     message={
                       !capabilities.familySharing
-                        ? `Your ${capabilities.planName} plan doesn't include family invites.`
-                        : `You've used ${seatCount} of ${capabilities.maxFamilyMembers} member seats.`
+                        ? t("family.planNoInvites", {
+                            plan: capabilities.planName,
+                          })
+                        : t("family.seatsUsedMessage", {
+                            used: seatCount,
+                            max: capabilities.maxFamilyMembers,
+                          })
                     }
                     hint={
                       !capabilities.familySharing
-                        ? "Upgrade to invite relatives to a shared vault."
-                        : "Upgrade for more seats, or remove a pending invite."
+                        ? t("family.upgradeInviteHint")
+                        : t("family.upgradeSeatsHint")
                     }
                   />
                 </div>
@@ -309,7 +340,7 @@ export function FamilySettingsPanel({
             ) : (
               <p className="mt-5 flex gap-2 rounded-md bg-canvas-deep/60 px-3 py-2.5 text-xs leading-relaxed text-ink-muted">
                 <Shield className="mt-0.5 size-3.5 shrink-0 text-accent" aria-hidden />
-                Only family owners can invite people or change roles.
+                {t("family.onlyOwnersCanInvite")}
               </p>
             )}
 
@@ -317,7 +348,7 @@ export function FamilySettingsPanel({
               <div className="mt-8">
                 <h3 className="flex items-center gap-2 text-sm font-medium text-ink">
                   <Clock className="size-4 text-amber-700" aria-hidden />
-                  Pending invitations
+                  {t("family.pendingInvitations")}
                 </h3>
                 <ul className="mt-3 divide-y divide-ink/8 rounded-xl border border-amber-200/80 bg-amber-50/50">
                   {pendingInvites.map((member) => (
@@ -347,7 +378,7 @@ export function FamilySettingsPanel({
                           };
                           if (!response.ok) {
                             throw new Error(
-                              data.error || "Could not update role.",
+                              data.error || t("family.errorUpdateRole"),
                             );
                           }
                           if (data.member) {
@@ -371,7 +402,7 @@ export function FamilySettingsPanel({
                             .catch(() => ({}))) as { error?: string };
                           if (!response.ok) {
                             throw new Error(
-                              data.error || "Could not cancel invite.",
+                              data.error || t("family.errorCancelInvite"),
                             );
                           }
                           setMembersByFamilyId((prev) => ({
@@ -385,7 +416,7 @@ export function FamilySettingsPanel({
                             delete next[member.id];
                             return next;
                           });
-                          setNotice("Invitation canceled.");
+                          setNotice(t("family.invitationCanceled"));
                         })
                       }
                     />
@@ -397,16 +428,16 @@ export function FamilySettingsPanel({
             <div className="mt-8">
               <h3 className="flex items-center gap-2 text-sm font-medium text-ink">
                 <Users className="size-4 text-accent-deep" aria-hidden />
-                Members
+                {t("family.members")}
               </h3>
               <ul className="family-list mt-3 divide-y divide-ink/8 rounded-xl border border-ink/10 bg-canvas">
                 {active.length === 0 ? (
                   <li className="px-4 py-8 text-center">
                     <p className="text-sm font-medium text-ink">
-                      {COPY.empty.familyMembers.title}
+                      {copy.empty.familyMembers.title}
                     </p>
                     <p className="mx-auto mt-1 max-w-sm text-sm text-ink-muted">
-                      {COPY.empty.familyMembers.description}
+                      {copy.empty.familyMembers.description}
                     </p>
                   </li>
                 ) : (
@@ -436,7 +467,7 @@ export function FamilySettingsPanel({
                           };
                           if (!response.ok) {
                             throw new Error(
-                              data.error || "Could not update role.",
+                              data.error || t("family.errorUpdateRole"),
                             );
                           }
                           if (data.member) {
@@ -467,7 +498,9 @@ export function FamilySettingsPanel({
                       onRemove={() => {
                         if (
                           !window.confirm(
-                            `Remove ${member.displayName || member.invitedEmail} from this family?`,
+                            t("family.removeMemberConfirm", {
+                              name: member.displayName || member.invitedEmail,
+                            }),
                           )
                         ) {
                           return;
@@ -482,7 +515,7 @@ export function FamilySettingsPanel({
                             .catch(() => ({}))) as { error?: string };
                           if (!response.ok) {
                             throw new Error(
-                              data.error || "Could not remove member.",
+                              data.error || t("family.errorRemoveMember"),
                             );
                           }
                           setMembersByFamilyId((prev) => ({
@@ -491,7 +524,7 @@ export function FamilySettingsPanel({
                               (m) => m.id !== member.id,
                             ),
                           }));
-                          setNotice("Member removed.");
+                          setNotice(t("family.memberRemoved"));
                         });
                       }}
                     />
@@ -507,7 +540,7 @@ export function FamilySettingsPanel({
       {primary && capabilities.familySharing ? (
         <details className="family-nested rounded-xl border border-dashed border-ink/15 bg-canvas-deep/30 px-4 py-3">
           <summary className="cursor-pointer text-sm font-medium text-ink-muted">
-            Create another family
+            {t("family.createAnother")}
           </summary>
           <div className="mt-3 pb-1">
             <CreateFamilyCard
@@ -525,9 +558,9 @@ export function FamilySettingsPanel({
                     error?: string;
                   };
                   if (!response.ok) {
-                    throw new Error(data.error || "Could not create family.");
+                    throw new Error(data.error || t("family.errorCreate"));
                   }
-                  setNotice("New family created.");
+                  setNotice(t("family.newFamilyCreated"));
                 })
               }
             />
@@ -549,6 +582,7 @@ function CreateFamilyCard({
   error: string | null;
   compact?: boolean;
 }) {
+  const t = useTranslations();
   const [name, setName] = useState("");
 
   return (
@@ -565,17 +599,20 @@ function CreateFamilyCard({
             <Users className="size-9 text-accent/70" aria-hidden />
           </span>
           <h2 className="ui-empty-title mt-4 font-display text-2xl tracking-tight text-ink">
-            Create your family
+            {t("family.createYourFamily")}
           </h2>
           <p className="ui-empty-copy mx-auto mt-2 max-w-md text-sm leading-relaxed text-ink-muted">
-            Invite people you trust. Shared photos and memories stay private to
-            your family — only ready items appear for everyone.
+            {t("family.createFamilyLead")}
           </p>
         </>
       ) : null}
 
       {error ? (
-        <p className="mx-auto mt-4 max-w-md rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+        <p
+          id="family-create-error"
+          role="alert"
+          className="mx-auto mt-4 max-w-md rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+        >
           {error}
         </p>
       ) : null}
@@ -593,14 +630,18 @@ function CreateFamilyCard({
         }}
       >
         <label className="sr-only" htmlFor="family-name">
-          Family name
+          {t("family.familyNameRequired")}
         </label>
         <input
           id="family-name"
           value={name}
           onChange={(event) => setName(event.target.value)}
-          placeholder="e.g. The Roberts family"
+          placeholder={t("family.familyNamePlaceholder")}
           maxLength={120}
+          required
+          aria-required="true"
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? "family-create-error" : undefined}
           className="min-w-0 flex-1 rounded-md border border-ink/15 bg-canvas px-3 py-2.5 text-sm text-ink outline-none transition placeholder:text-ink/35 focus:border-accent/40 focus:ring-2 focus:ring-accent/20"
         />
         <button
@@ -611,7 +652,7 @@ function CreateFamilyCard({
           {pending ? (
             <Loader2 className="size-4 animate-spin" aria-hidden />
           ) : null}
-          Create family
+          {t("family.createFamily")}
         </button>
       </form>
     </div>
@@ -633,6 +674,7 @@ function InviteForm({
   disabled: boolean;
   busy: boolean;
 }) {
+  const t = useTranslations();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"member" | "viewer">("member");
 
@@ -649,28 +691,28 @@ function InviteForm({
     >
       <h3 className="flex items-center gap-2 text-sm font-medium text-ink">
         <Mail className="size-4 text-accent-deep" aria-hidden />
-        Invite someone
+        {t("family.inviteSomeone")}
       </h3>
       <p className="mt-1 text-xs leading-relaxed text-ink-muted">
-        We’ll email them a secure invite link to join this family vault.
-        Sending again to a pending invite refreshes the link and resends the
-        email.
+        {t("family.inviteLead")}
       </p>
       <div className="mt-3 flex flex-col gap-2 sm:flex-row">
         <label className="sr-only" htmlFor={`invite-email-${familyId}`}>
-          Email
+          {t("family.emailRequired")}
         </label>
         <input
           id={`invite-email-${familyId}`}
           type="email"
           required
+          aria-required="true"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          placeholder="family@example.com"
+          placeholder={t("family.emailPlaceholder")}
+          autoComplete="email"
           className="min-w-0 flex-1 rounded-md border border-ink/15 bg-canvas px-3 py-2 text-sm text-ink outline-none transition placeholder:text-ink/35 focus:border-accent/40 focus:ring-2 focus:ring-accent/20"
         />
         <label className="sr-only" htmlFor={`invite-role-${familyId}`}>
-          Role
+          {t("family.role")}
         </label>
         <select
           id={`invite-role-${familyId}`}
@@ -682,7 +724,7 @@ function InviteForm({
         >
           {INVITABLE_FAMILY_ROLES.map((value) => (
             <option key={value} value={value}>
-              {roleLabel(value)}
+              {roleLabel(t, value)}
             </option>
           ))}
         </select>
@@ -692,7 +734,7 @@ function InviteForm({
           className="inline-flex items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition hover:bg-accent-deep disabled:opacity-60"
         >
           {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-          Send invite
+          {t("family.sendInvite")}
         </button>
       </div>
     </form>
@@ -718,6 +760,8 @@ function MemberRow({
   onRemove: () => void;
   inviteLink?: string;
 }) {
+  const t = useTranslations();
+  const format = useFormat();
   const [copied, setCopied] = useState(false);
   const isSelf = member.userId === viewerUserId;
   const isPending = member.status === "pending";
@@ -741,16 +785,30 @@ function MemberRow({
           ) : null}
           {isPending ? (
             <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-900">
-              Pending
+              {t("family.statusPending")}
             </span>
-          ) : null}
+          ) : member.firstContributedAt ? (
+            <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent-deep">
+              {t("family.statusContributing")}
+            </span>
+          ) : (
+            <span className="rounded bg-ink/5 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-ink-muted">
+              {t("family.statusJoined")}
+            </span>
+          )}
         </div>
         <p className="mt-0.5 truncate text-xs text-ink-muted">
           {member.displayName ? member.invitedEmail : null}
           {member.displayName ? " · " : null}
           {isPending
-            ? `Invited ${formatDate(member.invitedAt)}`
-            : `Joined ${formatDate(member.acceptedAt || member.createdAt)}`}
+            ? t("family.invitedOn", { date: format.date(member.invitedAt) })
+            : member.firstContributedAt
+              ? t("family.contributingSince", {
+                  date: format.date(member.firstContributedAt),
+                })
+              : t("family.joinedWaiting", {
+                  date: format.date(member.acceptedAt || member.createdAt),
+                })}
         </p>
       </div>
 
@@ -765,21 +823,21 @@ function MemberRow({
               )
             }
             className="rounded-md border border-ink/15 bg-canvas px-2.5 py-1.5 text-xs text-ink outline-none focus:border-accent/40 focus:ring-2 focus:ring-accent/20 disabled:opacity-60"
-            aria-label={`Role for ${title}`}
+            aria-label={t("family.roleFor", { name: title })}
           >
             {(isPending
               ? INVITABLE_FAMILY_ROLES
               : (["owner", "member", "viewer"] as const)
             ).map((value) => (
               <option key={value} value={value}>
-                {roleLabel(value)}
+                {roleLabel(t, value)}
                 {roleBusy && member.role === value ? "…" : ""}
               </option>
             ))}
           </select>
         ) : (
           <span className="rounded-md bg-canvas-deep px-2.5 py-1.5 text-xs font-medium text-ink-muted">
-            {roleLabel(member.role)}
+            {roleLabel(t, member.role)}
           </span>
         )}
 
@@ -802,7 +860,7 @@ function MemberRow({
             ) : (
               <Copy className="size-3" aria-hidden />
             )}
-            {copied ? "Copied" : "Copy link"}
+            {copied ? t("family.copied") : t("family.copyLink")}
           </button>
         ) : null}
 
@@ -818,7 +876,7 @@ function MemberRow({
             ) : (
               <UserMinus className="size-3" aria-hidden />
             )}
-            {isPending ? "Cancel" : "Remove"}
+            {isPending ? t("common.cancel") : t("family.removeMember")}
           </button>
         ) : null}
       </div>

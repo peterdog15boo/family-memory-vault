@@ -10,6 +10,9 @@ import {
 import { canCreateMovie } from "@/lib/plans/gates";
 import { getUserPlan } from "@/lib/plans";
 import { formatBytes, getStorageQuotaForUser } from "@/lib/billing/quotas";
+import type { AppLocale, TranslateFn } from "@/lib/i18n";
+import { DEFAULT_LOCALE } from "@/lib/i18n";
+import { localizeAssistantProse } from "@/lib/ai/localize";
 
 export type HelpAnswerLink = { label: string; href: string };
 
@@ -22,7 +25,9 @@ export type HelpAnswer = {
 function tokenize(text: string): string[] {
   return text
     .toLowerCase()
-    .replace(/[^a-z0-9\s'-]/g, " ")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}\s'-]/gu, " ")
     .split(/\s+/)
     .filter((t) => t.length > 1);
 }
@@ -158,40 +163,30 @@ async function buildPlanContext(
   return lines;
 }
 
-function formatEntryBody(entry: HelpKnowledgeEntry): string[] {
-  const parts: string[] = [`**${entry.topic}**`, entry.summary];
-  if (entry.steps && entry.steps.length > 0) {
-    parts.push("");
-    parts.push(...entry.steps.map((step, i) => `${i + 1}. ${step}`));
-  }
-  if (entry.notes && entry.notes.length > 0) {
-    parts.push("");
-    for (const note of entry.notes) {
-      parts.push(`Note: ${note}`);
-    }
-  }
-  return parts;
-}
-
 /**
  * Build a warm help reply from knowledge + optional live plan context.
  */
 export async function answerProductHelp(
   userId: string,
   prompt: string,
+  options: { locale?: AppLocale; t?: TranslateFn } = {},
 ): Promise<HelpAnswer> {
+  const locale = options.locale ?? DEFAULT_LOCALE;
+  const t = options.t;
   const entries = retrieveHelpEntries(prompt, 2);
   const planLines = await buildPlanContext(userId, entries);
 
   const sections: string[] = [];
   for (const entry of entries) {
     if (sections.length) sections.push("");
-    sections.push(...formatEntryBody(entry));
+    sections.push(...formatEntryBody(entry, t));
   }
 
   if (planLines.length) {
     sections.push("");
-    sections.push("Your plan right now:");
+    sections.push(
+      t?.("assistant.reply.helpPlanHeader") ?? "Your plan right now:",
+    );
     for (const line of planLines) {
       sections.push(`• ${line}`);
     }
@@ -200,46 +195,116 @@ export async function answerProductHelp(
   const linkMap = new Map<string, HelpAnswerLink>();
   for (const entry of entries) {
     for (const route of entry.relatedRoutes) {
-      linkMap.set(route.href, route);
+      linkMap.set(route.href, {
+        label: localizeRouteLabel(route.label, route.href, t),
+        href: route.href,
+      });
     }
   }
-  // Prefer Billing when plan-aware answers mention upgrading.
   if (planLines.some((l) => /upgrade/i.test(l))) {
-    linkMap.set("/billing", { label: "Billing", href: "/billing" });
+    linkMap.set("/billing", {
+      label: t?.("assistant.actions.billing") ?? "Billing",
+      href: "/billing",
+    });
   }
 
   if (entries.length === 0) {
+    const fallbackMessage = t
+      ? [
+          t("assistant.reply.helpFallback"),
+          "",
+          t("assistant.reply.helpTryAsking"),
+          `• ${t("assistant.examples.invite")}`,
+          `• ${t("assistant.examples.createMemory")}`,
+          `• ${t("assistant.examples.moreMovies")}`,
+          "",
+          t("assistant.reply.helpOrSearch"),
+        ].join("\n")
+      : [
+          "I can help with how to use Family Memory Vault.",
+          "",
+          "Try asking things like:",
+          "• How do I invite family members?",
+          "• Where do I create a Memory?",
+          "• Why don’t my photos show up right away?",
+          "• How can I make more movies this month?",
+          "",
+          "Or ask me to find photos — for example, “Show me beach photos.”",
+        ].join("\n");
+
     return {
       topicIds: [],
-      message: [
-        "I can help with how to use Family Memory Vault.",
-        "",
-        "Try asking things like:",
-        "• How do I invite family members?",
-        "• Where do I create a Memory?",
-        "• Why don’t my photos show up right away?",
-        "• How can I make more movies this month?",
-        "",
-        "Or ask me to find photos — for example, “Show me beach photos.”",
-      ].join("\n"),
+      message: await localizeAssistantProse(fallbackMessage, locale),
       links: [
-        { label: "Ask AI tips", href: "/assistant" },
-        { label: "Photos", href: "/media" },
-        { label: "Settings", href: "/settings" },
+        {
+          label: t?.("assistant.actions.askAiTips") ?? "Ask AI tips",
+          href: "/assistant",
+        },
+        {
+          label: t?.("assistant.actions.photos") ?? "Photos",
+          href: "/media",
+        },
+        {
+          label: t?.("assistant.actions.settings") ?? "Settings",
+          href: "/settings",
+        },
       ],
     };
   }
 
-  // Soften markdown bold for plain chat — keep readable without requiring MD.
   const message = sections
     .join("\n")
     .replace(/\*\*([^*]+)\*\*/g, "$1");
 
   return {
     topicIds: entries.map((e) => e.id),
-    message,
+    message: await localizeAssistantProse(message, locale),
     links: [...linkMap.values()],
   };
+}
+
+function formatEntryBody(
+  entry: HelpKnowledgeEntry,
+  t?: TranslateFn,
+): string[] {
+  const parts: string[] = [`**${entry.topic}**`, entry.summary];
+  if (entry.steps && entry.steps.length > 0) {
+    parts.push("");
+    parts.push(...entry.steps.map((step, i) => `${i + 1}. ${step}`));
+  }
+  if (entry.notes && entry.notes.length > 0) {
+    parts.push("");
+    for (const note of entry.notes) {
+      parts.push(
+        t
+          ? t("assistant.reply.helpNote", { note })
+          : `Note: ${note}`,
+      );
+    }
+  }
+  return parts;
+}
+
+function localizeRouteLabel(
+  label: string,
+  href: string,
+  t?: TranslateFn,
+): string {
+  if (!t) return label;
+  if (/\/billing/i.test(href)) return t("assistant.actions.billing");
+  if (/\/media/i.test(href)) return t("assistant.actions.photos");
+  if (/\/settings/i.test(href)) return t("assistant.actions.settings");
+  if (/\/family/i.test(href)) return label;
+  if (/\/memories/i.test(href)) return label;
+  if (/\/movies/i.test(href)) return t("assistant.actions.movies");
+  if (/\/documents\/legacy/i.test(href)) {
+    return t("assistant.actions.digitalLegacy");
+  }
+  if (/\/documents/i.test(href)) {
+    return t("assistant.actions.privateDocuments");
+  }
+  if (/\/assistant/i.test(href)) return t("assistant.title");
+  return label;
 }
 
 /**
@@ -253,16 +318,22 @@ export function hasStrongMediaRequest(prompt: string): boolean {
     /\b(show\s+me|find|search|look\s+for)\b.{0,60}\b(photos?|pictures?|images?|videos?|pics?)\b/i.test(
       raw,
     ) ||
-    /\b(photos?|pictures?|images?)\s+of\b/i.test(raw)
+    /\b(photos?|pictures?|images?)\s+of\b/i.test(raw) ||
+    /\b(muéstrame|muestra(me)?|busca(me)?|cherche|montre[- ]moi|zeige|mostra(mi)?)\b.{0,40}\b(fotos?|imagens?|photos?|bilder|写真|사진)\b/i.test(
+      raw,
+    ) ||
+    /\b(fotos?\s+de|imagens?\s+de)\b/i.test(raw)
   ) {
     return true;
   }
   // Imperative create without how/limits language
   if (
-    /\b(create|make|build)\b.{0,40}\b(slideshow|movie|montage|memory|album)\b/i.test(
+    /\b(create|make|build|crear|faire|machen|criar|作成|만들기)\b.{0,40}\b(slideshow|movie|montage|memory|album|recuerdo|souvenir|erinnerung|memória|映画|영화)\b/i.test(
       raw,
     ) &&
-    !/\b(how|where|why|limit|quota|more than|upgrade|plan)\b/i.test(lower)
+    !/\b(how|where|why|limit|quota|more than|upgrade|plan|cómo|comment|wie|como|어떻게)\b/i.test(
+      lower,
+    )
   ) {
     return true;
   }
@@ -285,7 +356,10 @@ export function isMixedHelpAndMediaRequest(prompt: string): boolean {
 /**
  * Short how-to tip for mixed media+help prompts (appended to search answers).
  */
-export function formatSecondaryHelpTip(prompt: string): string | null {
+export function formatSecondaryHelpTip(
+  prompt: string,
+  t?: TranslateFn,
+): string | null {
   if (!isMixedHelpAndMediaRequest(prompt)) return null;
   const entries = retrieveHelpEntries(prompt, 2).filter(
     (e) => e.id !== "ask_ai_search",
@@ -297,9 +371,18 @@ export function formatSecondaryHelpTip(prompt: string): string | null {
       ? `\n${entry.steps.map((s, i) => `${i + 1}. ${s}`).join("\n")}`
       : "";
   const route = entry.relatedRoutes[0]
-    ? `\nOpen ${entry.relatedRoutes[0].label} (${entry.relatedRoutes[0].href}) when you’re ready.`
+    ? t
+      ? `\n${t("assistant.reply.openRoute", {
+          label: entry.relatedRoutes[0].label,
+          href: entry.relatedRoutes[0].href,
+        })}`
+      : `\nOpen ${entry.relatedRoutes[0].label} (${entry.relatedRoutes[0].href}) when you’re ready.`
     : "";
-  return `\n\nAlso — ${entry.summary}${steps}${route}`;
+  const summary = `${entry.summary}${steps}${route}`;
+  if (t) {
+    return `\n\n${t("assistant.reply.alsoTip", { summary })}`;
+  }
+  return `\n\nAlso — ${summary}`;
 }
 
 /**
@@ -321,8 +404,10 @@ export function isProductHelpQuestion(prompt: string): boolean {
 
   // How / where / why / what-does product questions
   if (
-    /^(how|where|why|what)\b/i.test(raw) ||
-    /\b(how (do|can|to|should) i|where (do|can|to|should) i|why (don'?t|doesn'?t|can'?t|won'?t|isn'?t|aren'?t)|what does .+ mean|what is .+ for)\b/i.test(
+    /^(how|where|why|what|cómo|como|comment|où|wie|wo|warum|dove|come|onde|como|何|どう|어떻게|어디)\b/i.test(
+      raw,
+    ) ||
+    /\b(how (do|can|to|should) i|where (do|can|to|should) i|why (don'?t|doesn'?t|can'?t|won'?t|isn'?t|aren'?t)|what does .+ mean|what is .+ for|cómo (puedo|hago|se)|comment (faire|puis-je)|wie (kann|mache) ich)\b/i.test(
       lower,
     )
   ) {

@@ -1,13 +1,15 @@
 "use client";
 
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Film, ImageIcon, Trash2, Upload, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Film, ImageIcon, Trash2, Upload, X } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { MediaThumb } from "@/components/memories/MediaThumb";
 import { MediaViewerMedia } from "@/components/media/MediaViewerMedia";
 import { AssignMediaToPersonControl } from "@/components/people/AssignMediaToPersonControl";
-import { COPY } from "@/lib/copy";
+import { useCopy, useTranslations } from "@/components/i18n/LocaleProvider";
+import { useLightboxKeyboardNav } from "@/hooks/useLightboxKeyboardNav";
+import { useOverlayA11y } from "@/hooks/useOverlayA11y";
 import { cn } from "@/lib/utils";
 import type { SerializedSafeMedia } from "@/lib/memories/types";
 
@@ -98,13 +100,19 @@ const GalleryTile = memo(function GalleryTile({
   item: GalleryItem;
   onOpen: (id: string) => void;
 }) {
-  const label = item.originalFilename || "Family photo";
+  const t = useTranslations();
+  const label = item.originalFilename || t("mediaUi.familyMedia");
 
   return (
     <li>
       <button
         type="button"
         onClick={() => onOpen(item.id)}
+        aria-label={
+          item.type === "video"
+            ? `Open video: ${label}`
+            : `Open photo: ${label}`
+        }
         className={cn(
           "media-tile group relative aspect-square w-full overflow-hidden rounded-lg",
           "border border-ink/8 bg-canvas-deep text-left transition",
@@ -119,7 +127,7 @@ const GalleryTile = memo(function GalleryTile({
         ) : item.previewUrl && item.type === "video" ? (
           <VideoThumbnail
             src={item.previewUrl}
-            alt={item.originalFilename || "Family video"}
+            alt={item.originalFilename || t("mediaUi.familyMedia")}
           />
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-3 text-center">
@@ -130,13 +138,15 @@ const GalleryTile = memo(function GalleryTile({
               <ImageIcon className="relative size-7 text-ink/25" aria-hidden />
             )}
             <span className="relative text-xs text-ink-muted">
-              {item.hasThumbnail ? "Loading preview…" : "Almost ready…"}
+              {item.hasThumbnail
+                ? t("mediaUi.loadingPreview")
+                : t("mediaUi.almostReady")}
             </span>
           </div>
         )}
         <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink/50 to-transparent px-2 pb-2 pt-8 text-[11px] text-accent-foreground opacity-0 transition group-hover:opacity-100">
           <span className="line-clamp-1">
-            {item.originalFilename || "Memory"}
+            {item.originalFilename || t("nav.memories")}
           </span>
         </span>
       </button>
@@ -146,19 +156,30 @@ const GalleryTile = memo(function GalleryTile({
 
 export function MediaGallery({
   items,
-  emptyTitle = COPY.empty.mediaOwn.title,
-  emptyDescription = COPY.empty.mediaOwn.description,
+  emptyTitle,
+  emptyDescription,
   emptyActionHref = "/upload",
-  emptyActionLabel = "Upload photos",
-  emptySecondaryAction = {
-    href: "/family-memory-box",
-    label: "Or digitize old photos & tapes",
-  },
+  emptyActionLabel,
+  emptySecondaryAction,
   onDelete,
   deletingId = null,
 }: MediaGalleryProps) {
+  const copy = useCopy();
+  const t = useTranslations();
+  const resolvedEmptyTitle = emptyTitle ?? copy.empty.mediaOwn.title;
+  const resolvedEmptyDescription =
+    emptyDescription ?? copy.empty.mediaOwn.description;
+  const resolvedEmptyActionLabel = emptyActionLabel ?? t("pages.uploadPhotos");
+  const resolvedSecondaryAction =
+    emptySecondaryAction === undefined
+      ? {
+          href: "/family-memory-box",
+          label: t("pages.digitizeOld"),
+        }
+      : emptySecondaryAction;
   const [activeId, setActiveId] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  const viewerRef = useRef<HTMLDivElement>(null);
   const active = items.find((item) => item.id === activeId) ?? null;
   const deleting = Boolean(active && deletingId === active.id);
 
@@ -171,39 +192,28 @@ export function MediaGallery({
 
   const handleDelete = useCallback(async () => {
     if (!active || !onDelete || deleting) return;
-    const label = active.originalFilename || "this photo";
+    const label = active.originalFilename || t("common.thisPhoto");
     const ok = window.confirm(
-      `Delete “${label}”? This permanently removes it from Photos and cannot be undone.`,
+      t("common.deleteConfirmPhoto", { name: label }),
     );
     if (!ok) return;
     await onDelete(active);
-  }, [active, deleting, onDelete]);
+  }, [active, deleting, onDelete, t]);
 
-  useEffect(() => {
-    if (!active) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [active, close]);
+  useOverlayA11y({
+    open: Boolean(active),
+    onClose: close,
+    containerRef: viewerRef,
+    lockScrollPadding: true,
+  });
 
-  // Lock background scroll while the viewport overlay is open.
-  useEffect(() => {
-    if (!active) return;
-    const prevOverflow = document.body.style.overflow;
-    const prevPaddingRight = document.body.style.paddingRight;
-    const scrollbarGap =
-      window.innerWidth - document.documentElement.clientWidth;
-    document.body.style.overflow = "hidden";
-    if (scrollbarGap > 0) {
-      document.body.style.paddingRight = `${scrollbarGap}px`;
-    }
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      document.body.style.paddingRight = prevPaddingRight;
-    };
-  }, [active]);
+  const itemIds = useMemo(() => items.map((item) => item.id), [items]);
+  const { canNavigate, index, count, goPrev, goNext } = useLightboxKeyboardNav({
+    open: Boolean(active),
+    itemIds,
+    activeId,
+    onActiveIdChange: setActiveId,
+  });
 
   // Close the lightbox if the active item was removed from the list.
   useEffect(() => {
@@ -216,18 +226,18 @@ export function MediaGallery({
     return (
       <EmptyState
         icon={ImageIcon}
-        title={emptyTitle}
-        description={emptyDescription}
+        title={resolvedEmptyTitle}
+        description={resolvedEmptyDescription}
         action={
           emptyActionHref
             ? {
                 href: emptyActionHref,
-                label: emptyActionLabel,
+                label: resolvedEmptyActionLabel,
                 icon: Upload,
               }
             : undefined
         }
-        secondaryAction={emptySecondaryAction ?? undefined}
+        secondaryAction={resolvedSecondaryAction ?? undefined}
         size="large"
       />
     );
@@ -237,21 +247,50 @@ export function MediaGallery({
     active && mounted
       ? createPortal(
           <div
+            ref={viewerRef}
             role="dialog"
             aria-modal="true"
-            aria-label={active.originalFilename || "Photo preview"}
+            aria-labelledby="media-viewer-title"
             className="fixed inset-0 flex items-center justify-center bg-ink/70 p-4 backdrop-blur-sm"
             style={{ zIndex: MEDIA_VIEWER_Z }}
+            tabIndex={-1}
             onClick={close}
           >
             <button
               type="button"
               onClick={close}
               className="ui-btn ui-btn-secondary absolute right-4 top-4 z-10"
-              aria-label="Close"
+              aria-label={t("common.close")}
             >
-              <X className="size-5" />
+              <X className="size-5" aria-hidden />
             </button>
+
+            {canNavigate ? (
+              <>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    goPrev();
+                  }}
+                  className="ui-btn ui-btn-secondary absolute left-3 top-1/2 z-10 -translate-y-1/2 sm:left-4"
+                  aria-label="Previous photo"
+                >
+                  <ChevronLeft className="size-5" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    goNext();
+                  }}
+                  className="ui-btn ui-btn-secondary absolute right-3 top-1/2 z-10 -translate-y-1/2 sm:right-4"
+                  aria-label="Next photo"
+                >
+                  <ChevronRight className="size-5" aria-hidden />
+                </button>
+              </>
+            ) : null}
 
             <div
               className="relative flex max-h-[min(85vh,100%)] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-ink/10 bg-canvas shadow-2xl"
@@ -270,9 +309,22 @@ export function MediaGallery({
                 </div>
               )}
               <div className="flex flex-col gap-3 border-t border-ink/8 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="min-w-0 truncate text-sm text-ink-muted">
-                  {active.originalFilename || "Family photo"}
-                </p>
+                <div className="min-w-0">
+                  <p
+                    id="media-viewer-title"
+                    className="truncate text-sm text-ink"
+                  >
+                    {active.originalFilename ||
+                      (active.type === "video"
+                        ? "Family video"
+                        : "Family photo")}
+                  </p>
+                  {canNavigate ? (
+                    <p className="mt-0.5 text-xs text-ink-muted" aria-live="polite">
+                      {index + 1} of {count}
+                    </p>
+                  ) : null}
+                </div>
                 <div className="flex min-w-0 flex-1 flex-col items-stretch gap-2 sm:max-w-md sm:items-end">
                   {active.type === "photo" || active.type === "video" ? (
                     <AssignMediaToPersonControl
@@ -288,7 +340,7 @@ export function MediaGallery({
                       className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-800 transition hover:bg-red-100 disabled:cursor-wait disabled:opacity-60"
                     >
                       <Trash2 className="size-3.5" aria-hidden />
-                      {deleting ? "Deleting…" : "Delete"}
+                      {deleting ? t("common.deleting") : t("common.delete")}
                     </button>
                   ) : null}
                 </div>

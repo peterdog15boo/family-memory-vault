@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Eye, Loader2, X } from "lucide-react";
 import type { SerializedPrivateDocument } from "@/lib/documents/serialize";
@@ -9,6 +9,7 @@ import {
   getDocumentViewKind,
   type DocumentViewKind,
 } from "@/lib/documents/view";
+import { useOverlayA11y } from "@/hooks/useOverlayA11y";
 import { cn } from "@/lib/utils";
 
 type DocumentViewerDialogProps = {
@@ -50,13 +51,12 @@ export function DocumentViewerDialog({
     setMounted(true);
   }, []);
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useOverlayA11y({
+    open: mounted,
+    onClose,
+    containerRef: dialogRef,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -147,10 +147,12 @@ export function DocumentViewerDialog({
 
   return createPortal(
     <div
+      ref={dialogRef}
       className="fixed inset-0 z-[100] flex items-center justify-center bg-ink/55 p-3 sm:p-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby="document-viewer-title"
+      tabIndex={-1}
       onClick={onClose}
     >
       <div

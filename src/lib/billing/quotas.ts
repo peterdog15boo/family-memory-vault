@@ -13,6 +13,7 @@ import {
   media,
   privateDocuments,
 } from "@/lib/db/schema";
+import { DEFAULT_LOCALE, formatNumber, type AppLocale } from "@/lib/i18n";
 import { getUserPlan, type PlanLimits } from "@/lib/plans";
 
 export class StorageQuotaError extends Error {
@@ -66,19 +67,34 @@ const KB = 1024;
 
 /**
  * Human-readable byte size (binary units).
+ * Numeric portion follows `locale` (default en-US).
  */
-export function formatBytes(bytes: number, fractionDigits = 0): string {
+export function formatBytes(
+  bytes: number,
+  fractionDigits = 0,
+  locale: AppLocale = DEFAULT_LOCALE,
+): string {
   const n = Math.max(0, Number(bytes) || 0);
+  const fmt = (value: number, digits: number) =>
+    formatNumber(value, locale, {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    });
+
   if (n >= 1024 ** 4) {
-    return `${(n / 1024 ** 4).toFixed(Math.max(fractionDigits, 1))} TB`;
+    const digits = Math.max(fractionDigits, 1);
+    return `${fmt(n / 1024 ** 4, digits)} TB`;
   }
   if (n >= GB) {
     const digits = n >= 10 * GB ? fractionDigits : Math.max(fractionDigits, 1);
-    return `${(n / GB).toFixed(digits)} GB`;
+    return `${fmt(n / GB, digits)} GB`;
   }
-  if (n >= MB) return `${(n / MB).toFixed(fractionDigits || (n >= 10 * MB ? 0 : 1))} MB`;
-  if (n >= KB) return `${(n / KB).toFixed(0)} KB`;
-  return `${Math.round(n)} B`;
+  if (n >= MB) {
+    const digits = fractionDigits || (n >= 10 * MB ? 0 : 1);
+    return `${fmt(n / MB, digits)} MB`;
+  }
+  if (n >= KB) return `${fmt(n / KB, 0)} KB`;
+  return `${fmt(Math.round(n), 0)} B`;
 }
 
 type ByteUnit = "TB" | "GB" | "MB" | "KB" | "B";

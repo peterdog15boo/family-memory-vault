@@ -5,7 +5,7 @@ import { Film, Images } from "lucide-react";
 import { MovieCard } from "@/components/movies/MovieCard";
 import { MoviePlayer } from "@/components/movies/MoviePlayer";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { COPY } from "@/lib/copy";
+import { useCopy, useTranslations } from "@/components/i18n/LocaleProvider";
 import type { SerializedMovie } from "@/lib/movies/serialize";
 
 type MovieLibraryProps = {
@@ -29,12 +29,19 @@ export function MovieLibrary({
   showMemoryLink = false,
   refreshKey = 0,
   memoryId,
-  emptyTitle = COPY.empty.movies.title,
-  emptyDescription = COPY.empty.movies.description,
+  emptyTitle,
+  emptyDescription,
   emptyActionHref = "/memories",
-  emptyActionLabel = "Browse memories",
+  emptyActionLabel,
   className,
 }: MovieLibraryProps) {
+  const copy = useCopy();
+  const t = useTranslations();
+  const resolvedEmptyTitle = emptyTitle ?? copy.empty.movies.title;
+  const resolvedEmptyDescription =
+    emptyDescription ?? copy.empty.movies.description;
+  const resolvedEmptyActionLabel =
+    emptyActionLabel ?? t("pages.browseMemories");
   const [movies, setMovies] = useState(initialMovies);
   const [playing, setPlaying] = useState<SerializedMovie | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -127,11 +134,11 @@ export function MovieLibrary({
       <div className={className}>
         <EmptyState
           icon={Film}
-          title={emptyTitle}
-          description={emptyDescription}
+          title={resolvedEmptyTitle}
+          description={resolvedEmptyDescription}
           action={{
             href: emptyActionHref,
-            label: emptyActionLabel,
+            label: resolvedEmptyActionLabel,
             icon: Images,
           }}
         />

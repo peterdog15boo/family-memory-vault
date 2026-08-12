@@ -1,5 +1,10 @@
 import { PLAN_CATALOG, type PlanSeed } from "@/lib/plans/catalog";
 import type { PlanSlug } from "@/lib/db/schema";
+import {
+  DEFAULT_LOCALE,
+  formatCents as formatCentsIntl,
+  type AppLocale,
+} from "@/lib/i18n";
 
 /** Plans shown on the public pricing page (excludes Legacy). */
 export const PUBLIC_PLAN_SLUGS = ["free", "family", "family_plus"] as const;
@@ -23,12 +28,11 @@ export function formatStorageLabel(bytes: number | null): string {
   return `${gb % 1 === 0 ? gb.toFixed(0) : gb.toFixed(1)} GB storage`;
 }
 
-export function formatCents(cents: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: cents % 100 === 0 ? 0 : 2,
-  }).format(cents / 100);
+export function formatCents(
+  cents: number,
+  locale: AppLocale = DEFAULT_LOCALE,
+): string {
+  return formatCentsIntl(cents, locale);
 }
 
 export function formatMembersLabel(max: number): string {

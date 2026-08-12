@@ -18,7 +18,7 @@ import {
   movieAspectFromSettings,
   movieDownloadFilename,
 } from "@/lib/movies/share";
-import { COPY } from "@/lib/copy";
+import { useCopy } from "@/components/i18n/LocaleProvider";
 import { cn } from "@/lib/utils";
 
 type MovieCardProps = {
@@ -37,6 +37,7 @@ export function MovieCard({
   onPlay,
   onDelete,
 }: MovieCardProps) {
+  const copy = useCopy();
   const [shareOpen, setShareOpen] = useState(false);
   const ready = movie.status === "ready" && Boolean(movie.playUrl);
   const processing =
@@ -58,6 +59,19 @@ export function MovieCard({
         type="button"
         disabled={!ready || busy}
         onClick={() => ready && onPlay?.(movie)}
+        aria-label={
+          ready
+            ? `Play movie: ${movie.title}`
+            : processing
+              ? `${movie.title}: ${
+                  movie.status === "queued"
+                    ? copy.movie.status.queued
+                    : copy.movie.status.processing
+                }`
+              : failed
+                ? `${movie.title}: ${copy.movie.status.failed}`
+                : movie.title
+        }
         className={cn(
           "media-tile movie-poster relative block w-full overflow-hidden bg-ink/[0.06] text-left disabled:cursor-default",
           aspectClass,
@@ -91,15 +105,15 @@ export function MovieCard({
             <Loader2 className="size-6 animate-spin" aria-hidden />
             <span className="text-xs font-medium tracking-wide">
               {movie.status === "queued"
-                ? COPY.movie.status.queued
-                : COPY.movie.status.processing}
+                ? copy.movie.status.queued
+                : copy.movie.status.processing}
             </span>
           </span>
         ) : null}
 
         {failed ? (
           <span className="absolute left-3 top-3 rounded-md bg-red-700/90 px-2 py-0.5 text-[11px] font-medium text-white">
-            {COPY.movie.status.failed}
+            {copy.movie.status.failed}
           </span>
         ) : null}
 
@@ -166,6 +180,8 @@ export function MovieCard({
               disabled={busy}
               onClick={() => setShareOpen(true)}
               className="ui-btn ui-btn-ghost ui-btn-sm"
+              aria-haspopup="dialog"
+              aria-expanded={shareOpen}
             >
               <Share2 className="size-3" aria-hidden />
               Share

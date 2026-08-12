@@ -77,6 +77,7 @@ export function MediaViewerMedia({
             playsInline
             autoPlay={!videoControls}
             onEnded={onVideoEnded}
+            aria-label={alt || "Family video"}
             className="max-h-[85vh] w-auto max-w-full rounded-lg object-contain shadow-2xl"
           />
         )}
@@ -165,14 +166,14 @@ function ViewerLoadingPlaceholder({
       <Loader2
         className={cn(
           "size-8 animate-spin",
-          onDark ? "text-white/70" : "text-ink-muted",
+          onDark ? "text-white/90" : "text-ink-muted",
         )}
         aria-hidden
       />
       <p
         className={cn(
           "text-sm font-medium",
-          onDark ? "text-white/70" : "text-ink-muted",
+          onDark ? "text-white/90" : "text-ink-muted",
         )}
       >
         {label}

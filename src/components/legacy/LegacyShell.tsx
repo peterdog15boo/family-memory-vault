@@ -5,8 +5,7 @@ import { usePathname } from "next/navigation";
 import { ArrowLeft, Heart, Lock } from "lucide-react";
 import { AppPageIntro } from "@/components/ui/AppPageIntro";
 import { HintTooltip } from "@/components/ui/HintTooltip";
-import { COPY } from "@/lib/copy";
-import { LEGACY_NAV } from "@/lib/legacy/nav";
+import { useCopy, useTranslations } from "@/components/i18n/LocaleProvider";
 import { cn } from "@/lib/utils";
 
 type LegacyShellProps = {
@@ -15,6 +14,17 @@ type LegacyShellProps = {
 
 export function LegacyShell({ children }: LegacyShellProps) {
   const pathname = usePathname();
+  const copy = useCopy();
+  const t = useTranslations();
+  const legacyNav = [
+    { href: "/documents/legacy", label: t("legacy.navOverview") },
+    { href: "/documents/legacy/message", label: t("legacy.navMessage") },
+    { href: "/documents/legacy/contacts", label: t("legacy.navContacts") },
+    { href: "/documents/legacy/business", label: t("legacy.navBusiness") },
+    { href: "/documents/legacy/practical", label: t("legacy.navPractical") },
+    { href: "/documents/legacy/secure", label: t("legacy.navSecure") },
+    { href: "/documents/legacy/emergency", label: t("legacy.navEmergency") },
+  ] as const;
 
   return (
     <>
@@ -23,26 +33,26 @@ export function LegacyShell({ children }: LegacyShellProps) {
         eyebrow={
           <>
             <Lock className="size-3.5" aria-hidden />
-            Private · {COPY.legacy.subtitle}
+            Private · {copy.legacy.subtitle}
           </>
         }
         title={
           <>
-            {COPY.legacy.title}{" "}
+            {copy.legacy.title}{" "}
             <HintTooltip
-              tip={COPY.tips.digitalLegacy}
-              label="About Digital Legacy"
+              tip={copy.tips.digitalLegacy}
+              label={t("pages.legacyAbout")}
             />
           </>
         }
-        description={COPY.legacy.overviewLead}
+        description={copy.legacy.overviewLead}
         modernExtra={
           <Link
             href="/documents"
             className="mt-1 inline-flex items-center gap-1.5 text-sm font-medium text-ink-muted hover:text-ink"
           >
             <ArrowLeft className="size-4" aria-hidden />
-            Back to Documents
+            {t("pages.legacyBack")}
           </Link>
         }
         originalExtra={
@@ -51,7 +61,7 @@ export function LegacyShell({ children }: LegacyShellProps) {
             className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-ink-muted hover:text-ink"
           >
             <ArrowLeft className="size-4" aria-hidden />
-            Back to Documents
+            {t("pages.legacyBack")}
           </Link>
         }
       />
@@ -60,13 +70,13 @@ export function LegacyShell({ children }: LegacyShellProps) {
         <div className="mt-8 grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
           <aside className="legacy-vault-panel documents-vault-panel legacy-vault-in space-y-3 rounded-2xl p-3 lg:sticky lg:top-6 lg:self-start">
             <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[color:var(--legacy-muted)]">
-              Sections
+              {t("pages.legacySections")}
             </p>
             <nav
               className="flex flex-col gap-0.5"
-              aria-label="Digital Legacy sections"
+              aria-label={t("pages.legacyNavAria")}
             >
-              {LEGACY_NAV.map((item) => {
+              {legacyNav.map((item) => {
                 const active =
                   item.href === "/documents/legacy"
                     ? pathname === item.href
@@ -96,7 +106,7 @@ export function LegacyShell({ children }: LegacyShellProps) {
                   className="mt-0.5 size-3.5 shrink-0 text-[color:var(--legacy-accent)]"
                   aria-hidden
                 />
-                {COPY.legacy.overviewPrivacy}
+                {copy.legacy.overviewPrivacy}
               </p>
             </div>
           </aside>

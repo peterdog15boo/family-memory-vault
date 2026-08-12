@@ -42,6 +42,13 @@ import {
   saveProfileAvatar,
   saveProfileDisplayName,
 } from "@/lib/profile";
+import { getAccountPreferences } from "@/lib/account-preferences";
+import {
+  createTranslator,
+  DEFAULT_LOCALE,
+  isAppLocale,
+  type TranslateFn,
+} from "@/lib/i18n";
 
 export type {
   AvaAutoOpenReason,
@@ -375,9 +382,20 @@ function step(
   return partial;
 }
 
+async function translatorForUser(userId: string): Promise<TranslateFn> {
+  try {
+    const prefs = await getAccountPreferences(userId);
+    const locale = isAppLocale(prefs.locale) ? prefs.locale : DEFAULT_LOCALE;
+    return createTranslator(locale);
+  } catch {
+    return createTranslator(DEFAULT_LOCALE);
+  }
+}
+
 function buildSteps(
   state: UserOnboardingState,
   signals: AvaSignals,
+  t: TranslateFn = createTranslator(DEFAULT_LOCALE),
 ): AvaStep[] {
   const hp = state.helperProgress ?? emptyProgress();
   const welcomeDone =
@@ -431,21 +449,20 @@ function buildSteps(
   const steps: AvaStep[] = [
     step({
       id: "welcome",
-      title: "Welcome to Family Memory Vault",
-      description:
-        "I’m Ava — I’ll guide you step by step so settling in feels easy.",
+      title: t("ava.steps.welcomeTitle"),
+      description: t("ava.steps.welcomeDescription"),
       href: null,
-      ctaLabel: "Get started",
+      ctaLabel: t("ava.steps.welcomeCta"),
       optional: false,
       status: welcomeDone ? "done" : "available",
       inline: "acknowledge",
     }),
     step({
       id: "screen_name",
-      title: "What should we call you?",
-      description: "Pick a friendly screen name for greetings around the vault.",
+      title: t("ava.steps.screenNameTitle"),
+      description: t("ava.steps.screenNameDescription"),
       href: null,
-      ctaLabel: "Continue",
+      ctaLabel: t("ava.steps.screenNameCta"),
       optional: false,
       status: !welcomeDone
         ? "locked"
@@ -456,10 +473,10 @@ function buildSteps(
     }),
     step({
       id: "avatar",
-      title: "Choose your profile picture",
-      description: "A simple photo or preset helps family recognize you.",
+      title: t("ava.steps.avatarTitle"),
+      description: t("ava.steps.avatarDescription"),
       href: null,
-      ctaLabel: "Continue",
+      ctaLabel: t("ava.steps.avatarCta"),
       optional: false,
       status: !welcomeDone || !screenNameDone
         ? "locked"
@@ -470,11 +487,10 @@ function buildSteps(
     }),
     step({
       id: "upload",
-      title: "Add a family photo",
-      description:
-        "We’ll do a quick safety check before photos appear for family viewing — usually just a short wait.",
+      title: t("ava.steps.uploadTitle"),
+      description: t("ava.steps.uploadDescription"),
       href: "/upload",
-      ctaLabel: "Upload photos",
+      ctaLabel: t("ava.steps.uploadCta"),
       optional: false,
       status: !identityDone
         ? "locked"
@@ -484,10 +500,10 @@ function buildSteps(
     }),
     step({
       id: "moderation",
-      title: "Quick check in progress",
-      description: "I’ll let you know when your photo is ready on Photos.",
+      title: t("ava.steps.moderationTitle"),
+      description: t("ava.steps.moderationDescription"),
       href: null,
-      ctaLabel: "Got it",
+      ctaLabel: t("ava.steps.moderationCta"),
       optional: false,
       status: waitingModeration
         ? "available"
@@ -498,20 +514,20 @@ function buildSteps(
     }),
     step({
       id: "photos_ready",
-      title: "Your photos are ready",
-      description: "They passed the quick check and are safe for family viewing.",
+      title: t("ava.steps.photosReadyTitle"),
+      description: t("ava.steps.photosReadyDescription"),
       href: "/media",
-      ctaLabel: "View Photos",
+      ctaLabel: t("ava.steps.photosReadyCta"),
       optional: false,
       // Live signal: clean photo ⇒ complete (no redo on resume).
       status: identityDone && photosReadyDone ? "done" : "locked",
     }),
     step({
       id: "encourage_memory",
-      title: "Ready for a Memory?",
-      description: "A Memory is a simple collection of photos that tells a story.",
+      title: t("ava.steps.encourageMemoryTitle"),
+      description: t("ava.steps.encourageMemoryDescription"),
       href: "/memories/new",
-      ctaLabel: "Create Memory",
+      ctaLabel: t("ava.steps.encourageMemoryCta"),
       optional: true,
       status: memoryDone || hp.encourageMemorySkipped
         ? "done"
@@ -521,10 +537,12 @@ function buildSteps(
     }),
     step({
       id: "create_memory",
-      title: "Make your first Memory",
-      description: "Gather a few photos into one place you can revisit.",
-      href: "/memories/new",
-      ctaLabel: "Create Memory",
+      title: t("ava.steps.createMemoryTitle"),
+      description: t("ava.steps.createMemoryDescription"),
+      href: memoryDone ? "/memories" : "/memories/new",
+      ctaLabel: memoryDone
+        ? t("ava.viewMemories")
+        : t("ava.steps.createMemoryCta"),
       optional: true,
       // Live signal: memory exists ⇒ complete (celebration may override below).
       status: memoryDone || hp.createMemorySkipped
@@ -535,11 +553,10 @@ function buildSteps(
     }),
     step({
       id: "people",
-      title: "Meet People",
-      description:
-        "Faces can group into People over time — or add someone by hand if we miss them.",
+      title: t("ava.steps.peopleTitle"),
+      description: t("ava.steps.peopleDescription"),
       href: "/people",
-      ctaLabel: "Open People",
+      ctaLabel: t("ava.steps.peopleCta"),
       optional: true,
       status: !postMemoryUnlocked
         ? "locked"
@@ -549,10 +566,10 @@ function buildSteps(
     }),
     step({
       id: "create_movie",
-      title: "Make a short movie",
-      description: "Turn a Memory into a little keepsake film for family.",
+      title: t("ava.steps.createMovieTitle"),
+      description: t("ava.steps.createMovieDescription"),
       href: movieHref,
-      ctaLabel: "Create a movie",
+      ctaLabel: t("ava.steps.createMovieCta"),
       optional: true,
       status: !postMemoryUnlocked
         ? "locked"
@@ -562,12 +579,12 @@ function buildSteps(
     }),
     step({
       id: "ask_ai",
-      title: "Try Ask AI",
-      description: "Search your photos with everyday words.",
+      title: t("ava.steps.askAiTitle"),
+      description: t("ava.steps.askAiDescription"),
       href: "/assistant",
-      ctaLabel: "Ask AI",
+      ctaLabel: t("ava.steps.askAiCta"),
       optional: true,
-      examples: ["show me birthday photos", "find beach pictures"],
+      examples: [t("ava.examples.birthday"), t("ava.examples.beach")],
       status: !postMemoryUnlocked
         ? "locked"
         : askAiDone
@@ -576,10 +593,10 @@ function buildSteps(
     }),
     step({
       id: "invite",
-      title: "Invite family",
-      description: "Share the vault with a spouse or family member when you’re ready.",
+      title: t("ava.steps.inviteTitle"),
+      description: t("ava.steps.inviteDescription"),
       href: "/family",
-      ctaLabel: "Open Family",
+      ctaLabel: t("ava.steps.inviteCta"),
       optional: true,
       status: !postMemoryUnlocked
         ? "locked"
@@ -589,10 +606,10 @@ function buildSteps(
     }),
     step({
       id: "documents_legacy",
-      title: "Documents & Digital Legacy",
-      description: "Advanced tools for later — no rush.",
+      title: t("ava.steps.documentsTitle"),
+      description: t("ava.steps.documentsDescription"),
       href: "/documents",
-      ctaLabel: "Take a peek",
+      ctaLabel: t("ava.steps.documentsCta"),
       optional: true,
       status: !docsUnlocked
         ? "locked"
@@ -602,10 +619,10 @@ function buildSteps(
     }),
     step({
       id: "complete",
-      title: "You’re all set",
-      description: "I’ll stay nearby if you need a nudge.",
+      title: t("ava.steps.completeTitle"),
+      description: t("ava.steps.completeDescription"),
       href: "/dashboard",
-      ctaLabel: "Thanks, Ava",
+      ctaLabel: t("ava.steps.completeCta"),
       optional: false,
       status: !coreDone
         ? "locked"
@@ -653,15 +670,19 @@ function pickActiveStep(
 
 export async function getAvaProgress(userId: string): Promise<AvaProgress> {
   const db = getDb();
-  const [user] = await db
-    .select({
-      displayName: users.displayName,
-      imageUrl: users.imageUrl,
-      onboarding: users.onboarding,
-    })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
+  const [user, t] = await Promise.all([
+    db
+      .select({
+        displayName: users.displayName,
+        imageUrl: users.imageUrl,
+        onboarding: users.onboarding,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1)
+      .then((rows) => rows[0]),
+    translatorForUser(userId),
+  ]);
 
   const state = normalizeOnboardingState(user?.onboarding);
   // Live profile fields (same source Settings uses after sync).
@@ -741,7 +762,7 @@ export async function getAvaProgress(userId: string): Promise<AvaProgress> {
     }).catch(() => undefined);
   }
 
-  const steps = buildSteps(liveState, signals);
+  const steps = buildSteps(liveState, signals, t);
   const completedCount = steps.filter((s) => s.status === "done").length;
   const percent = Math.round((completedCount / Math.max(steps.length, 1)) * 100);
 

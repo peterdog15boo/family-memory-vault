@@ -41,6 +41,7 @@ function safeRedirectPath(raw: string | undefined): string {
   if (!raw) return "/dashboard";
   if (!raw.startsWith("/") || raw.startsWith("//")) return "/dashboard";
   if (raw.startsWith("/beta-agree")) return "/dashboard";
+  // Allow /terms-agree so post-NDA flow can continue to Terms acceptance.
   if (raw.startsWith("/sign-in") || raw.startsWith("/sign-up")) {
     return "/dashboard";
   }
@@ -58,7 +59,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const authResult = await requireApiUser({ skipBetaNda: true });
+  const authResult = await requireApiUser({
+    skipBetaNda: true,
+    skipTerms: true,
+  });
   if (!authResult.ok) return authResult.response;
 
   const limited = enforceRateLimit(

@@ -36,6 +36,9 @@ import { shouldOverrideWithProductHelp, isMixedHelpAndMediaRequest } from "@/lib
 import {
   detectMediaPreference,
 } from "@/lib/ai/media-preference";
+import { intentLocalePromptSuffix } from "@/lib/ai/locale";
+import type { AppLocale } from "@/lib/i18n";
+import { createTranslator, DEFAULT_LOCALE } from "@/lib/i18n";
 
 /* -------------------------------------------------------------------------- */
 /* Public options                                                              */
@@ -56,6 +59,8 @@ export type ParseIntentOptions = {
   now?: Date;
   /** Abort signal for the LLM call. */
   signal?: AbortSignal;
+  /** UI locale — guides clarifying questions + English visual-term normalization. */
+  locale?: AppLocale;
 };
 
 export type ParseIntentMeta = {
@@ -176,6 +181,10 @@ Rules:
 - confidence: 0–1. If confidence < 0.55, prefer action "clarify".
 - Return JSON only. No markdown.`;
 
+export function buildIntentSystemPrompt(locale: AppLocale = DEFAULT_LOCALE): string {
+  return `${INTENT_SYSTEM_PROMPT}${intentLocalePromptSuffix(locale)}`;
+}
+
 export const INTENT_FEW_SHOT_USER = `Examples (for your reasoning only — respond with JSON for the final user request alone):
 
 1) "Create a slideshow of Noah images from 7th grade"
@@ -212,7 +221,13 @@ export const INTENT_FEW_SHOT_USER = `Examples (for your reasoning only — respo
 → {"action":"answer_help","people":[],"date_range":null,"tone":null,"qualities":null,"theme_preference":null,"title_suggestion":null,"document_title":null,"document_category":null,"document_category_description":null,"legacy_contact_name":null,"legacy_contact_category":null,"legacy_contact_email":null,"legacy_contact_phone":null,"legacy_contact_relationship":null,"legacy_instruction_section":null,"legacy_instruction_title":null,"legacy_instruction_content":null,"clarifying_questions":null,"confidence":0.95}
 
 9) "Where do I create a Memory?"
-→ {"action":"answer_help","people":[],"date_range":null,"tone":null,"qualities":null,"theme_preference":null,"title_suggestion":null,"document_title":null,"document_category":null,"document_category_description":null,"legacy_contact_name":null,"legacy_contact_category":null,"legacy_contact_email":null,"legacy_contact_phone":null,"legacy_contact_relationship":null,"legacy_instruction_section":null,"legacy_instruction_title":null,"legacy_instruction_content":null,"clarifying_questions":null,"confidence":0.93}`;
+→ {"action":"answer_help","people":[],"date_range":null,"tone":null,"qualities":null,"theme_preference":null,"title_suggestion":null,"document_title":null,"document_category":null,"document_category_description":null,"legacy_contact_name":null,"legacy_contact_category":null,"legacy_contact_email":null,"legacy_contact_phone":null,"legacy_contact_relationship":null,"legacy_instruction_section":null,"legacy_instruction_title":null,"legacy_instruction_content":null,"clarifying_questions":null,"confidence":0.93}
+
+10) "fotos de la playa"
+→ {"action":"search_media","people":[],"date_range":null,"tone":null,"qualities":null,"visual_query":"beach photos","objects":null,"scenes":["beach"],"media_preference":"photos","theme_preference":null,"title_suggestion":null,"document_title":null,"document_category":null,"document_category_description":null,"legacy_contact_name":null,"legacy_contact_category":null,"legacy_contact_email":null,"legacy_contact_phone":null,"legacy_contact_relationship":null,"legacy_instruction_section":null,"legacy_instruction_title":null,"legacy_instruction_content":null,"clarifying_questions":null,"confidence":0.9}
+
+11) "montre-moi des photos d'anniversaire"
+→ {"action":"search_media","people":[],"date_range":null,"tone":null,"qualities":["birthday"],"visual_query":"birthday photos","objects":["cake"],"scenes":null,"media_preference":"photos","theme_preference":null,"title_suggestion":null,"document_title":null,"document_category":null,"document_category_description":null,"legacy_contact_name":null,"legacy_contact_category":null,"legacy_contact_email":null,"legacy_contact_phone":null,"legacy_contact_relationship":null,"legacy_instruction_section":null,"legacy_instruction_title":null,"legacy_instruction_content":null,"clarifying_questions":null,"confidence":0.88}`;
 
 /* -------------------------------------------------------------------------- */
 /* Entry point                                                                 */
@@ -228,14 +243,13 @@ export async function parseIntent(
 ): Promise<ParseIntentResult> {
   const raw = prompt.trim();
   if (!raw) {
+    const t = createTranslator(options.locale ?? DEFAULT_LOCALE);
     return finalizeIntent(
       {
         action: "clarify",
         people: [],
         raw_prompt: prompt,
-        clarifying_questions: [
-          "What would you like to do — search photos, create a memory album, or make a slideshow/movie?",
-        ],
+        clarifying_questions: [t("assistant.reply.emptyPromptQuestion")],
         confidence: 0,
       },
       options,
@@ -285,7 +299,7 @@ async function parseIntentWithLlm(
 
   const result = await complete({
     messages: [
-      { role: "system", content: INTENT_SYSTEM_PROMPT },
+      { role: "system", content: buildIntentSystemPrompt(options.locale) },
       { role: "user", content: INTENT_FEW_SHOT_USER },
       {
         role: "user",

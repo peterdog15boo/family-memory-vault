@@ -3,7 +3,7 @@
 import { useCallback, useState, useTransition } from "react";
 import { MediaGallery } from "@/components/dashboard/MediaGallery";
 import { LibrarySection } from "@/components/library/LibrarySection";
-import { COPY } from "@/lib/copy";
+import { useCopy, useTranslations } from "@/components/i18n/LocaleProvider";
 import type { SerializedSafeMedia } from "@/lib/memories/types";
 
 type PaginatedMediaLibraryProps = {
@@ -18,12 +18,13 @@ type PaginatedMediaLibraryProps = {
 function LoadMoreButton({
   onClick,
   pending,
-  label = "Load more",
+  label,
 }: {
   onClick: () => void;
   pending: boolean;
   label?: string;
 }) {
+  const t = useTranslations();
   return (
     <div className="mt-6 flex justify-center">
       <button
@@ -32,7 +33,7 @@ function LoadMoreButton({
         disabled={pending}
         className="rounded-md border border-ink/15 bg-canvas px-4 py-2 text-sm font-medium text-ink transition hover:border-accent/40 hover:bg-canvas-deep disabled:cursor-wait disabled:opacity-60"
       >
-        {pending ? "Loading…" : label}
+        {pending ? t("common.loading") : (label ?? t("common.loadMore"))}
       </button>
     </div>
   );
@@ -49,6 +50,8 @@ export function PaginatedMediaLibrary({
   sharedHasMore: initialSharedHasMore,
   pageSize = 48,
 }: PaginatedMediaLibraryProps) {
+  const copy = useCopy();
+  const t = useTranslations();
   const [own, setOwn] = useState(initialOwn);
   const [shared, setShared] = useState(initialShared);
   const [ownHasMore, setOwnHasMore] = useState(initialOwnHasMore);
@@ -132,8 +135,8 @@ export function PaginatedMediaLibrary({
       ) : null}
 
       <LibrarySection
-        title="Your photos"
-        description="Photos and videos you’ve added."
+        title={t("pages.mediaTitle")}
+        description={t("pages.mediaDescription")}
         count={own.length}
         className="mt-10"
       >
@@ -143,7 +146,7 @@ export function PaginatedMediaLibrary({
           deletingId={deletingId}
           emptySecondaryAction={{
             href: "/family-memory-box",
-            label: "Or digitize old photos & tapes",
+            label: t("pages.digitizeOld"),
           }}
         />
         {ownHasMore ? (
@@ -156,16 +159,16 @@ export function PaginatedMediaLibrary({
 
       {hasFamilySharing || shared.length > 0 ? (
         <LibrarySection
-          title="Shared with family"
-          description="Photos from people in your family."
+          title={t("mediaUi.sharedSectionTitle")}
+          description={t("mediaUi.sharedSectionLead")}
           count={shared.length}
           variant="shared"
           className="mt-12"
         >
           <MediaGallery
             items={shared}
-            emptyTitle={COPY.empty.mediaShared.title}
-            emptyDescription={COPY.empty.mediaShared.description}
+            emptyTitle={copy.empty.mediaShared.title}
+            emptyDescription={copy.empty.mediaShared.description}
             emptyActionHref={null}
             emptySecondaryAction={null}
           />

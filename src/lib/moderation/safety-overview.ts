@@ -9,6 +9,7 @@ import {
   desc,
   eq,
   ilike,
+  inArray,
   isNotNull,
   or,
   sql,
@@ -154,7 +155,11 @@ function filterWhere(filter: SafetyOverviewFilter): SQL | undefined {
     return eq(media.moderationStatus, "csam_quarantined");
   }
   if (filter === "needs_review") {
-    return eq(media.moderationStatus, "needs_human_review");
+    return inArray(media.moderationStatus, [
+      "needs_human_review",
+      "adult",
+      "rejected",
+    ]);
   }
   if (filter === "ncmec_reported") {
     return and(isNotNull(media.ncmecReportId), sql`${media.ncmecReportId} <> ''`);

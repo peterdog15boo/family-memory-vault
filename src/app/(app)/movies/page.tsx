@@ -4,7 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { MovieLibrary } from "@/components/movies/MovieLibrary";
 import { AppPageIntro } from "@/components/ui/AppPageIntro";
-import { COPY } from "@/lib/copy";
+import { getTranslations } from "@/lib/i18n/server";
 import { listUserMoviesWithMemory } from "@/lib/movies/list";
 import { serializeMovie } from "@/lib/movies/serialize";
 
@@ -17,6 +17,8 @@ export default async function MoviesPage() {
     redirect("/");
   }
 
+  const t = await getTranslations();
+
   const rows = await listUserMoviesWithMemory(userId, { limit: 48 });
   const movies = await Promise.all(
     rows.map((row) => serializeMovie(row, { includeUrls: true })),
@@ -26,13 +28,13 @@ export default async function MoviesPage() {
     <>
       <AppPageIntro
         slot="movies"
-        eyebrow="Short films"
-        title="Movies"
-        description="Watch the short films made from your memories — or open an album to make a new one."
+        eyebrow={t("pages.moviesEyebrow")}
+        title={t("pages.moviesTitle")}
+        description={t("pages.moviesDescription")}
         actions={
           <Link href="/memories" className="ui-btn ui-btn-primary ui-btn-lg">
             <Film className="size-4" aria-hidden />
-            Make a movie
+            {t("pages.moviesMake")}
           </Link>
         }
       />
@@ -41,10 +43,10 @@ export default async function MoviesPage() {
         <MovieLibrary
           initialMovies={movies}
           showMemoryLink
-          emptyTitle={COPY.empty.movies.title}
-          emptyDescription={COPY.empty.movies.description}
+          emptyTitle={t("empty.moviesTitle")}
+          emptyDescription={t("empty.moviesDescription")}
           emptyActionHref="/memories"
-          emptyActionLabel="Browse memories"
+          emptyActionLabel={t("pages.browseMemories")}
         />
       </div>
     </>

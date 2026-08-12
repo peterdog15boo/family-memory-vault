@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, Plus, Shield, Trash2 } from "lucide-react";
 import { EmergencyAccessLegalNotice } from "@/components/emergency-access/EmergencyAccessLegalNotice";
+import { useFormat } from "@/components/i18n/LocaleProvider";
 import type { SerializedEmergencyAccessDesignation } from "@/lib/emergency-access/serialize";
 import {
   EMERGENCY_ACCESS_STATUS_LABELS,
@@ -56,22 +57,11 @@ function canEditDesignation(
   );
 }
 
-function formatWhen(iso: string | null): string | null {
-  if (!iso) return null;
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(iso));
-  } catch {
-    return iso;
-  }
-}
-
 export function EmergencyAccessOwnerPanel({
   designations: initial,
 }: EmergencyAccessOwnerPanelProps) {
   const router = useRouter();
+  const format = useFormat();
   const [designations, setDesignations] = useState(initial);
   const [formMode, setFormMode] = useState<"create" | "edit" | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -280,7 +270,10 @@ export function EmergencyAccessOwnerPanel({
                     </p>
                     {d.status === "requested" && d.waitingEndsAt ? (
                       <p className="mt-1 text-xs text-amber-900">
-                        Waiting ends {formatWhen(d.waitingEndsAt)}
+                        Waiting ends{" "}
+                        {d.waitingEndsAt
+                          ? format.dateTime(d.waitingEndsAt)
+                          : null}
                         {d.waitingPeriodHours > 0
                           ? " (auto-grant unless you deny)"
                           : ""}
@@ -297,7 +290,10 @@ export function EmergencyAccessOwnerPanel({
                     d.accessType !== "permanent" &&
                     d.grantExpiresAt ? (
                       <p className="mt-1 text-xs text-[color:var(--legacy-accent-deep)]">
-                        Access active until {formatWhen(d.grantExpiresAt)}
+                        Access active until{" "}
+                        {d.grantExpiresAt
+                          ? format.dateTime(d.grantExpiresAt)
+                          : null}
                         {d.grantedBy ? ` · ${d.grantedBy}` : ""}
                       </p>
                     ) : null}

@@ -17,6 +17,12 @@ import type {
 } from "@/lib/ai/assistant";
 import { publicAssistantErrorMessage } from "@/lib/ai/safety";
 import { LogEvents, logAssistantFailed } from "@/lib/observability/events";
+import {
+  createTranslator,
+  DEFAULT_LOCALE,
+  type AppLocale,
+  type TranslateFn,
+} from "@/lib/i18n";
 
 /* -------------------------------------------------------------------------- */
 /* Action buttons                                                              */
@@ -187,11 +193,12 @@ export function serializeUnderstanding(
 
 export function buildActionButtons(
   turn: AssistantUiResponse,
+  t: TranslateFn = createTranslator(DEFAULT_LOCALE),
 ): AssistantActionButton[] {
   const buttons: AssistantActionButton[] = [];
 
   if (turn.status === "preview" && turn.preview) {
-    const confirmLabel = previewConfirmLabel(turn.preview.action);
+    const confirmLabel = previewConfirmLabel(turn.preview.action, t);
     buttons.push({
       id: `confirm-${turn.preview.proposalId}`,
       label: confirmLabel,
@@ -201,7 +208,7 @@ export function buildActionButtons(
     });
     buttons.push({
       id: `cancel-${turn.preview.proposalId}`,
-      label: "Not now",
+      label: t("assistant.actions.notNow"),
       action: "cancel",
       proposalId: turn.preview.proposalId,
       conversationId: turn.conversationId,
@@ -211,7 +218,7 @@ export function buildActionButtons(
   if (turn.entities?.memoryId) {
     buttons.push({
       id: `memory-${turn.entities.memoryId}`,
-      label: "View Memory",
+      label: t("assistant.actions.viewMemory"),
       action: "view_memory",
       href: `/memories/${turn.entities.memoryId}`,
     });
@@ -220,7 +227,7 @@ export function buildActionButtons(
   if (turn.entities?.movieId) {
     buttons.push({
       id: `movie-${turn.entities.movieId}`,
-      label: "View Movie",
+      label: t("assistant.actions.viewMovie"),
       action: "view_movie",
       href: `/movies`,
     });
@@ -238,14 +245,14 @@ export function buildActionButtons(
     if (mediaIds.length > 0) {
       buttons.push({
         id: "create-memory-from-search",
-        label: "Create Memory",
+        label: t("assistant.actions.createMemoryFromSearch"),
         action: "create_memory_from_search",
         conversationId: turn.conversationId,
         mediaIds,
       });
       buttons.push({
         id: "create-movie-from-search",
-        label: "Create Movie",
+        label: t("assistant.actions.createMovieFromSearch"),
         action: "create_movie_from_search",
         conversationId: turn.conversationId,
         mediaIds,
@@ -257,7 +264,7 @@ export function buildActionButtons(
       const person = matchedPeople[0];
       buttons.push({
         id: `person-${person.id}`,
-        label: `View ${person.name}'s media`,
+        label: t("assistant.actions.viewPersonsMedia", { name: person.name }),
         action: "browse_media",
         href: `/people/${person.id}`,
       });
@@ -265,7 +272,7 @@ export function buildActionButtons(
       for (const person of matchedPeople.slice(0, 3)) {
         buttons.push({
           id: `person-${person.id}`,
-          label: `View ${person.name}`,
+          label: t("assistant.actions.viewPerson", { name: person.name }),
           action: "browse_media",
           href: `/people/${person.id}`,
         });
@@ -273,7 +280,7 @@ export function buildActionButtons(
     } else {
       buttons.push({
         id: "browse-media",
-        label: "View library",
+        label: t("assistant.actions.viewLibrary"),
         action: "browse_media",
         href: "/media",
       });
@@ -283,7 +290,7 @@ export function buildActionButtons(
   if (turn.status === "completed" && turn.result?.type === "create_document_category") {
     buttons.push({
       id: "open-documents",
-      label: "Open documents",
+      label: t("assistant.actions.openDocuments"),
       action: "open_documents",
       href: "/documents",
     });
@@ -291,8 +298,8 @@ export function buildActionButtons(
 
   if (turn.status === "completed" && turn.result?.type === "file_private_document") {
     buttons.push({
-      id: "open-documents-filed",
-      label: "Open documents",
+      id: "open-documents-file",
+      label: t("assistant.actions.openDocuments"),
       action: "open_documents",
       href: "/documents",
     });
@@ -306,17 +313,17 @@ export function buildActionButtons(
   ) {
     buttons.push({
       id: "open-legacy",
-      label: "Open Digital Legacy",
+      label: t("assistant.actions.openLegacy"),
       action: "open_legacy",
       href: "/documents/legacy",
     });
   }
 
   if (turn.status === "completed" && turn.result?.type === "answer_help") {
-    for (const link of turn.result.links.slice(0, 4)) {
+    for (const link of (turn.result.links ?? []).slice(0, 4)) {
       buttons.push({
         id: `help-${link.href.replace(/\W+/g, "-")}`,
-        label: friendlyHelpLinkLabel(link.label, link.href),
+        label: friendlyHelpLinkLabel(link.label, link.href, t),
         action: "open_help_route",
         href: link.href,
       });
@@ -326,22 +333,29 @@ export function buildActionButtons(
   return buttons;
 }
 
-function friendlyHelpLinkLabel(label: string, href: string): string {
-  if (/\/family/i.test(href)) return "Go to Family";
-  if (/\/billing|\/pricing/i.test(href)) return "Upgrade / Billing";
-  if (/\/media/i.test(href)) return "View library";
-  if (/\/memories/i.test(href)) return "Go to Memories";
-  if (/\/movies/i.test(href)) return "Go to Movies";
-  if (/\/settings/i.test(href)) return "Open Settings";
-  if (/\/documents\/legacy/i.test(href)) return "Digital Legacy";
-  if (/\/documents/i.test(href)) return "Go to Documents";
-  if (/\/upload/i.test(href)) return "Go to Upload";
-  if (/\/people/i.test(href)) return "Go to People";
+function friendlyHelpLinkLabel(
+  label: string,
+  href: string,
+  t: TranslateFn,
+): string {
+  if (/\/family/i.test(href)) return t("assistant.actions.goFamily");
+  if (/\/billing|\/pricing/i.test(href)) return t("assistant.actions.upgradeBilling");
+  if (/\/media/i.test(href)) return t("assistant.actions.viewLibrary");
+  if (/\/memories/i.test(href)) return t("assistant.actions.goMemories");
+  if (/\/movies/i.test(href)) return t("assistant.actions.goMovies");
+  if (/\/settings/i.test(href)) return t("assistant.actions.openSettings");
+  if (/\/documents\/legacy/i.test(href)) {
+    return t("assistant.actions.digitalLegacy");
+  }
+  if (/\/documents/i.test(href)) return t("assistant.actions.goDocuments");
+  if (/\/upload/i.test(href)) return t("assistant.actions.goUpload");
+  if (/\/people/i.test(href)) return t("assistant.actions.goPeople");
   return label;
 }
 
 export function buildCreatedLinks(
   turn: AssistantUiResponse,
+  t: TranslateFn = createTranslator(DEFAULT_LOCALE),
 ): AssistantCreatedLinks {
   const memoryId = turn.entities?.memoryId ?? null;
   const movieId = turn.entities?.movieId ?? null;
@@ -349,29 +363,39 @@ export function buildCreatedLinks(
   const links: Array<{ label: string; href: string }> = [];
 
   if (memoryId) {
-    links.push({ label: "Memory", href: `/memories/${memoryId}` });
+    links.push({ label: t("assistant.actions.memory"), href: `/memories/${memoryId}` });
   }
   if (movieId) {
-    links.push({ label: "Movies", href: "/movies" });
+    links.push({ label: t("assistant.actions.movies"), href: "/movies" });
   }
   if (turn.result?.type === "create_document_category") {
-    links.push({ label: "Private Documents", href: "/documents" });
+    links.push({
+      label: t("assistant.actions.privateDocuments"),
+      href: "/documents",
+    });
   }
   if (turn.result?.type === "file_private_document") {
-    links.push({ label: "Private Documents", href: "/documents" });
+    links.push({
+      label: t("assistant.actions.privateDocuments"),
+      href: "/documents",
+    });
   }
   if (
     turn.result?.type === "add_legacy_contact" ||
     turn.result?.type === "draft_legacy_business" ||
     turn.result?.type === "review_legacy_checklist"
   ) {
-    links.push({ label: "Digital Legacy", href: "/documents/legacy" });
+    links.push({
+      label: t("assistant.actions.digitalLegacy"),
+      href: "/documents/legacy",
+    });
   }
   if (turn.result?.type === "answer_help") {
     for (const link of turn.result.links) {
-      if (!links.some((l) => l.href === link.href)) {
-        links.push(link);
-      }
+      links.push({
+        label: friendlyHelpLinkLabel(link.label, link.href, t),
+        href: link.href,
+      });
     }
   }
 
@@ -380,7 +404,9 @@ export function buildCreatedLinks(
 
 export function toAssistantTurnApiPayload(
   turn: AssistantUiResponse,
+  locale: AppLocale = DEFAULT_LOCALE,
 ): AssistantTurnApiPayload {
+  const t = createTranslator(locale);
   const preview = turn.preview
     ? serializeMediaPreview(turn.preview)
     : null;
@@ -394,8 +420,8 @@ export function toAssistantTurnApiPayload(
     understanding: serializeUnderstanding(turn.intent),
     clarifyingQuestions: turn.clarifyingQuestions ?? [],
     mediaPreview: preview,
-    actionButtons: buildActionButtons(turn),
-    created: buildCreatedLinks(turn),
+    actionButtons: buildActionButtons(turn, t),
+    created: buildCreatedLinks(turn, t),
     result: turn.result ?? null,
     actionId: turn.actionId ?? null,
   };
@@ -416,22 +442,25 @@ function serializeMediaPreview(preview: AssistantUiPreview) {
   };
 }
 
-function previewConfirmLabel(action: AssistantUiPreview["action"]): string {
+function previewConfirmLabel(
+  action: AssistantUiPreview["action"],
+  t: TranslateFn,
+): string {
   switch (action) {
     case "create_movie":
-      return "Create slideshow";
+      return t("assistant.actions.createSlideshow");
     case "create_memory":
-      return "Create memory";
+      return t("assistant.actions.createMemory");
     case "create_document_category":
-      return "Create category";
+      return t("assistant.actions.createCategory");
     case "file_private_document":
-      return "File document";
+      return t("assistant.actions.fileDocument");
     case "add_legacy_contact":
-      return "Add contact";
+      return t("assistant.actions.addContact");
     case "draft_legacy_business":
-      return "Save draft";
+      return t("assistant.actions.saveDraft");
     default:
-      return "Confirm";
+      return t("assistant.actions.confirm");
   }
 }
 

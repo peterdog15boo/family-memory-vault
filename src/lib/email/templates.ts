@@ -4,6 +4,11 @@
  */
 
 import { getAppUrl } from "@/lib/env";
+import {
+  createTranslator,
+  DEFAULT_LOCALE,
+  type AppLocale,
+} from "@/lib/i18n";
 
 export type EmailContent = {
   subject: string;
@@ -154,38 +159,55 @@ export function familyInviteEmail(data: {
   familyName: string;
   role?: string | null;
   inviteUrl: string;
+  /** Recipient UI locale; defaults to English. */
+  locale?: AppLocale;
 }): EmailContent {
-  const who = data.inviteeName?.trim() || "there";
-  const rolePart = data.role ? ` as a ${data.role}` : "";
-  const subject = `${data.inviterName} invited you to ${data.familyName}`;
+  const t = createTranslator(data.locale ?? DEFAULT_LOCALE);
+  const who =
+    data.inviteeName?.trim() || t("emails.invite.greetingFallback");
+  const rolePart = data.role
+    ? t("emails.invite.rolePart", { role: data.role })
+    : "";
+  const subject = t("emails.invite.subject", {
+    inviter: data.inviterName,
+    family: data.familyName,
+  });
   const text = [
-    `Hi ${who},`,
+    t("emails.invite.greeting", { name: who }),
     ``,
-    `${data.inviterName} invited you to join "${data.familyName}" on ${BRAND}${rolePart}.`,
+    t("emails.invite.body1", {
+      inviter: data.inviterName,
+      family: data.familyName,
+      rolePart,
+    }),
     ``,
-    `${BRAND} is a private place for your family to keep photos, videos, and shared memories together — safely, and only with people you invite.`,
+    t("emails.invite.body2"),
     ``,
-    `Accept the invitation:`,
+    t("emails.invite.acceptLabel"),
     data.inviteUrl,
     ``,
-    `If the button doesn’t work, paste the link above into your browser.`,
+    t("emails.invite.pasteHint"),
   ].join("\n");
 
   return {
     subject,
     text,
     html: layout({
-      preview: `${data.inviterName} invited you to share family memories.`,
-      heading: "You're invited",
+      preview: t("emails.invite.preview", { inviter: data.inviterName }),
+      heading: t("emails.invite.heading"),
       bodyHtml: paragraphs([
-        `${data.inviterName} invited you to join “${data.familyName}” on ${BRAND}${rolePart}.`,
-        `${BRAND} is a private place for your family to keep photos, videos, and shared memories together — safely, and only with people you invite.`,
-        `Join to see shared memories and help preserve your family’s photos together.`,
+        t("emails.invite.body1", {
+          inviter: data.inviterName,
+          family: data.familyName,
+          rolePart,
+        }),
+        t("emails.invite.body2"),
+        t("emails.invite.body3"),
       ]),
-      ctaLabel: "Accept invitation",
+      ctaLabel: t("emails.invite.cta"),
       ctaHref: data.inviteUrl,
       plainLinkHref: data.inviteUrl,
-      footerNote: `This invitation was sent by ${data.inviterName} via ${BRAND}. If you weren’t expecting it, you can ignore this email.`,
+      footerNote: t("emails.invite.footer", { inviter: data.inviterName }),
     }),
   };
 }
@@ -416,6 +438,153 @@ export function memoryBoxOrderAdminEmail(data: {
       ctaLabel: data.adminUrl ? "View orders" : undefined,
       ctaHref: data.adminUrl,
       footerNote: `Internal notification from ${BRAND}.`,
+    }),
+  };
+}
+
+export function feedbackSubmissionAdminEmail(data: {
+  ticketId: string;
+  mode: "bug" | "feature";
+  title: string;
+  description: string;
+  category: string;
+  status: string;
+  severity?: string | null;
+  expectedBehavior?: string | null;
+  problemStatement?: string | null;
+  suggestedSolution?: string | null;
+  email?: string | null;
+  userId?: string | null;
+  pageUrl: string;
+  pathname: string;
+  browser?: string | null;
+  os?: string | null;
+  viewport?: string | null;
+  screenshotKey?: string | null;
+  consoleErrors?: string[];
+  clientTimestamp?: string | null;
+  adminUrl?: string;
+}): EmailContent {
+  const kind = data.mode === "bug" ? "Bug report" : "Feature request";
+  const subject = `${data.ticketId} — ${kind}: ${data.title}`;
+  const consoleBlock =
+    data.consoleErrors && data.consoleErrors.length > 0
+      ? data.consoleErrors.map((line) => `  - ${line}`).join("\n")
+      : "  (none)";
+
+  const text = [
+    `New beta feedback — ${kind}`,
+    ``,
+    `Ticket: ${data.ticketId}`,
+    `Status: ${data.status}`,
+    `Category: ${data.category}`,
+    data.severity ? `Severity: ${data.severity}` : null,
+    `Title: ${data.title}`,
+    ``,
+    `Description:`,
+    data.description,
+    data.expectedBehavior ? `\nExpected:\n${data.expectedBehavior}` : null,
+    data.problemStatement ? `\nProblem:\n${data.problemStatement}` : null,
+    data.suggestedSolution ? `\nSuggested:\n${data.suggestedSolution}` : null,
+    ``,
+    `Reporter: ${data.email ?? "(no email)"}`,
+    `User ID: ${data.userId ?? "(unknown)"}`,
+    `Page: ${data.pageUrl}`,
+    `Path: ${data.pathname}`,
+    `Browser: ${data.browser ?? "?"} · OS: ${data.os ?? "?"}`,
+    data.viewport ? `Viewport: ${data.viewport}` : null,
+    data.clientTimestamp ? `Client time: ${data.clientTimestamp}` : null,
+    data.screenshotKey ? `Screenshot (R2): ${data.screenshotKey}` : "Screenshot: (none)",
+    ``,
+    `Console errors:`,
+    consoleBlock,
+    data.adminUrl ? `\nAdmin: ${data.adminUrl}` : null,
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
+
+  const bodyLines = [
+    `<strong>Ticket:</strong> ${escapeHtml(data.ticketId)}`,
+    `<strong>Type:</strong> ${escapeHtml(kind)}`,
+    `<strong>Status:</strong> ${escapeHtml(data.status)}`,
+    `<strong>Category:</strong> ${escapeHtml(data.category)}`,
+    data.severity
+      ? `<strong>Severity:</strong> ${escapeHtml(data.severity)}`
+      : null,
+    `<strong>Title:</strong> ${escapeHtml(data.title)}`,
+    `<strong>Description:</strong><br/>${escapeHtml(data.description).replace(/\n/g, "<br/>")}`,
+    data.expectedBehavior
+      ? `<strong>Expected:</strong><br/>${escapeHtml(data.expectedBehavior).replace(/\n/g, "<br/>")}`
+      : null,
+    data.problemStatement
+      ? `<strong>Problem:</strong><br/>${escapeHtml(data.problemStatement).replace(/\n/g, "<br/>")}`
+      : null,
+    data.suggestedSolution
+      ? `<strong>Suggested:</strong><br/>${escapeHtml(data.suggestedSolution).replace(/\n/g, "<br/>")}`
+      : null,
+    `<strong>Reporter:</strong> ${escapeHtml(data.email ?? "(no email)")}`,
+    `<strong>User ID:</strong> ${escapeHtml(data.userId ?? "(unknown)")}`,
+    `<strong>Page:</strong> ${escapeHtml(data.pageUrl)}`,
+    `<strong>Browser / OS:</strong> ${escapeHtml(`${data.browser ?? "?"} · ${data.os ?? "?"}`)}`,
+    data.viewport
+      ? `<strong>Viewport:</strong> ${escapeHtml(data.viewport)}`
+      : null,
+    data.screenshotKey
+      ? `<strong>Screenshot key:</strong> <code>${escapeHtml(data.screenshotKey)}</code>`
+      : `<strong>Screenshot:</strong> none`,
+  ].filter((line): line is string => Boolean(line));
+
+  return {
+    subject,
+    text,
+    html: layout({
+      preview: `${data.ticketId} — ${kind}: ${data.title}`,
+      heading: "New beta feedback",
+      bodyHtml: paragraphs(bodyLines),
+      ctaLabel: data.adminUrl ? "Open admin" : undefined,
+      ctaHref: data.adminUrl,
+      footerNote: `Internal notification from ${BRAND}.`,
+    }),
+  };
+}
+
+export function milestoneEmail(data: {
+  firstName?: string | null;
+  badgeTitle: string;
+  badgeBody?: string | null;
+  href?: string;
+}): EmailContent {
+  const name = data.firstName?.trim() || "there";
+  const href = data.href ?? appUrl("/dashboard");
+  const title = data.badgeTitle.trim() || "A new milestone";
+  const subject = `${title} — Family Memory Vault`;
+  const detail =
+    data.badgeBody?.trim() ||
+    "A quiet milestone in your family vault — worth a look when you have a moment.";
+
+  const text = [
+    `Hi ${name},`,
+    ``,
+    title,
+    ``,
+    detail,
+    ``,
+    `Open your vault: ${href}`,
+  ].join("\n");
+
+  return {
+    subject,
+    text,
+    html: layout({
+      preview: title,
+      heading: title,
+      bodyHtml: paragraphs([
+        `Hi ${name},`,
+        detail,
+        "There’s no rush — this note is just so the moment isn’t easy to miss.",
+      ]),
+      ctaLabel: "Open your vault",
+      ctaHref: href,
     }),
   };
 }

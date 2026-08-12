@@ -6,7 +6,7 @@ import { FacePrivacyNote } from "@/components/people/FacePrivacyNote";
 import { PeopleList } from "@/components/people/PeopleList";
 import { AppPageIntro } from "@/components/ui/AppPageIntro";
 import { HintTooltip } from "@/components/ui/HintTooltip";
-import { COPY } from "@/lib/copy";
+import { getTranslations } from "@/lib/i18n/server";
 import { getPlanCapabilities } from "@/lib/plans/gates";
 import { listPeopleWithCovers, serializePersonListItem } from "@/lib/people/queries";
 
@@ -18,6 +18,8 @@ export default async function PeoplePage() {
   if (!isAuthenticated || !userId) {
     redirect("/");
   }
+
+  const t = await getTranslations();
 
   const [peopleRaw, capabilities] = await Promise.all([
     listPeopleWithCovers(userId),
@@ -57,16 +59,16 @@ export default async function PeoplePage() {
         eyebrow={
           <>
             <Heart className="size-3.5" aria-hidden />
-            Family faces
+            {t("pages.peopleEyebrow")}
           </>
         }
         title={
           <>
-            People{" "}
-            <HintTooltip tip={COPY.tips.peopleFaces} label="About People" />
+            {t("pages.peopleTitle")}{" "}
+            <HintTooltip tip={t("tips.peopleFaces")} label={t("pages.peopleAbout")} />
           </>
         }
-        description="Faces from your photos, gathered gently so you can name the people you love."
+        description={t("pages.peopleDescription")}
         originalExtra={peopleMeta}
         modernExtra={peopleMeta}
       />

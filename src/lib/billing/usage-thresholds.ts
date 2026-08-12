@@ -1,3 +1,5 @@
+import { DEFAULT_LOCALE, formatDate, type AppLocale } from "@/lib/i18n";
+
 /** Show gentle warnings when usage reaches this share of the limit. */
 export const USAGE_WARNING_PERCENT = 80;
 
@@ -18,21 +20,27 @@ export function getUsageLevel(percentUsed: number | null): UsageLevel {
   return "ok";
 }
 
-export function formatUsagePeriodReset(now = new Date()): string {
+export function formatUsagePeriodReset(
+  now = new Date(),
+  locale: AppLocale = DEFAULT_LOCALE,
+): string {
   const next = new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
   );
-  return new Intl.DateTimeFormat(undefined, {
+  return formatDate(next, locale, {
     month: "long",
     day: "numeric",
     timeZone: "UTC",
-  }).format(next);
+  });
 }
 
-export function formatBillingDate(date: Date): string {
-  return new Intl.DateTimeFormat(undefined, {
+export function formatBillingDate(
+  date: Date,
+  locale: AppLocale = DEFAULT_LOCALE,
+): string {
+  return formatDate(date, locale, {
     month: "long",
     day: "numeric",
     year: "numeric",
-  }).format(date);
+  });
 }

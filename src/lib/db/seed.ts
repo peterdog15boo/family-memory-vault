@@ -18,6 +18,7 @@ import {
   moderationEvents,
   users,
 } from "@/lib/db/schema";
+import { seedAchievements } from "@/lib/gamification";
 import { ensureFreeSubscription, seedPlans } from "@/lib/plans";
 
 config({ path: ".env.local", override: true });
@@ -39,6 +40,9 @@ async function seed() {
   console.log(
     `Plans: ${planRows.map((p) => p.slug).join(", ") || "(none)"}`,
   );
+
+  const achievementRows = await seedAchievements();
+  console.log(`Achievements: ${achievementRows.length} definitions`);
 
   await db
     .insert(users)

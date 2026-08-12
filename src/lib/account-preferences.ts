@@ -10,6 +10,7 @@ import {
   type NotificationType,
   type UserAccountPreferences,
 } from "@/lib/db/schema";
+import { DEFAULT_LOCALE, isAppLocale } from "@/lib/i18n/locales";
 
 export {
   DEFAULT_USER_ACCOUNT_PREFERENCES,
@@ -29,6 +30,8 @@ export const ACCOUNT_PREFERENCE_TOGGLE_KEYS = [
   "inAppMediaReady",
   "inAppEmergencyAccess",
   "notificationSoundEnabled",
+  "celebrationSoundEnabled",
+  "emailMilestoneCelebrations",
   "productUpdatesEmail",
 ] as const satisfies readonly (keyof UserAccountPreferences)[];
 
@@ -52,12 +55,25 @@ export function resolveAccountPreferences(
   } else if (raw.lastStorageWarningAt === null) {
     out.lastStorageWarningAt = null;
   }
+  if (isAppLocale(raw.locale)) {
+    out.locale = raw.locale;
+  } else {
+    // Missing, null, or unsupported → US English (never crash on bad values).
+    out.locale = DEFAULT_LOCALE;
+  }
   return out;
 }
 
+export type PublicAccountPreferences = Pick<
+  ResolvedAccountPreferences,
+  AccountPreferenceToggleKey
+> & {
+  locale: string;
+};
+
 export function publicAccountPreferences(
   prefs: ResolvedAccountPreferences,
-): Pick<ResolvedAccountPreferences, AccountPreferenceToggleKey> {
+): PublicAccountPreferences {
   const out = {} as Pick<
     ResolvedAccountPreferences,
     AccountPreferenceToggleKey
@@ -65,7 +81,10 @@ export function publicAccountPreferences(
   for (const key of ACCOUNT_PREFERENCE_TOGGLE_KEYS) {
     out[key] = prefs[key];
   }
-  return out;
+  return {
+    ...out,
+    locale: isAppLocale(prefs.locale) ? prefs.locale : DEFAULT_LOCALE,
+  };
 }
 
 export async function getAccountPreferences(
@@ -94,6 +113,9 @@ export async function updateAccountPreferences(
   if (patch.lastStorageWarningAt !== undefined) {
     next.lastStorageWarningAt = patch.lastStorageWarningAt;
   }
+  if (patch.locale !== undefined) {
+    next.locale = isAppLocale(patch.locale) ? patch.locale : DEFAULT_LOCALE;
+  }
 
   const db = getDb();
   await db
@@ -109,7 +131,7 @@ export async function updateAccountPreferences(
 
 export async function userAllowsEmail(
   userId: string,
-  kind: "movie_ready" | "family_invite" | "storage_warning",
+  kind: "movie_ready" | "family_invite" | "storage_warning" | "milestone",
 ): Promise<boolean> {
   const prefs = await getAccountPreferences(userId);
   switch (kind) {
@@ -119,6 +141,8 @@ export async function userAllowsEmail(
       return prefs.emailFamilyInvite;
     case "storage_warning":
       return prefs.emailStorageWarnings;
+    case "milestone":
+      return prefs.emailMilestoneCelebrations;
     default:
       return true;
   }
@@ -138,6 +162,10 @@ export async function userAllowsInApp(
       return prefs.inAppStorageWarnings;
     case "media_ready":
       return prefs.inAppMediaReady;
+    case "memory_created":
+    case "family_milestone":
+    case "legacy_milestone":
+      return true;
     case "emergency_access":
       return prefs.inAppEmergencyAccess;
     case "moderation_attention":

@@ -1,8 +1,7 @@
 /**
- * Temporary beta feedback survey (Google Form).
- * Set NEXT_PUBLIC_BETA_SURVEY_URL to enable; unset to hide all CTAs.
+ * Optional beta survey URL (Google Form) shown as a secondary link in the
+ * feedback modal. In-app feedback works without it.
  */
-
 export const BETA_SURVEY_DISMISS_KEY = "fmv.betaSurveyBanner.dismissed";
 
 export function getBetaSurveyUrl(): string | null {

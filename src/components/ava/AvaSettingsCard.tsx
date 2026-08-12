@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
 import { Ava } from "@/components/ava/Ava";
+import { useTranslations, useLocale } from "@/components/i18n/LocaleProvider";
 import type { AvaProgress } from "@/lib/ava/types";
 import { cn } from "@/lib/utils";
 
@@ -10,6 +11,8 @@ import { cn } from "@/lib/utils";
  * Settings: show/hide Ava helper tips (maps to helperEnabled).
  */
 export function AvaSettingsCard() {
+  const t = useTranslations();
+  const { locale } = useLocale();
   const [progress, setProgress] = useState<AvaProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -21,7 +24,7 @@ export function AvaSettingsCard() {
         if (data.progress) setProgress(data.progress);
       })
       .catch(() => undefined);
-  }, []);
+  }, [locale]);
 
   if (!progress?.eligible) return null;
 
@@ -43,11 +46,13 @@ export function AvaSettingsCard() {
           progress?: AvaProgress;
         };
         if (!res.ok || !data.progress) {
-          throw new Error(data.error || "Could not update Ava.");
+          throw new Error(data.error || t("ava.couldNotUpdate"));
         }
         setProgress(data.progress);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Update failed.");
+        setError(
+          err instanceof Error ? err.message : t("ava.updateFailed"),
+        );
       }
     });
   }
@@ -57,10 +62,11 @@ export function AvaSettingsCard() {
       <div className="flex items-start gap-3">
         <Ava size="md" decorative className="shrink-0" />
         <div className="min-w-0 flex-1">
-          <h2 className="font-display text-xl text-ink">Ava guide</h2>
+          <h2 className="font-display text-xl text-ink">
+            {t("ava.settings.title")}
+          </h2>
           <p className="mt-1 text-sm leading-relaxed text-ink-muted">
-            Gentle tips while you settle in. Ava stays quiet after you cancel,
-            and never blocks uploading or viewing photos.
+            {t("ava.settings.description")}
           </p>
 
           <label
@@ -72,12 +78,12 @@ export function AvaSettingsCard() {
           >
             <span className="min-w-0">
               <span className="block text-sm font-medium text-ink">
-                Show Ava helper tips
+                {t("ava.settings.showTips")}
               </span>
               <span className="mt-0.5 block text-xs text-ink-muted">
                 {tipsOn
-                  ? "Tips and quiet milestones are on"
-                  : "Tips are off — header icon is hidden"}
+                  ? t("ava.settings.tipsOn")
+                  : t("ava.settings.tipsOff")}
               </span>
             </span>
             <span className="flex items-center gap-2">
@@ -93,7 +99,7 @@ export function AvaSettingsCard() {
                 checked={tipsOn}
                 disabled={pending}
                 onChange={(e) => setTipsEnabled(e.target.checked)}
-                aria-label="Show Ava helper tips"
+                aria-label={t("ava.settings.showTips")}
               />
               <span
                 className={cn(
@@ -114,14 +120,14 @@ export function AvaSettingsCard() {
 
           <p className="mt-3 text-xs text-ink-muted">
             {progress.completed
-              ? "Core tour completed"
+              ? t("ava.settings.statusCompleted")
               : progress.dismissed
-                ? "Paused — click Ava in the header to continue"
+                ? t("ava.settings.statusPaused")
                 : tipsOn
-                  ? "Ready when you need a nudge"
-                  : "Turned off in settings"}
+                  ? t("ava.settings.statusReady")
+                  : t("ava.settings.statusOff")}
             {" · "}
-            {progress.percent}% of steps touched
+            {t("ava.settings.percentTouched", { percent: progress.percent })}
           </p>
 
           {error ? (

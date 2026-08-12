@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Music2, Pause, Play, Sparkles, Upload, X } from "lucide-react";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 import {
   LIBRARY_MUSIC_LICENSE,
   MUSIC_CATEGORIES,
@@ -58,21 +59,20 @@ type MovieMusicPickerProps = {
   aiSoundtrackQuotaLabel?: string | null;
 };
 
-const SOURCE_OPTIONS: { id: MusicSource | "ai"; label: string }[] = [
-  { id: "none", label: "No music" },
-  { id: "library", label: "Library" },
-  { id: "upload", label: "Upload" },
-  { id: "ai", label: "AI generate" },
+const SOURCE_OPTION_IDS: (MusicSource | "ai")[] = [
+  "none",
+  "library",
+  "upload",
+  "ai",
 ];
 
 type PickerTab = MusicSource | "ai";
 
-const FADE_PRESETS: { id: string; label: string; inMs: number; outMs: number }[] =
-  [
-    { id: "short", label: "Short fades", inMs: 800, outMs: 1200 },
-    { id: "medium", label: "Medium fades", inMs: 1500, outMs: 2500 },
-    { id: "long", label: "Long fades", inMs: 2500, outMs: 4000 },
-  ];
+const FADE_PRESET_VALUES: { id: string; inMs: number; outMs: number }[] = [
+  { id: "short", inMs: 800, outMs: 1200 },
+  { id: "medium", inMs: 1500, outMs: 2500 },
+  { id: "long", inMs: 2500, outMs: 4000 },
+];
 
 const AI_PROMPT_HINTS = [
   "warm family piano",
@@ -106,6 +106,7 @@ export function MovieMusicPicker({
   aiSoundtrackHint = null,
   aiSoundtrackQuotaLabel = null,
 }: MovieMusicPickerProps) {
+  const t = useTranslations();
   const [category, setCategory] = useState<MusicCategory | "all">("all");
   const [tracks, setTracks] = useState<LibraryApiTrack[]>(tracksFromCatalog);
   const [uploading, setUploading] = useState(false);
@@ -124,6 +125,36 @@ export function MovieMusicPicker({
   const [aiGenerating, setAiGenerating] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+
+  const sourceOptions = useMemo(
+    () =>
+      SOURCE_OPTION_IDS.map((id) => ({
+        id,
+        label:
+          id === "none"
+            ? t("movie.musicNone")
+            : id === "library"
+              ? t("movie.musicLibrary")
+              : id === "upload"
+                ? t("movie.musicUpload")
+                : t("movie.musicAiGenerate"),
+      })),
+    [t],
+  );
+
+  const fadePresets = useMemo(
+    () =>
+      FADE_PRESET_VALUES.map((f) => ({
+        ...f,
+        label:
+          f.id === "short"
+            ? t("movie.fadeShort")
+            : f.id === "medium"
+              ? t("movie.fadeMedium")
+              : t("movie.fadeLong"),
+      })),
+    [t],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -174,7 +205,7 @@ export function MovieMusicPicker({
     value.musicLabel || selectedTrack?.label || null;
 
   const activeFadeId =
-    FADE_PRESETS.find(
+    fadePresets.find(
       (f) =>
         f.inMs === value.musicFadeInMs && f.outMs === value.musicFadeOutMs,
     )?.id ?? "custom";
@@ -206,7 +237,7 @@ export function MovieMusicPicker({
       setPreviewTrackId(trackKey);
     } catch (err) {
       setUploadError(
-        err instanceof Error ? err.message : "Could not play preview.",
+        err instanceof Error ? err.message : t("movie.errorPreview"),
       );
       setPreviewTrackId(null);
     } finally {
@@ -255,7 +286,7 @@ export function MovieMusicPicker({
           error?: string;
         };
         if (!res.ok || !data.url) {
-          throw new Error(data.error || "Could not load preview.");
+          throw new Error(data.error || t("movie.errorLoadPreview"));
         }
         url = data.url;
       }
@@ -263,7 +294,7 @@ export function MovieMusicPicker({
       await playPreviewUrl(url, "selected");
     } catch (err) {
       setUploadError(
-        err instanceof Error ? err.message : "Could not play preview.",
+        err instanceof Error ? err.message : t("movie.errorPreview"),
       );
     } finally {
       setPreviewLoadingId(null);
@@ -307,7 +338,7 @@ export function MovieMusicPicker({
     setUploadError(null);
     setAiGenerating(true);
     setAiProgress(8);
-    setAiStatusMessage("Starting…");
+    setAiStatusMessage(t("common.starting"));
     stopPreview();
     try {
       const res = await fetch("/api/movies/music/generate", {
@@ -327,16 +358,16 @@ export function MovieMusicPicker({
         error?: string;
       };
       if (!res.ok || !data.jobId) {
-        throw new Error(data.error || "Could not start generation.");
+        throw new Error(data.error || t("movie.errorStartGeneration"));
       }
       setAiJobId(data.jobId);
       setAiProgress(data.progressPercent ?? 10);
-      setAiStatusMessage(data.statusMessage ?? "Queued…");
+      setAiStatusMessage(data.statusMessage ?? t("movie.queued"));
     } catch (err) {
       setAiGenerating(false);
       setAiJobId(null);
       setUploadError(
-        err instanceof Error ? err.message : "Generation failed.",
+        err instanceof Error ? err.message : t("movie.errorGenerationFailed"),
       );
     }
   }
@@ -362,7 +393,7 @@ export function MovieMusicPicker({
         };
         if (cancelled) return;
         if (!res.ok) {
-          throw new Error(data.error || "Could not check generation status.");
+          throw new Error(data.error || t("movie.errorCheckGeneration"));
         }
         setAiProgress(data.progressPercent ?? 0);
         setAiStatusMessage(data.statusMessage ?? null);
@@ -375,7 +406,7 @@ export function MovieMusicPicker({
             musicSource: "upload",
             musicTrackId: null,
             musicUploadKey: data.result.key,
-            musicLabel: data.result.label || "AI-generated soundtrack",
+            musicLabel: data.result.label || t("movie.aiGeneratedSoundtrack"),
             musicSuggestionId: null,
             musicAiGenerated: true,
             musicAiProvider: data.result.providerId ?? "elevenlabs",
@@ -385,7 +416,7 @@ export function MovieMusicPicker({
         if (data.stage === "failed") {
           setAiGenerating(false);
           setAiJobId(null);
-          setUploadError(data.error || "Soundtrack generation failed.");
+          setUploadError(data.error || t("movie.errorSoundtrackFailed"));
           return;
         }
         timer = setTimeout(() => void poll(), 2000);
@@ -394,7 +425,7 @@ export function MovieMusicPicker({
         setAiGenerating(false);
         setAiJobId(null);
         setUploadError(
-          err instanceof Error ? err.message : "Generation failed.",
+          err instanceof Error ? err.message : t("movie.errorGenerationFailed"),
         );
       }
     }
@@ -404,7 +435,7 @@ export function MovieMusicPicker({
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [aiJobId, aiGenerating, patch]);
+  }, [aiJobId, aiGenerating, patch, t]);
 
   async function handleUpload(file: File | null) {
     if (!file) return;
@@ -435,7 +466,7 @@ export function MovieMusicPicker({
         error?: string;
       };
       if (!presign.ok || !presignData.url || !presignData.key) {
-        throw new Error(presignData.error || "Could not start upload.");
+        throw new Error(presignData.error || t("movie.errorStartUpload"));
       }
 
       const put = await fetch(presignData.url, {
@@ -444,7 +475,7 @@ export function MovieMusicPicker({
         body: file,
       });
       if (!put.ok) {
-        throw new Error("Upload failed. Try a smaller MP3, WAV, or M4A.");
+        throw new Error(t("movie.errorUploadAudio"));
       }
 
       const complete = await fetch("/api/movies/music/complete", {
@@ -462,7 +493,7 @@ export function MovieMusicPicker({
         error?: string;
       };
       if (!complete.ok || !completeData.key) {
-        throw new Error(completeData.error || "Could not save upload.");
+        throw new Error(completeData.error || t("movie.errorSaveUpload"));
       }
 
       patch({
@@ -476,7 +507,7 @@ export function MovieMusicPicker({
       });
     } catch (err) {
       setUploadError(
-        err instanceof Error ? err.message : "Upload failed.",
+        err instanceof Error ? err.message : t("movie.errorUploadFailed"),
       );
     } finally {
       setUploading(false);
@@ -491,16 +522,13 @@ export function MovieMusicPicker({
     <section>
       {!embedded ? (
         <>
-          <h3 className="text-sm font-medium text-ink">Music</h3>
-          <p className="mt-1 text-sm text-ink-muted">
-            Curated royalty-free beds — preview, set volume, fade &amp; loop on
-            export. Optional AI soundtrack on Family plans.
-          </p>
+          <h3 className="text-sm font-medium text-ink">{t("movie.music")}</h3>
+          <p className="mt-1 text-sm text-ink-muted">{t("movie.musicLead")}</p>
         </>
       ) : null}
 
       <div className={cn("flex flex-wrap gap-2", embedded ? null : "mt-3")}>
-        {SOURCE_OPTIONS.map((opt) => {
+        {sourceOptions.map((opt) => {
           const selected =
             opt.id === "ai"
               ? tab === "ai" || value.musicAiGenerated
@@ -572,7 +600,7 @@ export function MovieMusicPicker({
                   : "border-ink/10 text-ink-muted",
               )}
             >
-              All
+              {t("movie.musicAll")}
             </button>
             {MUSIC_CATEGORIES.map((id) => (
               <button
@@ -641,8 +669,8 @@ export function MovieMusicPicker({
                     className="mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-md border border-ink/12 px-2 py-1 text-[11px] font-medium text-ink transition hover:border-accent/35 disabled:opacity-50"
                     aria-label={
                       isPreviewing
-                        ? `Stop preview of ${track.label}`
-                        : `Preview ${track.label}`
+                        ? t("movie.stopPreviewTrack", { label: track.label })
+                        : t("movie.previewTrack", { label: track.label })
                     }
                   >
                     {isLoading ? (
@@ -652,7 +680,7 @@ export function MovieMusicPicker({
                     ) : (
                       <Play className="size-3" aria-hidden />
                     )}
-                    {isPreviewing ? "Stop" : "Preview"}
+                    {isPreviewing ? t("movie.stop") : t("movie.preview")}
                   </button>
                 </div>
               );
@@ -684,10 +712,10 @@ export function MovieMusicPicker({
             ) : (
               <Upload className="size-4" aria-hidden />
             )}
-            {uploading ? "Uploading…" : "Upload MP3, WAV, or M4A"}
+            {uploading ? t("common.uploading") : t("movie.uploadAudio")}
           </button>
           <p className="text-[11px] text-ink-muted">
-            Max 25 MB. Stored privately with your movie settings.
+            {t("movie.uploadAudioHint")}
           </p>
         </div>
       ) : null}
@@ -701,7 +729,7 @@ export function MovieMusicPicker({
             />
             <div className="min-w-0">
               <p className="text-sm font-medium text-ink">
-                Generate soundtrack for this movie
+                {t("movie.generateSoundtrack")}
               </p>
               <p className="mt-0.5 text-[11px] text-ink-muted">
                 AI-generated soundtrack · instrumental bed from a legitimate
@@ -713,14 +741,13 @@ export function MovieMusicPicker({
 
           {!aiSoundtrackAllowed ? (
             <p className="text-xs text-ink-muted">
-              {aiSoundtrackHint ||
-                "Available on Family plans and higher."}
+              {aiSoundtrackHint || t("movie.aiAvailableFamily")}
             </p>
           ) : (
             <>
               <label className="block">
                 <span className="text-xs text-ink-muted">
-                  Optional direction
+                  {t("movie.optionalDirection")}
                 </span>
                 <input
                   type="text"
@@ -762,15 +789,15 @@ export function MovieMusicPicker({
                   <Sparkles className="size-4" aria-hidden />
                 )}
                 {aiGenerating
-                  ? "Generating soundtrack…"
+                  ? t("movie.generatingSoundtrack")
                   : value.musicAiGenerated
-                    ? "Generate a new soundtrack"
-                    : "Generate soundtrack"}
+                    ? t("movie.generateNewSoundtrack")
+                    : t("movie.generateSoundtrackCta")}
               </button>
               {aiGenerating ? (
                 <div className="space-y-1.5" aria-live="polite">
                   <div className="flex items-center justify-between text-[11px] text-ink-muted">
-                    <span>{aiStatusMessage || "Working…"}</span>
+                    <span>{aiStatusMessage || t("common.working")}</span>
                     <span className="tabular-nums">{aiProgress}%</span>
                   </div>
                   <div className="h-1.5 overflow-hidden rounded-full bg-ink/10">
@@ -796,8 +823,8 @@ export function MovieMusicPicker({
             <div className="min-w-0">
               <p className="text-[11px] uppercase tracking-wide text-ink-muted">
                 {value.musicAiGenerated
-                  ? "AI-generated soundtrack"
-                  : "Selected soundtrack"}
+                  ? t("movie.aiGeneratedSoundtrack")
+                  : t("movie.selectedSoundtrack")}
               </p>
               <p className="truncate text-sm font-medium text-ink">
                 {selectedLabel}
@@ -843,13 +870,13 @@ export function MovieMusicPicker({
                 ) : (
                   <Play className="size-3" aria-hidden />
                 )}
-                Preview
+                {t("movie.preview")}
               </button>
               <button
                 type="button"
                 onClick={selectNone}
                 className="rounded-md border border-ink/10 p-1.5 text-ink-muted transition hover:text-ink"
-                aria-label="Remove music"
+                aria-label={t("movie.removeMusic")}
               >
                 <X className="size-3.5" aria-hidden />
               </button>
@@ -858,7 +885,7 @@ export function MovieMusicPicker({
 
           <label className="mt-3 block">
             <span className="flex items-center justify-between text-xs text-ink-muted">
-              Volume
+              {t("movie.volume")}
               <span className="tabular-nums text-ink">
                 {Math.round(value.musicVolume * 100)}%
               </span>
@@ -878,9 +905,9 @@ export function MovieMusicPicker({
           </label>
 
           <div className="mt-3">
-            <p className="text-xs text-ink-muted">Fade in / out</p>
+            <p className="text-xs text-ink-muted">{t("movie.fadeInOut")}</p>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {FADE_PRESETS.map((f) => (
+              {fadePresets.map((f) => (
                 <button
                   key={f.id}
                   type="button"
@@ -910,7 +937,7 @@ export function MovieMusicPicker({
                     : "border-ink/10 text-ink-muted",
                 )}
               >
-                {value.musicLoop ? "Loop on" : "Loop off"}
+                {value.musicLoop ? t("movie.loopOn") : t("movie.loopOff")}
               </button>
             </div>
           </div>

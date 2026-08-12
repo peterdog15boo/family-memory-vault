@@ -6,6 +6,7 @@ import { useState } from "react";
 import { KeyRound, ShieldAlert } from "lucide-react";
 import { EmergencyAccessLegalNotice } from "@/components/emergency-access/EmergencyAccessLegalNotice";
 import { AppPageIntro } from "@/components/ui/AppPageIntro";
+import { useFormat } from "@/components/i18n/LocaleProvider";
 import type { SerializedEmergencyAccessDesignation } from "@/lib/emergency-access/serialize";
 import { EMERGENCY_ACCESS_STATUS_LABELS } from "@/lib/emergency-access/types";
 
@@ -13,22 +14,11 @@ type EmergencyAccessIncomingPanelProps = {
   designations: SerializedEmergencyAccessDesignation[];
 };
 
-function formatWhen(iso: string | null): string | null {
-  if (!iso) return null;
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(iso));
-  } catch {
-    return iso;
-  }
-}
-
 export function EmergencyAccessIncomingPanel({
   designations: initial,
 }: EmergencyAccessIncomingPanelProps) {
   const router = useRouter();
+  const format = useFormat();
   const [designations, setDesignations] = useState(initial);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -117,7 +107,10 @@ export function EmergencyAccessIncomingPanel({
                       </p>
                       {d.status === "requested" && d.waitingEndsAt ? (
                         <p className="mt-1 text-xs text-amber-900">
-                          Waiting period ends {formatWhen(d.waitingEndsAt)}
+                          Waiting period ends{" "}
+                          {d.waitingEndsAt
+                            ? format.dateTime(d.waitingEndsAt)
+                            : null}
                         </p>
                       ) : null}
                       {canOpen && d.accessType === "permanent" ? (
@@ -129,7 +122,10 @@ export function EmergencyAccessIncomingPanel({
                       d.accessType !== "permanent" &&
                       d.grantExpiresAt ? (
                         <p className="mt-1 text-xs text-[color:var(--legacy-accent-deep)]">
-                          Access until {formatWhen(d.grantExpiresAt)}
+                          Access until{" "}
+                          {d.grantExpiresAt
+                            ? format.dateTime(d.grantExpiresAt)
+                            : null}
                         </p>
                       ) : null}
                     </div>

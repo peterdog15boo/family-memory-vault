@@ -8,7 +8,7 @@ import { z } from "zod";
  * - adult: adult (non-CSAM) content; restricted from family-safe surfaces
  * - csam_quarantined: suspected CSAM; isolated — never served; escalate per policy
  * - rejected: removed / not allowed for other policy reasons
- * - needs_human_review: automated scores are borderline or ambiguous — hold for a person
+ * - needs_human_review: automated scores are borderline/ambiguous, or scanners failed after retries — hold for a person
  */
 export const MODERATION_STATUSES = [
   "pending",

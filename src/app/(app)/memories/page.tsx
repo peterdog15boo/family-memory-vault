@@ -8,6 +8,13 @@ import {
   listMemoryLibrary,
   serializeMemoryListItem,
 } from "@/lib/memories";
+import { getTranslations } from "@/lib/i18n/server";
+import { JourneyTrackCard } from "@/components/gamification/PhotosJourneyTrack";
+import {
+  emptyJourneySnapshot,
+  getUserJourney,
+  memoriesSnapshotFromJourney,
+} from "@/lib/gamification";
 
 type MemoriesPageProps = {
   searchParams?: Promise<{ deleted?: string }>;
@@ -23,11 +30,15 @@ export default async function MemoriesPage({ searchParams }: MemoriesPageProps) 
     redirect("/");
   }
 
+  const t = await getTranslations();
   const params = searchParams ? await searchParams : {};
   const deletedNotice =
-    params.deleted === "1"
-      ? "Album deleted. Your photos are still saved."
-      : null;
+    params.deleted === "1" ? t("memories.deletedNotice") : null;
+
+  const journey = await getUserJourney(userId).catch(() => null);
+  const memoriesJourney = journey
+    ? memoriesSnapshotFromJourney(journey)
+    : emptyJourneySnapshot("memories");
 
   const library = await listMemoryLibrary(userId);
   const own = library.own.map(serializeMemoryListItem);
@@ -37,18 +48,20 @@ export default async function MemoriesPage({ searchParams }: MemoriesPageProps) 
     <>
       <AppPageIntro
         slot="memories"
-        eyebrow="Albums & stories"
-        title="Memories"
-        description="Gather photos into albums you can revisit and share with family."
+        eyebrow={t("memories.eyebrow")}
+        title={t("memories.title")}
+        description={t("memories.description")}
         actions={
           <Link href="/memories/new" className="ui-btn ui-btn-primary ui-btn-lg">
             <Plus className="size-4" aria-hidden />
-            Create a memory
+            {t("pages.createMemory")}
           </Link>
         }
       />
 
       <div className="app-page app-page--memories app-stack mx-auto max-w-6xl">
+        <JourneyTrackCard initial={memoriesJourney} />
+
         <PaginatedMemoryLibrary
           initialOwn={own}
           initialShared={shared}
@@ -60,8 +73,7 @@ export default async function MemoriesPage({ searchParams }: MemoriesPageProps) 
 
         <p className="mt-10 flex gap-2 text-xs leading-relaxed text-ink-muted">
           <Shield className="mt-0.5 size-3.5 shrink-0 text-accent" aria-hidden />
-          Only clean, approved media can appear in a memory. Upload new photos
-          from the Upload page when you&apos;re ready.
+          {t("memories.safetyNote")}
         </p>
       </div>
     </>

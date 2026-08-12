@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import {
   ArrowLeft,
   Check,
+  ChevronLeft,
+  ChevronRight,
   Clapperboard,
   Film,
   ImagePlus,
@@ -23,7 +25,9 @@ import { MediaViewerMedia } from "@/components/media/MediaViewerMedia";
 import { MemoryFamilyShareControls } from "@/components/memories/MemoryFamilyShareControls";
 import { SlideshowPlayer } from "@/components/memories/SlideshowPlayer";
 import { MovieLibrary } from "@/components/movies/MovieLibrary";
-import { COPY } from "@/lib/copy";
+import { useCopy, useFormat, useTranslations } from "@/components/i18n/LocaleProvider";
+import { useLightboxKeyboardNav } from "@/hooks/useLightboxKeyboardNav";
+import { useOverlayA11y } from "@/hooks/useOverlayA11y";
 import type {
   SerializedMemoryWithMedia,
   SerializedSafeMedia,
@@ -66,6 +70,9 @@ export function MemoryDetailView({
   startEditing = false,
 }: MemoryDetailViewProps) {
   const router = useRouter();
+  const copy = useCopy();
+  const t = useTranslations();
+  const format = useFormat();
   const [memory, setMemory] = useState(initialMemory);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [editing, setEditing] = useState(Boolean(canEdit && startEditing));
@@ -103,28 +110,61 @@ export function MemoryDetailView({
 
   const lightbox = memory.media.find((item) => item.id === lightboxId) ?? null;
   const [viewerMounted, setViewerMounted] = useState(false);
+  const lightboxRef = useRef<HTMLDivElement>(null);
+  const addSheetRef = useRef<HTMLDivElement>(null);
+  const closeLightbox = useCallback(() => setLightboxId(null), []);
+  const closeAddSheet = useCallback(() => {
+    if (!pending) setAddOpen(false);
+  }, [pending]);
+  const deleteConfirmRef = useRef<HTMLDivElement>(null);
+  const dismissDeleteAlbum = useCallback(() => {
+    if (!pending) setDeleteOpen(false);
+  }, [pending]);
 
   useEffect(() => {
     setViewerMounted(true);
   }, []);
 
-  useEffect(() => {
-    if (!lightbox) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setLightboxId(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [lightbox]);
+  useOverlayA11y({
+    open: Boolean(lightbox),
+    onClose: closeLightbox,
+    containerRef: lightboxRef,
+  });
 
-  useEffect(() => {
-    if (!lightbox) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [lightbox]);
+  useOverlayA11y({
+    open: Boolean(addOpen && canManageMedia),
+    onClose: closeAddSheet,
+    containerRef: addSheetRef,
+    escapeEnabled: !pending,
+  });
+
+  useOverlayA11y({
+    open: Boolean(deleteOpen && canManageMedia),
+    onClose: dismissDeleteAlbum,
+    containerRef: deleteConfirmRef,
+    lockScroll: false,
+    escapeEnabled: !pending,
+    // Inline non-modal confirm — Escape + initial focus only; don't trap Tab.
+    trapFocus: false,
+    initialFocusSelector: "button",
+  });
+
+  const memoryMediaIds = useMemo(
+    () => memory.media.map((item) => item.id),
+    [memory.media],
+  );
+  const {
+    canNavigate: lightboxCanNav,
+    index: lightboxIndex,
+    count: lightboxCount,
+    goPrev: lightboxPrev,
+    goNext: lightboxNext,
+  } = useLightboxKeyboardNav({
+    open: Boolean(lightbox),
+    itemIds: memoryMediaIds,
+    activeId: lightboxId,
+    onActiveIdChange: setLightboxId,
+  });
 
   const refreshFromPayload = useCallback(
     (next: SerializedMemoryWithMedia) => {
@@ -267,11 +307,7 @@ export function MemoryDetailView({
     });
   }
 
-  const updatedLabel = new Date(memory.updatedAt).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  const updatedLabel = format.date(memory.updatedAt);
 
   return (
     <div className="app-page mx-auto max-w-6xl">
@@ -500,9 +536,12 @@ export function MemoryDetailView({
 
       {deleteOpen && canManageMedia ? (
         <div
+          ref={deleteConfirmRef}
           className="mt-6 rounded-xl border border-red-200 bg-red-50/60 px-4 py-4 sm:px-5"
           role="dialog"
+          aria-modal="false"
           aria-labelledby="delete-album-title"
+          tabIndex={-1}
         >
           <p
             id="delete-album-title"
@@ -521,7 +560,7 @@ export function MemoryDetailView({
               type="button"
               onClick={confirmDeleteAlbum}
               disabled={pending}
-              className="inline-flex items-center justify-center gap-2 rounded-md bg-red-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-800 disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-red-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-800 disabled:opacity-60"
             >
               {pending ? (
                 <Loader2 className="size-3.5 animate-spin" aria-hidden />
@@ -532,9 +571,9 @@ export function MemoryDetailView({
             </button>
             <button
               type="button"
-              onClick={() => setDeleteOpen(false)}
+              onClick={dismissDeleteAlbum}
               disabled={pending}
-              className="inline-flex items-center gap-2 rounded-md border border-ink/10 bg-canvas px-4 py-2.5 text-sm text-ink hover:bg-canvas-deep disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-md border border-ink/10 bg-canvas px-4 py-2.5 text-sm text-ink hover:bg-canvas-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-60"
             >
               Cancel
             </button>
@@ -660,11 +699,7 @@ export function MemoryDetailView({
                     {item.type === "video" ? "Video" : "Photo"}
                     {item.id === memory.coverMediaId ? " · Cover" : ""}
                     {" · "}
-                    Added{" "}
-                    {new Date(item.addedAt).toLocaleDateString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                    })}
+                    Added {format.date(item.addedAt, { month: "short", day: "numeric" })}
                   </p>
                   {canManageMedia ? (
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -742,10 +777,10 @@ export function MemoryDetailView({
             initialMovies={initialMovies}
             memoryId={memory.id}
             refreshKey={moviesRefreshKey}
-            emptyTitle={COPY.empty.moviesMemory.title}
-            emptyDescription={COPY.empty.moviesMemory.description}
+            emptyTitle={copy.empty.moviesMemory.title}
+            emptyDescription={copy.empty.moviesMemory.description}
             emptyActionHref="/memories"
-            emptyActionLabel="Browse other memories"
+            emptyActionLabel={t("pages.browseOtherMemories")}
           />
         </section>
       ) : null}
@@ -753,10 +788,12 @@ export function MemoryDetailView({
       {/* Add photos sheet */}
       {addOpen && canManageMedia ? (
         <div
+          ref={addSheetRef}
           className="fixed inset-0 z-50 flex items-end justify-center bg-ink/50 p-4 backdrop-blur-sm sm:items-center"
           role="dialog"
           aria-modal="true"
-          aria-label="Add photos to memory"
+          aria-labelledby="add-photos-memory-title"
+          tabIndex={-1}
           onClick={() => !pending && setAddOpen(false)}
         >
           <div
@@ -765,7 +802,12 @@ export function MemoryDetailView({
           >
             <div className="flex items-center justify-between border-b border-ink/8 px-4 py-3">
               <div>
-                <h3 className="font-display text-lg text-ink">Add photos</h3>
+                <h3
+                  id="add-photos-memory-title"
+                  className="font-display text-lg text-ink"
+                >
+                  Add photos
+                </h3>
                 <p className="text-xs text-ink-muted">
                   Choose from photos that are ready
                 </p>
@@ -854,24 +896,66 @@ export function MemoryDetailView({
       {lightbox && viewerMounted
         ? createPortal(
             <div
+              ref={lightboxRef}
               className="fixed inset-0 z-[100] flex items-center justify-center bg-ink/70 p-4 backdrop-blur-sm"
               role="dialog"
               aria-modal="true"
-              aria-label={lightbox.originalFilename || "Photo preview"}
+              aria-labelledby="memory-lightbox-title"
+              tabIndex={-1}
               onClick={() => setLightboxId(null)}
             >
               <button
                 type="button"
                 onClick={() => setLightboxId(null)}
-                className="absolute right-4 top-4 rounded-md bg-canvas/90 p-2 text-ink"
+                className="absolute right-4 top-4 z-10 rounded-md bg-canvas/90 p-2 text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                 aria-label="Close"
               >
-                <X className="size-5" />
+                <X className="size-5" aria-hidden />
               </button>
+              {lightboxCanNav ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      lightboxPrev();
+                    }}
+                    className="absolute left-3 top-1/2 z-10 -translate-y-1/2 rounded-md bg-canvas/90 p-2 text-ink shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 sm:left-4"
+                    aria-label="Previous"
+                  >
+                    <ChevronLeft className="size-5" aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      lightboxNext();
+                    }}
+                    className="absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-md bg-canvas/90 p-2 text-ink shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 sm:right-4"
+                    aria-label="Next"
+                  >
+                    <ChevronRight className="size-5" aria-hidden />
+                  </button>
+                </>
+              ) : null}
               <div
                 className="max-h-[85vh] max-w-5xl overflow-hidden rounded-xl bg-canvas shadow-2xl"
                 onClick={(event) => event.stopPropagation()}
               >
+                <p id="memory-lightbox-title" className="sr-only">
+                  {lightbox.originalFilename ||
+                    (lightbox.type === "video"
+                      ? "Video preview"
+                      : "Photo preview")}
+                  {lightboxCanNav
+                    ? ` (${lightboxIndex + 1} of ${lightboxCount})`
+                    : ""}
+                </p>
+                {lightboxCanNav ? (
+                  <p className="sr-only" aria-live="polite">
+                    {lightboxIndex + 1} of {lightboxCount}
+                  </p>
+                ) : null}
                 {lightbox.type === "photo" || lightbox.type === "video" ? (
                   <MediaViewerMedia
                     mediaId={lightbox.id}
@@ -937,6 +1021,11 @@ function MemoryMediaTile({
         <button
           type="button"
           onClick={onOpen}
+          aria-label={
+            item.type === "video"
+              ? `Open video: ${item.originalFilename || "Family video"}`
+              : `Open photo: ${item.originalFilename || "Family photo"}`
+          }
           className="absolute inset-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40"
         >
           <MediaThumb item={item} />

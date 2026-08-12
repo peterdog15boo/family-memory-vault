@@ -8,6 +8,7 @@ import {
   ScanLine,
   Sparkles,
 } from "lucide-react";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { CinematicSection } from "@/components/cinematic";
 import { FamilyMemoryBoxOrderForm } from "@/components/marketing/FamilyMemoryBoxOrderForm";
 import { LandingReveal } from "@/components/marketing/LandingReveal";
@@ -45,32 +46,35 @@ const MEDIA_TYPES = [
   },
 ] as const;
 
-const STEPS = [
-  {
-    icon: Package,
-    title: "We mail your box",
-    body: "Expect your Family Memory Box within about 2 weeks of ordering.",
-  },
-  {
-    icon: ScanLine,
-    title: "You fill it & ship it back",
-    body: "Pack photos, tapes, and reels. After we receive your box, digitizing takes about 5–8 weeks.",
-  },
-  {
-    icon: Sparkles,
-    title: "They appear in Photos",
-    body: "When processing is complete, your digitized media shows up automatically on your Photos page — no manual upload.",
-  },
-] as const;
-
 /**
  * Public Family Memory Box offer — digitize physical media into the vault.
+ * Hero, steps, and pricing chrome are i18n-wired; deeper sections remain English for now.
  */
 export function FamilyMemoryBoxPage({
   isSignedIn,
   stripeCheckoutEnabled = false,
   accountDefaults = null,
 }: FamilyMemoryBoxPageProps) {
+  const t = useTranslations();
+
+  const steps = [
+    {
+      icon: Package,
+      title: t("memoryBox.step1Title"),
+      body: t("memoryBox.step1Body"),
+    },
+    {
+      icon: ScanLine,
+      title: t("memoryBox.step2Title"),
+      body: t("memoryBox.step2Body"),
+    },
+    {
+      icon: Sparkles,
+      title: t("memoryBox.step3Title"),
+      body: t("memoryBox.step3Body"),
+    },
+  ] as const;
+
   return (
     <div className="memory-box-page">
       <CinematicSection
@@ -83,25 +87,26 @@ export function FamilyMemoryBoxPage({
         priority
         className="memory-box-hero"
         contentClassName="memory-box-hero-content"
-        imageAlt="Warm family gathering — memories worth preserving"
+        imageAlt={t("memoryBox.heroImageAlt")}
       >
-        <p className="memory-box-brand animate-fade-up">Family Memory Vault</p>
+        <p className="memory-box-brand animate-fade-up">
+          {t("memoryBox.brand")}
+        </p>
         <h1 className="memory-box-title animate-fade-up-delay-1">
-          Family Memory Box
+          {t("memoryBox.heroTitle")}
         </h1>
         <p className="memory-box-support animate-fade-up-delay-2">
-          Ship us the shoebox. We digitize your photos, tapes, and film — then
-          they appear automatically in your Photos page when ready.
+          {t("memoryBox.heroSupport")}
         </p>
         <div className="memory-box-hero-actions animate-fade-up-delay-3">
           <a href="#order" className="ui-btn ui-btn-primary ui-btn-lg">
-            Order Family Memory Box
+            {t("memoryBox.heroCta")}
           </a>
           <a
             href="#how-it-works"
             className="ui-btn ui-btn-ghost ui-btn-lg landing-cta-ghost-on-media"
           >
-            See how it works
+            {t("memoryBox.heroSecondaryCta")}
           </a>
         </div>
       </CinematicSection>
@@ -114,17 +119,16 @@ export function FamilyMemoryBoxPage({
         <LandingReveal>
           <div className="memory-box-section-intro">
             <h2 id="memory-box-how-title" className="memory-box-section-title">
-              Simple from attic to Photos
+              {t("memoryBox.howTitle")}
             </h2>
             <p className="memory-box-section-lead">
-              One flat price. One box. When digitizing is done, your files land
-              in Photos automatically — honest timelines, no rush job.
+              {t("memoryBox.howLead")}
             </p>
           </div>
         </LandingReveal>
 
         <ol className="memory-box-steps">
-          {STEPS.map((step, index) => {
+          {steps.map((step, index) => {
             const Icon = step.icon;
             return (
               <li key={step.title} className="memory-box-step">
@@ -151,27 +155,31 @@ export function FamilyMemoryBoxPage({
       >
         <LandingReveal>
           <div className="memory-box-pricing-inner">
-            <p className="memory-box-pricing-eyebrow">One flat price</p>
+            <p className="memory-box-pricing-eyebrow">
+              {t("memoryBox.pricingEyebrow")}
+            </p>
             <h2 id="memory-box-price-title" className="memory-box-pricing-title">
-              Everything in the box, digitized with care
+              {t("memoryBox.pricingTitle")}
             </h2>
             <p className="memory-box-price-row">
-              <span className="memory-box-price-was" aria-label="Was 299 dollars">
-                $299
+              <span
+                className="memory-box-price-was"
+                aria-label={t("memoryBox.priceWasAria")}
+              >
+                {t("memoryBox.priceWas")}
               </span>
-              <span className="memory-box-price-now">$199</span>
+              <span className="memory-box-price-now">
+                {t("memoryBox.priceNow")}
+              </span>
             </p>
             <p className="memory-box-pricing-note">
-              Includes the box, return guidance, and digitizing. Completed files
-              appear automatically in your Photos page — typically about 5–8
-              weeks after we receive your filled box (your empty box arrives in
-              about 2 weeks).
+              {t("memoryBox.pricingNote")}
             </p>
             <a
               href="#order"
               className="ui-btn ui-btn-primary ui-btn-lg memory-box-pricing-cta"
             >
-              Get started
+              {t("memoryBox.pricingCta")}
             </a>
           </div>
         </LandingReveal>
@@ -307,7 +315,7 @@ export function FamilyMemoryBoxPage({
             it, allow about 5–8 weeks — then find everything waiting in Photos.
           </p>
           <a href="#order" className="ui-btn ui-btn-primary ui-btn-lg">
-            Order Family Memory Box
+            {t("memoryBox.heroCta")}
           </a>
         </LandingReveal>
       </CinematicSection>

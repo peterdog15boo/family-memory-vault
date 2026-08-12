@@ -1,6 +1,7 @@
 "use client";
 
 import { Heart } from "lucide-react";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { MediaSection } from "@/components/media-section";
 
 /**
@@ -16,6 +17,7 @@ export function LegacyIntroBanner({
   videoSrc?: string | null;
   posterSrc?: string | null;
 } = {}) {
+  const t = useTranslations();
   return (
     <MediaSection
       treatment="legacyDusk"
@@ -33,15 +35,13 @@ export function LegacyIntroBanner({
           className="size-3.5 text-[color:var(--legacy-accent)]"
           aria-hidden
         />
-        A gift of clarity
+        {t("legacy.introEyebrow")}
       </p>
       <h2 className="mt-2 font-display text-xl tracking-tight text-[color:var(--legacy-ink)] sm:text-2xl">
-        Begin with what feels right
+        {t("legacy.introTitle")}
       </h2>
       <p className="mt-2 max-w-xl text-sm leading-relaxed text-[color:var(--legacy-muted)] sm:text-[0.9375rem]">
-        Digital Legacy is private to you — contacts, guidance, and messages for
-        the people who may one day need them. There is no rush; every small step
-        is an act of care.
+        {t("legacy.introBody")}
       </p>
     </MediaSection>
   );

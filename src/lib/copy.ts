@@ -1,6 +1,10 @@
 /**
  * Shared product microcopy — warm, clear, family-oriented.
- * Prefer importing these over scattering one-off strings.
+ *
+ * Prefer `useCopy()` / `getTranslations()` for locale-aware UI.
+ * This English catalog remains as a fallback for code that has not
+ * migrated yet. Do not hardcode new user-facing strings — add keys
+ * under `src/lib/i18n/dictionaries/` instead.
  *
  * Voice: plain language for average users. Warm, calm, modern,
  * loving, trustworthy. Avoid technical jargon in normal UI.

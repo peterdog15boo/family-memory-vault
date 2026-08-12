@@ -14,16 +14,24 @@ import { useRouter } from "next/navigation";
 import {
   Bell,
   CheckCheck,
+  BookHeart,
   Film,
   HardDrive,
   ImageIcon,
   Loader2,
   Shield,
+  Heart,
   Users,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { playNotificationDing } from "@/lib/notifications/client-attention";
+import {
+  useLocale,
+  useTranslations,
+} from "@/components/i18n/LocaleProvider";
+import { useOverlayA11y } from "@/hooks/useOverlayA11y";
+import { formatDate, type TranslateFn } from "@/lib/i18n";
 
 type NotificationItem = {
   id: string;
@@ -42,7 +50,10 @@ type NotificationBellProps = {
 const ICON_MAP: Record<string, typeof Bell> = {
   media_ready: ImageIcon,
   movie_ready: Film,
+  memory_created: BookHeart,
   family_invite: Users,
+  family_milestone: Users,
+  legacy_milestone: Heart,
   storage_warning: HardDrive,
   moderation_attention: Shield,
 };
@@ -60,26 +71,27 @@ type PanelPos = {
   width: number;
 };
 
-function timeAgo(dateStr: string): string {
+function timeAgo(dateStr: string, t: TranslateFn, locale: string): string {
   const seconds = Math.floor(
     (Date.now() - new Date(dateStr).getTime()) / 1000,
   );
-  if (seconds < 60) return "just now";
+  if (seconds < 60) return t("notifications.ui.justNow");
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60) {
+    return t("notifications.ui.minutesAgo", { count: minutes });
+  }
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t("notifications.ui.hoursAgo", { count: hours });
   const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
+  if (days < 7) return t("notifications.ui.daysAgo", { count: days });
+  return formatDate(dateStr, locale, { month: "short", day: "numeric" });
 }
 
 export function NotificationBell({
   initialUnreadCount,
 }: NotificationBellProps) {
+  const t = useTranslations();
+  const { locale } = useLocale();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>([]);
@@ -163,7 +175,12 @@ export function NotificationBell({
       if (!liveRef.current || next <= prev) return;
 
       setAttention(true);
-      if (soundEnabledRef.current) {
+      // Sound is optional; the unread badge + attention highlight are always
+      // the primary cue. Skip ding when the user prefers reduced motion.
+      const reduceMotion =
+        typeof window !== "undefined" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (soundEnabledRef.current && !reduceMotion) {
         playNotificationDing();
       }
     },
@@ -307,15 +324,12 @@ export function NotificationBell({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [open]);
 
-  // Close on Escape
-  useEffect(() => {
-    if (!open) return;
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("keydown", handleKey);
-    return () => document.removeEventListener("keydown", handleKey);
-  }, [open]);
+  useOverlayA11y({
+    open,
+    onClose: () => setOpen(false),
+    containerRef: panelRef,
+    lockScroll: false,
+  });
 
   async function handleMarkRead(id: string) {
     setItems((prev) =>
@@ -377,26 +391,30 @@ export function NotificationBell({
               zIndex: NOTIFICATION_PANEL_Z,
             }}
             role="dialog"
-            aria-label="Notifications"
+            aria-modal="true"
+            aria-label={t("notifications.ui.title")}
+            tabIndex={-1}
           >
             <div className="flex items-center justify-between border-b border-ink/8 px-4 py-3">
-              <h2 className="text-sm font-semibold text-ink">Notifications</h2>
+              <h2 className="text-sm font-semibold text-ink">
+                {t("notifications.ui.title")}
+              </h2>
               <div className="flex items-center gap-2">
                 {hasUnread ? (
                   <button
                     type="button"
                     onClick={() => void handleMarkAllRead()}
-                    className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-accent-deep transition hover:bg-accent/10"
+                    className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-accent-deep transition hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                   >
                     <CheckCheck className="size-3" aria-hidden />
-                    Mark all read
+                    {t("notifications.ui.markAllRead")}
                   </button>
                 ) : null}
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  className="rounded p-1 text-ink-muted transition hover:bg-ink/5 hover:text-ink"
-                  aria-label="Close"
+                  className="rounded p-1 text-ink-muted transition hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                  aria-label={t("notifications.ui.close")}
                 >
                   <X className="size-4" />
                 </button>
@@ -412,10 +430,10 @@ export function NotificationBell({
                 <div className="px-4 py-10 text-center">
                   <Bell className="mx-auto size-8 text-ink/20" aria-hidden />
                   <p className="mt-2 text-sm text-ink-muted">
-                    No notifications yet
+                    {t("notifications.ui.empty")}
                   </p>
                   <p className="mt-1 text-xs text-ink-muted">
-                    We&apos;ll let you know when something needs your attention.
+                    {t("notifications.ui.emptyHint")}
                   </p>
                 </div>
               ) : (
@@ -462,7 +480,7 @@ export function NotificationBell({
                               {isUnread ? (
                                 <span
                                   className="mt-1.5 size-2 shrink-0 rounded-full bg-accent"
-                                  aria-label="Unread"
+                                  aria-label={t("notifications.ui.unreadAria")}
                                 />
                               ) : null}
                             </div>
@@ -470,7 +488,7 @@ export function NotificationBell({
                               {item.message}
                             </p>
                             <p className="mt-1 text-[11px] text-ink-muted/70">
-                              {timeAgo(item.createdAt)}
+                              {timeAgo(item.createdAt, t, locale)}
                             </p>
                           </div>
                         </button>
@@ -488,7 +506,7 @@ export function NotificationBell({
                   onClick={() => setOpen(false)}
                   className="text-xs font-medium text-accent-deep hover:text-accent"
                 >
-                  View all notifications
+                  {t("notifications.ui.viewAll")}
                 </Link>
               </div>
             ) : null}
@@ -508,7 +526,15 @@ export function NotificationBell({
           open && "border-accent/30 text-accent-deep",
           attention && !open && "notification-bell-attention",
         )}
-        aria-label={`Notifications${hasUnread ? ` (${unreadCount} unread)` : ""}${attention ? " — new" : ""}`}
+        aria-label={
+          attention
+            ? hasUnread
+              ? t("notifications.ui.ariaLabelUnreadNew", { count: unreadCount })
+              : t("notifications.ui.ariaLabelNew")
+            : hasUnread
+              ? t("notifications.ui.ariaLabelUnread", { count: unreadCount })
+              : t("notifications.ui.ariaLabel")
+        }
         aria-expanded={open}
         aria-haspopup="true"
       >

@@ -70,6 +70,20 @@ import {
 } from "@/lib/ai/private-vault";
 import { formatSecondaryHelpTip } from "@/lib/ai/help";
 import {
+  buildClarifyCopy,
+  buildCompletionCopy,
+  buildPreviewCopy,
+  buildPrivateVaultPreviewCopy,
+  buildSparseCopy,
+} from "@/lib/ai/assistant-copy";
+import {
+  resolveAssistantLocale,
+  assistantLanguageName,
+  type AssistantLocaleContext,
+} from "@/lib/ai/locale";
+import { localizeAssistantProse } from "@/lib/ai/localize";
+import { createTranslator, DEFAULT_LOCALE, type AppLocale, type TranslateFn } from "@/lib/i18n";
+import {
   logAssistantConfirm,
   logAssistantFailed,
   logAssistantTurn,
@@ -145,7 +159,9 @@ export type HandleAssistantTurnInput = {
   confirmMediaIds?: string[] | null;
   /** Forwarded to intent parser (tests / offline). */
   preferFallbackIntent?: boolean;
-  parseOptions?: Omit<ParseIntentOptions, "knownPeople" | "preferFallback">;
+  parseOptions?: Omit<ParseIntentOptions, "knownPeople" | "preferFallback" | "locale">;
+  /** UI locale; defaults to the user’s account preference. */
+  locale?: AppLocale;
 };
 /* -------------------------------------------------------------------------- */
 /* Entry points                                                                */
@@ -158,6 +174,16 @@ export async function handleAssistantTurn(
   input: HandleAssistantTurnInput,
 ): Promise<AssistantUiResponse> {
   const userId = input.userId;
+  const localeCtx: AssistantLocaleContext =
+    input.locale != null
+      ? {
+          locale: input.locale,
+          t: createTranslator(input.locale),
+          languageName: assistantLanguageName(input.locale),
+        }
+      : await resolveAssistantLocale(userId);
+  const { locale, t } = localeCtx;
+
   const conversationId = await ensureConversation(
     userId,
     input.conversationId,
@@ -167,16 +193,16 @@ export async function handleAssistantTurn(
   const userText =
     rawMessage ||
     (input.confirmProposalId
-      ? "Yes"
+      ? t("assistant.yes")
       : input.cancelProposalId
-        ? "Cancel"
+        ? t("assistant.cancel")
         : "");
 
   if (!userText) {
     return failTurn({
       conversationId,
       userMessageId: "",
-      message: "Tell me what you’d like to find or create in your vault.",
+      message: t("assistant.reply.emptyPrompt"),
     });
   }
 
@@ -210,8 +236,7 @@ export async function handleAssistantTurn(
     }
     return reply(conversationId, userMessage.id, userId, {
       status: "cancelled",
-      message:
-        "Okay — I’ve cancelled that. Whenever you’re ready, we can try again gently.",
+      message: t("assistant.reply.cancelledGentle"),
       intent: openProposal?.proposal.intent,
     });
   }
@@ -236,6 +261,8 @@ export async function handleAssistantTurn(
       proposalMessageId: openProposal.messageId,
       proposal: openProposal.proposal,
       selectedMediaIds: input.confirmMediaIds ?? undefined,
+      locale,
+      t,
     });
   }
 
@@ -247,7 +274,7 @@ export async function handleAssistantTurn(
       reply: userText,
       knownPeople,
       preferFallback: input.preferFallbackIntent,
-      parseOptions: input.parseOptions,
+      parseOptions: { ...input.parseOptions, locale },
     });
     await markProposal(openProposal.messageId, userId, openProposal.proposal, "consumed");
   }
@@ -259,6 +286,7 @@ export async function handleAssistantTurn(
       knownPeople,
       preferFallback: input.preferFallbackIntent,
       ...input.parseOptions,
+      locale,
     }));
 
   const intent = stripParseMeta(parsed);
@@ -276,6 +304,8 @@ export async function handleAssistantTurn(
       conversationId,
       userMessageId: userMessage.id,
       intent,
+      t,
+      locale,
     });
     logAssistantTurn({
       userId,
@@ -295,6 +325,8 @@ export async function handleAssistantTurn(
       intent,
       resolved: emptyResolvedIntent(intent),
       media: emptyMediaResult(),
+      locale,
+      t,
     });
     logAssistantTurn({
       userId,
@@ -317,7 +349,7 @@ export async function handleAssistantTurn(
         needsClarification: true,
         clarifyingQuestions: uniqueStrings([
           ...resolved.clarifyingQuestions,
-          "Who should this focus on, is there a year or season, or what object/scene should it include (for example bounce house or birthday cake)?",
+          t("assistant.reply.clarifyFocus"),
         ]),
       };
     }
@@ -327,7 +359,7 @@ export async function handleAssistantTurn(
         needsClarification: true,
         clarifyingQuestions: uniqueStrings([
           ...resolved.clarifyingQuestions,
-          "Who should I look for, what year or season, or what object/scene should I search for (for example bounce house, birthday cake, or beach)?",
+          t("assistant.reply.clarifySearch"),
         ]),
       };
     }
@@ -337,6 +369,7 @@ export async function handleAssistantTurn(
       userMessageId: userMessage.id,
       intent,
       resolved,
+      t,
     });
     logAssistantTurn({
       userId,
@@ -371,6 +404,7 @@ export async function handleAssistantTurn(
       resolved,
       media,
       minRequired,
+      t,
     });
     logAssistantTurn({
       userId,
@@ -397,6 +431,7 @@ export async function handleAssistantTurn(
       intent,
       resolved,
       media,
+      t,
     });
     logAssistantTurn({
       userId,
@@ -416,6 +451,8 @@ export async function handleAssistantTurn(
     intent,
     resolved,
     media,
+    locale,
+    t,
   });
   logAssistantTurn({
     userId,
@@ -437,6 +474,7 @@ export async function confirmAssistantProposal(input: {
   proposalId: string;
   /** Optional curated subset of the proposal’s media IDs. */
   mediaIds?: string[] | null;
+  locale?: AppLocale;
 }): Promise<AssistantUiResponse> {
   return handleAssistantTurn({
     userId: input.userId,
@@ -444,6 +482,7 @@ export async function confirmAssistantProposal(input: {
     message: "Yes",
     confirmProposalId: input.proposalId,
     confirmMediaIds: input.mediaIds,
+    locale: input.locale,
   });
 }
 
@@ -454,12 +493,14 @@ export async function cancelAssistantProposal(input: {
   userId: string;
   conversationId: string;
   proposalId: string;
+  locale?: AppLocale;
 }): Promise<AssistantUiResponse> {
   return handleAssistantTurn({
     userId: input.userId,
     conversationId: input.conversationId,
     message: "Cancel",
     cancelProposalId: input.proposalId,
+    locale: input.locale,
   });
 }
 
@@ -474,8 +515,18 @@ export async function proposeCreateFromSearchResults(input: {
   seedIntent?: AssistantIntent | null;
   /** Default create_memory; pass create_movie for a slideshow draft. */
   createAction?: "create_memory" | "create_movie";
+  locale?: AppLocale;
 }): Promise<AssistantUiResponse> {
   const createAction = input.createAction ?? "create_memory";
+  const localeCtx =
+    input.locale != null
+      ? {
+          locale: input.locale,
+          t: createTranslator(input.locale),
+          languageName: assistantLanguageName(input.locale),
+        }
+      : await resolveAssistantLocale(input.userId);
+  const { t } = localeCtx;
   const conversationId = await ensureConversation(
     input.userId,
     input.conversationId,
@@ -483,8 +534,8 @@ export async function proposeCreateFromSearchResults(input: {
 
   const userText =
     createAction === "create_movie"
-      ? "Create a movie from these photos"
-      : "Create a memory from these photos";
+      ? t("assistant.reply.createFromPhotosMovie")
+      : t("assistant.reply.createFromPhotosMemory");
   const userMessage = await addMessage({
     conversationId,
     userId: input.userId,
@@ -522,16 +573,25 @@ export async function proposeCreateFromSearchResults(input: {
     createAction === "create_movie" ? MIN_MEDIA_FOR_MOVIE : MIN_MEDIA_FOR_MEMORY;
 
   if (media.totalCount < minRequired) {
+    const kind =
+      createAction === "create_movie"
+        ? t("assistant.reply.kindMovie")
+        : t("assistant.reply.kindMemory");
+    const kindNeed =
+      createAction === "create_movie"
+        ? t("assistant.reply.kindSlideshow")
+        : t("assistant.reply.kindMemory");
     return reply(conversationId, userMessage.id, input.userId, {
       status: "clarify",
       message:
         media.totalCount === 0
-          ? `I couldn’t use those photos for a ${createAction === "create_movie" ? "movie" : "memory"} — they may no longer be available. Try searching again.`
-          : `I need at least ${minRequired} photo(s) to create a ${createAction === "create_movie" ? "slideshow" : "memory"}.`,
+          ? t("assistant.reply.unavailableFromSearch", { kind })
+          : t("assistant.reply.needMoreFromSearch", {
+              min: minRequired,
+              kind: kindNeed,
+            }),
       intent,
-      clarifyingQuestions: [
-        "Search again, or pick a person / time period / object so I can gather more photos.",
-      ],
+      clarifyingQuestions: [t("assistant.reply.searchAgainHint")],
       entities: { mediaIds: media.items.map((i) => i.id) },
     });
   }
@@ -543,6 +603,7 @@ export async function proposeCreateFromSearchResults(input: {
     intent,
     resolved,
     media,
+    t,
   });
 
   logAssistantTurn({
@@ -580,6 +641,7 @@ async function respondClarify(input: {
   userMessageId: string;
   intent: AssistantIntent;
   resolved: ResolvedIntent;
+  t: TranslateFn;
 }): Promise<AssistantUiResponse> {
   const questions = uniqueStrings([
     ...input.resolved.clarifyingQuestions,
@@ -588,9 +650,7 @@ async function respondClarify(input: {
   const list =
     questions.length > 0
       ? questions
-      : [
-          "Who should this focus on, and would you like a photo search, a memory album, or a slideshow?",
-        ];
+      : [input.t("assistant.reply.emptyPromptQuestion")];
 
   const proposal = buildProposal({
     stage: "clarify",
@@ -600,7 +660,7 @@ async function respondClarify(input: {
     clarifyingQuestions: list,
   });
 
-  const message = buildClarifyCopy(input.intent, list);
+  const message = buildClarifyCopy(input.t, input.intent, list);
 
   return reply(input.conversationId, input.userMessageId, input.userId, {
     status: "clarify",
@@ -616,6 +676,8 @@ async function handlePrivateVaultTurn(input: {
   conversationId: string;
   userMessageId: string;
   intent: AssistantIntent;
+  t: TranslateFn;
+  locale: AppLocale;
 }): Promise<AssistantUiResponse> {
   const questions = uniqueStrings([
     ...(input.intent.clarifying_questions ?? []),
@@ -630,6 +692,8 @@ async function handlePrivateVaultTurn(input: {
       intent: input.intent,
       resolved: emptyResolvedIntent(input.intent),
       media: emptyMediaResult(),
+      locale: input.locale,
+      t: input.t,
     });
   }
 
@@ -644,6 +708,7 @@ async function handlePrivateVaultTurn(input: {
         needsClarification: true,
         clarifyingQuestions: questions,
       },
+      t: input.t,
     });
   }
 
@@ -661,7 +726,7 @@ async function handlePrivateVaultTurn(input: {
 
   return reply(input.conversationId, input.userMessageId, input.userId, {
     status: "preview",
-    message: buildPrivateVaultPreviewCopy(input.intent),
+    message: buildPrivateVaultPreviewCopy(input.t, input.intent),
     intent: input.intent,
     pendingProposal: proposal,
     preview: {
@@ -689,6 +754,7 @@ async function respondSparse(input: {
   resolved: ResolvedIntent;
   media: AssistantMediaQueryResult;
   minRequired: number;
+  t: TranslateFn;
 }): Promise<AssistantUiResponse> {
   const explanation = explainSparseMediaResults({
     diagnostics: input.media.diagnostics,
@@ -710,7 +776,7 @@ async function respondSparse(input: {
     clarifyingQuestions: questions,
   });
 
-  const message = buildSparseCopy(input.intent, explanation.summary, questions);
+  const message = buildSparseCopy(input.t, input.intent, explanation.summary, questions);
 
   return reply(input.conversationId, input.userMessageId, input.userId, {
     status: "clarify",
@@ -729,6 +795,7 @@ async function respondPreview(input: {
   intent: AssistantIntent;
   resolved: ResolvedIntent;
   media: AssistantMediaQueryResult;
+  t: TranslateFn;
 }): Promise<AssistantUiResponse> {
   const title = buildMemoryTitle(input.intent, input.resolved);
   const theme =
@@ -750,7 +817,7 @@ async function respondPreview(input: {
     themePreference: theme,
   });
 
-  const message = buildPreviewCopy({
+  const message = buildPreviewCopy(input.t, {
     intent: input.intent,
     resolved: input.resolved,
     totalCount: usableCount,
@@ -797,6 +864,8 @@ async function executeAndReply(input: {
   intent: AssistantIntent;
   resolved: ResolvedIntent;
   media: AssistantMediaQueryResult;
+  locale: AppLocale;
+  t: TranslateFn;
 }): Promise<AssistantUiResponse> {
   const outcome = await executeAssistantAction({
     userId: input.userId,
@@ -806,9 +875,23 @@ async function executeAndReply(input: {
     resolved: input.resolved,
     media: input.media,
     writeAssistantReply: false,
+    locale: input.locale,
+    t: input.t,
   });
 
-  const message = buildCompletionCopy(input.intent, outcome.result, outcome.assistantMessage);
+  let message = buildCompletionCopy(
+    input.t,
+    input.intent,
+    outcome.result,
+    outcome.assistantMessage,
+  );
+  if (
+    input.locale !== DEFAULT_LOCALE &&
+    outcome.result.type === "search_media" &&
+    outcome.result.count === 0
+  ) {
+    message = await localizeAssistantProse(message, input.locale);
+  }
   const entities = entitiesFromResult(outcome.result);
 
   // Search completions need the same preview strip as create drafts so users
@@ -885,6 +968,8 @@ async function completeFromProposal(input: {
   proposalMessageId: string;
   proposal: AssistantPendingProposal;
   selectedMediaIds?: string[];
+  locale: AppLocale;
+  t: TranslateFn;
 }): Promise<AssistantUiResponse> {
   const { proposal } = input;
   await markProposal(
@@ -906,6 +991,8 @@ async function completeFromProposal(input: {
       intent: proposal.intent,
       resolved: emptyResolvedIntent(proposal.intent),
       media: emptyMediaResult(),
+      locale: input.locale,
+      t: input.t,
     });
   }
 
@@ -931,9 +1018,10 @@ async function completeFromProposal(input: {
             ...resolved,
             clarifyingQuestions: uniqueStrings([
               ...resolved.clarifyingQuestions,
-              "Who should this focus on before I create anything?",
+              input.t("assistant.reply.clarifyFocusWho"),
             ]),
           },
+          t: input.t,
         });
       }
     }
@@ -967,6 +1055,8 @@ async function completeFromProposal(input: {
     intent: proposal.intent,
     resolved,
     media,
+    locale: input.locale,
+    t: input.t,
   });
 }
 
@@ -1046,38 +1136,6 @@ export async function mergeClarificationIntent(input: {
 /* Copy                                                                        */
 /* -------------------------------------------------------------------------- */
 
-export function isConfirmMessage(text: string): boolean {
-  const t = text.trim().toLowerCase();
-  return /^(yes|yep|yeah|yea|ok|okay|sure|please|confirm|go ahead|do it|create it|make it|looks good|that works|perfect)\b/.test(
-    t,
-  );
-}
-
-export function isCancelMessage(text: string): boolean {
-  const t = text.trim().toLowerCase();
-  return /^(no|nope|cancel|stop|nevermind|never mind|don't|dont)\b/.test(t);
-}
-
-function buildClarifyCopy(intent: AssistantIntent, questions: string[]): string {
-  const intro = isMemorial(intent)
-    ? "I want to handle this with care. Before I gather photos, could you help me with a couple of details?"
-    : "Happy to help — I just need a little more clarity:";
-
-  return [intro, ...questions.map((q, i) => `${i + 1}. ${q}`)].join("\n");
-}
-
-function buildSparseCopy(
-  intent: AssistantIntent,
-  summary: string,
-  questions: string[],
-): string {
-  const intro = isMemorial(intent)
-    ? "I found fewer photos than I’d want for a meaningful tribute, and I don’t want to rush something this important."
-    : "I found fewer photos than I’d need to do this well.";
-
-  return [intro, summary, ...questions.map((q) => `• ${q}`)].join("\n");
-}
-
 function formatVisualRelatedLabel(intent: AssistantIntent): string | null {
   const label =
     intent.visual_query?.trim() ||
@@ -1086,172 +1144,19 @@ function formatVisualRelatedLabel(intent: AssistantIntent): string | null {
   return label?.trim() || null;
 }
 
-function buildPreviewCopy(input: {
-  intent: AssistantIntent;
-  resolved: ResolvedIntent;
-  totalCount: number;
-  totalMatched?: number;
-  title: string;
-  theme?: string;
-  mediaItems?: Array<{ type: string }>;
-}): string {
-  const visual = formatVisualRelatedLabel(input.intent);
-  const whoNames = input.resolved.matchedPeople.map((p) => p.name);
-  const who =
-    whoNames.length > 0
-      ? whoNames.join(", ")
-      : visual
-        ? null
-        : "your family";
-  const when = input.resolved.dateFilter?.label
-    ? ` from ${input.resolved.dateFilter.label}`
-    : "";
-  const qualities =
-    input.intent.qualities && input.intent.qualities.length > 0 && !visual
-      ? ` I’ll keep ${input.intent.qualities.join(" and ")} in mind.`
-      : "";
-  const moreNote =
-    input.totalMatched && input.totalMatched > input.totalCount
-      ? ` (using ${input.totalCount} of ${input.totalMatched} matches)`
-      : "";
-
-  const countLabel =
-    input.mediaItems && input.mediaItems.length > 0
-      ? formatMediaTypeCounts(input.mediaItems)
-      : `${input.totalCount} item${input.totalCount === 1 ? "" : "s"}`;
-
-  const foundLine = visual
-    ? `Found ${countLabel} related to ${visual}${who ? ` featuring ${who}` : ""}${when}${moreNote}.`
-    : `I found ${countLabel} of ${who}${when}${moreNote}.`;
-
-  if (input.intent.action === "create_movie" && isMemorial(input.intent)) {
-    return [
-      foundLine,
-      `If it feels right, I can create a cinematic tribute titled “${input.title}”.${qualities}`,
-      "Reply yes to begin, or tell me what to adjust.",
-    ].join(" ");
-  }
-
-  if (input.intent.action === "create_movie") {
-    return [
-      foundLine,
-      `I can make a ${input.theme ?? "simple"} slideshow called “${input.title}”.${qualities}`,
-      "Does that look right? Reply yes to create it.",
-    ].join(" ");
-  }
-
-  return [
-    foundLine,
-    `I can gather them into a memory album titled “${input.title}”.${qualities}`,
-    "Reply yes to create it, or tell me what to change.",
-  ].join(" ");
-}
-
-function buildPrivateVaultPreviewCopy(intent: AssistantIntent): string {
-  switch (intent.action) {
-    case "create_document_category":
-      return `I’m ready to create the private document category “${intent.document_category}”. I won’t upload any files from chat. Confirm when you want me to create it.`;
-    case "file_private_document":
-      return `I’m ready to file “${intent.document_title}” under “${intent.document_category}”. Confirm and I’ll update that private document only.`;
-    case "add_legacy_contact":
-      return `I’m ready to add ${intent.legacy_contact_name} to your Digital Legacy contacts${intent.legacy_contact_category ? ` as ${intent.legacy_contact_category.replace(/_/g, " ")}` : ""}. Confirm before I save it.`;
-    case "draft_legacy_business":
-      return "I drafted a starter business transition note for your Digital Legacy section. Confirm if you want me to save it there, or tell me what to adjust first.";
-    default:
-      return "I’m ready to make that change. Confirm if it looks right.";
-  }
-}
-
-function buildCompletionCopy(
-  intent: AssistantIntent,
-  result: AssistantActionResult,
-  fallback: string,
-): string {
-  if (result.type === "search_media") {
-    const visual = formatVisualRelatedLabel(intent);
-    const helpAside = formatSecondaryHelpTip(intent.raw_prompt) ?? "";
-    const countLabel = `${result.count} item${result.count === 1 ? "" : "s"}`;
-    if (result.count === 0) {
-      const empty = isMemorial(intent)
-        ? "I couldn’t find matching photos or videos yet. When you’re ready, we can widen the search together."
-        : fallback;
-      // Fallback may already include the mixed-help tip from the executor.
-      return /\n\nAlso —/.test(empty) ? empty : `${empty}${helpAside}`;
-    }
-    if (visual) {
-      const lead = `Found ${countLabel} related to ${visual}.`;
-      if (result.count < ASSISTANT_SEARCH_SPARSE_THRESHOLD) {
-        return `${lead} You can browse them, create a memory, or try a broader term.${helpAside}`;
-      }
-      return `${lead} I’ve pulled a few previews — browse results, or create a Memory / Movie from them.${helpAside}`;
-    }
-    if (result.count < ASSISTANT_SEARCH_SPARSE_THRESHOLD) {
-      return `I only found ${countLabel}. You can browse them, or tell me a broader year or another person to include.${helpAside}`;
-    }
-    return `Here are ${countLabel}. I’ve pulled a few previews for you.${helpAside}`;
-  }
-
-  if (result.type === "create_memory") {
-    return `Done — I created “${result.title ?? "your memory"}” with ${result.mediaIds?.length ?? 0} item${(result.mediaIds?.length ?? 0) === 1 ? "" : "s"}.`;
-  }
-
-  if (result.type === "create_movie") {
-    if (isMemorial(intent)) {
-      return `I’ve started a tribute film titled “${result.title ?? "In Memory"}”. I’ll let you know when the render is ready — take your time viewing it.`;
-    }
-    return `I’ve started your slideshow “${result.title ?? "Family movie"}”. I’ll notify you when it’s ready.`;
-  }
-
-  if (result.type === "clarify") {
-    return buildClarifyCopy(intent, result.questions);
-  }
-
-  if (result.type === "create_document_category") {
-    return `I created the private document category “${result.name}”.`;
-  }
-
-  if (result.type === "file_private_document") {
-    return `I filed “${result.documentTitle}” under “${result.categoryName}”.`;
-  }
-
-  if (result.type === "add_legacy_contact") {
-    return `I added ${result.name} to your Digital Legacy contacts.`;
-  }
-
-  if (result.type === "draft_legacy_business") {
-    return "I saved a starter business transition draft in your Digital Legacy instructions.";
-  }
-
-  if (result.type === "review_legacy_checklist") {
-    return result.missing.length === 0
-      ? "Your Digital Legacy checklist looks complete."
-      : `Your Digital Legacy checklist is ${result.completed} of ${result.total} complete. I listed what is still missing.`;
-  }
-
-  if (result.type === "answer_help") {
-    return fallback;
-  }
-
-  if (result.type === "error") {
-    const safe = publicAssistantErrorMessage(new Error(result.message));
-    return isMemorial(intent)
-      ? `I ran into a problem and paused so nothing incomplete was created. ${safe}`
-      : safe;
-  }
-
-  return fallback;
-}
-
-function isMemorial(intent: AssistantIntent): boolean {
-  return (
-    intent.tone === "memorial" ||
-    /\b(memorial|tribute|in memory|remembrance)\b/i.test(intent.raw_prompt)
+export function isConfirmMessage(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  return /^(yes|yep|yeah|yea|ok|okay|sure|please|confirm|go ahead|do it|create it|make it|looks good|that works|perfect|sí|si|oui|ja|sim|はい|네|예|sì|sí\.?|confirmar|confirme|d'accord|vale)\b/i.test(
+    t,
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* Persistence helpers                                                         */
-/* -------------------------------------------------------------------------- */
+export function isCancelMessage(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  return /^(no|nope|cancel|stop|nevermind|never mind|don't|dont|non|nein|não|nao|いいえ|아니|annuler|cancelar|annulla|annuleren)\b/i.test(
+    t,
+  );
+}
 
 async function ensureConversation(
   userId: string,

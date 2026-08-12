@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { ArrowLeft, Download, EyeOff, Lock } from "lucide-react";
 import { GrantedLegacyVideos } from "@/components/legacy/GrantedLegacyVideos";
-import { COPY } from "@/lib/copy";
+import { useCopy } from "@/components/i18n/LocaleProvider";
 import type { LoadedLegacyVault } from "@/lib/legacy/load-vault";
 import type { SerializedLegacySecureItem } from "@/lib/legacy/serialize";
 import {
@@ -28,6 +28,7 @@ export function GrantedLegacyView({
   grantExpiresAt,
   accessType,
 }: GrantedLegacyViewProps) {
+  const copy = useCopy();
   const ownerLabel = ownerDisplayName?.trim() || "Vault owner";
   const [revealedById, setRevealedById] = useState<
     Record<string, SerializedLegacySecureItem>
@@ -45,7 +46,7 @@ export function GrantedLegacyView({
       return;
     }
 
-    if (!window.confirm(COPY.legacy.secureRevealConfirm)) return;
+    if (!window.confirm(copy.legacy.secureRevealConfirm)) return;
 
     setBusyId(item.id);
     setSecureError(null);

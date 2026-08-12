@@ -299,6 +299,15 @@ export async function createMemory(
   if (!created) {
     throw new MemoryError("Failed to load memory after create.");
   }
+
+  const { afterMemoryCreated } = await import("@/lib/gamification/memory-created");
+  void afterMemoryCreated({
+    userId: parsed.userId,
+    memoryId: created.id,
+    memoryKind: parsed.type === "story" ? "story" : "album",
+    title: created.title,
+  });
+
   return created;
 }
 

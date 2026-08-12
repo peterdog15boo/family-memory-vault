@@ -1,7 +1,15 @@
 import type { Metadata, Viewport } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Figtree, Fraunces } from "next/font/google";
+import { FeedbackHost } from "@/components/feedback/FeedbackHost";
+import { LocaleProvider } from "@/components/i18n/LocaleProvider";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
+import {
+  APP_LOCALES,
+  DEFAULT_LOCALE,
+  LOCALE_STORAGE_KEY,
+} from "@/lib/i18n/locales";
+import { getLocale, getTranslations } from "@/lib/i18n/server";
 import {
   APP_THEME_DEFAULT,
   APP_THEME_STORAGE_KEY,
@@ -24,11 +32,13 @@ const fraunces = Fraunces({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "Family Memory Vault",
-  description:
-    "Preserve your family's most important memories — privately and safely. Built for families who value privacy and care.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return {
+    title: t("meta.defaultTitle"),
+    description: t("meta.defaultDescription"),
+  };
+}
 
 /** Resize layout with the on-screen keyboard so floating sheets stay usable. */
 export const viewport: Viewport = {
@@ -60,24 +70,58 @@ const themeBootScript = `
 })();
 `;
 
-export default function RootLayout({
+/** Apply stored locale before paint so html[lang] matches guest preference. */
+const localeBootScript = `
+(function(){
+  var fallback = ${JSON.stringify(DEFAULT_LOCALE)};
+  var key = ${JSON.stringify(LOCALE_STORAGE_KEY)};
+  var allowed = ${JSON.stringify([...APP_LOCALES])};
+  try {
+    var q = new URLSearchParams(location.search).get("lang") || new URLSearchParams(location.search).get("locale");
+    var t = q || localStorage.getItem(key);
+    if (!t || allowed.indexOf(t) === -1) return;
+    document.documentElement.setAttribute("lang", t);
+    document.documentElement.setAttribute("data-locale", t);
+    try {
+      document.cookie = key + "=" + encodeURIComponent(t) + "; path=/; max-age=31536000; SameSite=Lax";
+    } catch (eCookie) {}
+    if (q && allowed.indexOf(q) !== -1) {
+      try { localStorage.setItem(key, q); } catch (e2) {}
+    }
+  } catch (e) {
+    document.documentElement.setAttribute("lang", fallback);
+    document.documentElement.setAttribute("data-locale", fallback);
+  }
+})();
+`;
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getLocale();
+
   return (
     <html
-      lang="en"
+      lang={locale}
       className={`${figtree.variable} ${fraunces.variable} h-full antialiased`}
       data-theme={APP_THEME_DEFAULT}
+      data-locale={locale}
       suppressHydrationWarning
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
+        <script dangerouslySetInnerHTML={{ __html: localeBootScript }} />
       </head>
       <body className="page-atmosphere min-h-full font-sans">
         <ClerkProvider>
-          <ThemeProvider>{children}</ThemeProvider>
+          <ThemeProvider>
+            <LocaleProvider initialLocale={locale}>
+              {children}
+              <FeedbackHost />
+            </LocaleProvider>
+          </ThemeProvider>
         </ClerkProvider>
       </body>
     </html>

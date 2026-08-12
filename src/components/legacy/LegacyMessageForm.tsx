@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Save } from "lucide-react";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 import type { SerializedLegacyProfile } from "@/lib/legacy/serialize";
 
 type LegacyMessageFormProps = {
@@ -18,6 +19,7 @@ export function LegacyMessageForm({
   profile: initial,
   variant = "standalone",
 }: LegacyMessageFormProps) {
+  const t = useTranslations();
   const router = useRouter();
   const [summaryMessage, setSummaryMessage] = useState(
     initial.summaryMessage ?? "",
@@ -49,11 +51,13 @@ export function LegacyMessageForm({
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not save your message.");
+      if (!res.ok) throw new Error(data.error || t("legacy.errorSaveMessage"));
       setSaved(true);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save your message.");
+      setError(
+        err instanceof Error ? err.message : t("legacy.errorSaveMessage"),
+      );
     } finally {
       setBusy(false);
     }
@@ -67,25 +71,17 @@ export function LegacyMessageForm({
       className="legacy-vault-panel documents-vault-panel legacy-vault-in space-y-5 rounded-2xl p-5 sm:p-6"
     >
       <div>
-        <h2
-          className={
-            isLetter
-              ? "font-display text-xl tracking-tight text-[color:var(--legacy-ink)]"
-              : "font-display text-xl tracking-tight text-[color:var(--legacy-ink)]"
-          }
-        >
-          {isLetter ? "Write to them" : "Message to Loved Ones"}
+        <h2 className="font-display text-xl tracking-tight text-[color:var(--legacy-ink)]">
+          {isLetter ? t("legacy.writeToThem") : t("legacy.navMessage")}
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-[color:var(--legacy-muted)]">
-          {isLetter
-            ? "Words they can hold onto — a letter, a few paragraphs, or simple notes about what matters most. This sits beside your video as one farewell packet."
-            : "Write in your own voice. This can be a letter, a few paragraphs, or simple notes about what matters most to you. You can also leave a spoken message in the video section below."}
+          {isLetter ? t("legacy.messageLeadLetter") : t("legacy.messageLead")}
         </p>
       </div>
 
       <label className="block">
         <span className="text-xs font-medium uppercase tracking-wide text-[color:var(--legacy-muted)]">
-          {isLetter ? "Your letter" : "Your message"}
+          {isLetter ? t("legacy.yourLetter") : t("legacy.yourMessage")}
         </span>
         <textarea
           value={summaryMessage}
@@ -93,16 +89,16 @@ export function LegacyMessageForm({
           rows={isLetter ? 8 : 10}
           maxLength={20000}
           disabled={busy}
-          placeholder="Dear ones — if you're reading this, I want you to know…"
+          placeholder={t("legacy.messagePlaceholder")}
           className="mt-1.5 w-full rounded-lg border border-[color:var(--legacy-line)] bg-white/70 px-3 py-2.5 text-sm leading-relaxed outline-none focus:ring-2 focus:ring-[color:var(--legacy-accent)]"
         />
       </label>
 
       <label className="block">
         <span className="text-xs font-medium uppercase tracking-wide text-[color:var(--legacy-muted)]">
-          Guidance for later{" "}
+          {t("legacy.guidanceLabel")}{" "}
           <span className="normal-case tracking-normal">
-            (optional)
+            ({t("common.optional")})
           </span>
         </span>
         <textarea
@@ -111,16 +107,16 @@ export function LegacyMessageForm({
           rows={4}
           maxLength={20000}
           disabled={busy}
-          placeholder="Anything else you'd like them to know — priorities, values, or practical wishes."
+          placeholder={t("legacy.guidancePlaceholder")}
           className="mt-1.5 w-full rounded-lg border border-[color:var(--legacy-line)] bg-white/70 px-3 py-2.5 text-sm leading-relaxed outline-none focus:ring-2 focus:ring-[color:var(--legacy-accent)]"
         />
       </label>
 
       <label className="block">
         <span className="text-xs font-medium uppercase tracking-wide text-[color:var(--legacy-muted)]">
-          Memorial or service preferences{" "}
+          {t("legacy.memorialLabel")}{" "}
           <span className="normal-case tracking-normal text-[color:var(--legacy-muted)]">
-            (optional)
+            ({t("common.optional")})
           </span>
         </span>
         <textarea
@@ -129,7 +125,7 @@ export function LegacyMessageForm({
           rows={3}
           maxLength={20000}
           disabled={busy}
-          placeholder="If you'd like to share preferences for a gathering, burial, or celebration of life."
+          placeholder={t("legacy.memorialPlaceholder")}
           className="mt-1.5 w-full rounded-lg border border-[color:var(--legacy-line)] bg-white/70 px-3 py-2.5 text-sm leading-relaxed outline-none focus:ring-2 focus:ring-[color:var(--legacy-accent)]"
         />
       </label>
@@ -141,7 +137,7 @@ export function LegacyMessageForm({
       ) : null}
       {saved ? (
         <p className="text-sm text-[color:var(--legacy-accent-deep)]">
-          Saved — your words are stored privately in your vault.
+          {t("legacy.messageSaved")}
         </p>
       ) : null}
 
@@ -151,7 +147,11 @@ export function LegacyMessageForm({
         className="inline-flex items-center gap-2 rounded-md bg-[color:var(--legacy-accent)] px-4 py-2.5 text-sm font-medium text-white hover:bg-[color:var(--legacy-accent-deep)] disabled:opacity-50"
       >
         <Save className="size-4" aria-hidden />
-        {busy ? "Saving…" : isLetter ? "Save written message" : "Save message"}
+        {busy
+          ? t("common.saving")
+          : isLetter
+            ? t("legacy.saveWrittenMessage")
+            : t("legacy.saveMessage")}
       </button>
     </form>
   );

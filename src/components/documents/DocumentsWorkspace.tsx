@@ -18,7 +18,7 @@ import {
 import { DocumentUploadDialog } from "@/components/documents/DocumentUploadDialog";
 import { AppPageIntro } from "@/components/ui/AppPageIntro";
 import { HintTooltip } from "@/components/ui/HintTooltip";
-import { COPY } from "@/lib/copy";
+import { useCopy, useFormat, useTranslations } from "@/components/i18n/LocaleProvider";
 import type {
   SerializedDocumentCategory,
   SerializedPrivateDocument,
@@ -39,31 +39,6 @@ type DocumentsWorkspaceProps = {
   r2Configured: boolean;
 };
 
-function formatUploadedDate(iso: string): string {
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    }).format(new Date(iso));
-  } catch {
-    return iso.slice(0, 10);
-  }
-}
-
-function formatShortDate(iso: string | null): string | null {
-  if (!iso) return null;
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    }).format(new Date(iso));
-  } catch {
-    return iso.slice(0, 10);
-  }
-}
-
 function contentTypeLabel(contentType: string): string {
   if (contentType === "application/pdf") return "PDF";
   if (contentType.startsWith("image/")) return "Image";
@@ -78,15 +53,14 @@ function contentTypeLabel(contentType: string): string {
   return "File";
 }
 
-const VIEW_OPTIONS: {
+const VIEW_OPTION_IDS: {
   id: PrivateDocumentListView;
-  label: string;
   icon: typeof Star;
 }[] = [
-  { id: "all", label: "All", icon: FileText },
-  { id: "important", label: "Important", icon: Star },
-  { id: "recent", label: "Recent", icon: Clock },
-  { id: "reminders", label: "Reminders", icon: Bell },
+  { id: "all", icon: FileText },
+  { id: "important", icon: Star },
+  { id: "recent", icon: Clock },
+  { id: "reminders", icon: Bell },
 ];
 
 export function DocumentsWorkspace({
@@ -98,6 +72,9 @@ export function DocumentsWorkspace({
   r2Configured,
 }: DocumentsWorkspaceProps) {
   const router = useRouter();
+  const copy = useCopy();
+  const t = useTranslations();
+  const format = useFormat();
   const [query, setQuery] = useState(initialQuery);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -107,6 +84,22 @@ export function DocumentsWorkspace({
   const [newCategoryName, setNewCategoryName] = useState("");
   const [categoryBusy, setCategoryBusy] = useState(false);
   const [categoryError, setCategoryError] = useState<string | null>(null);
+
+  const viewOptions = useMemo(
+    () =>
+      VIEW_OPTION_IDS.map((opt) => ({
+        ...opt,
+        label:
+          opt.id === "all"
+            ? t("documents.viewAll")
+            : opt.id === "important"
+              ? t("documents.viewImportant")
+              : opt.id === "recent"
+                ? t("documents.viewRecent")
+                : t("documents.viewReminders"),
+      })),
+    [t],
+  );
 
   const selected = useMemo(
     () => categories.find((c) => c.id === selectedCategoryId) ?? null,
@@ -173,11 +166,13 @@ export function DocumentsWorkspace({
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Bulk update failed.");
+      if (!res.ok) throw new Error(data.error || t("documents.errorBulkUpdate"));
       setSelectedIds(new Set());
       router.refresh();
     } catch (err) {
-      setBulkError(err instanceof Error ? err.message : "Bulk update failed.");
+      setBulkError(
+        err instanceof Error ? err.message : t("documents.errorBulkUpdate"),
+      );
     } finally {
       setBulkBusy(false);
     }
@@ -193,10 +188,12 @@ export function DocumentsWorkspace({
         body: JSON.stringify({ documentIds: [documentId], categoryId }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not move document.");
+      if (!res.ok) throw new Error(data.error || t("documents.errorMove"));
       router.refresh();
     } catch (err) {
-      setBulkError(err instanceof Error ? err.message : "Could not move document.");
+      setBulkError(
+        err instanceof Error ? err.message : t("documents.errorMove"),
+      );
     } finally {
       setBulkBusy(false);
     }
@@ -215,7 +212,7 @@ export function DocumentsWorkspace({
         body: JSON.stringify({ name }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not create category.");
+      if (!res.ok) throw new Error(data.error || t("documents.errorCreateCategory"));
       setNewCategoryName("");
       router.refresh();
       if (data.category?.id) {
@@ -223,7 +220,9 @@ export function DocumentsWorkspace({
       }
     } catch (err) {
       setCategoryError(
-        err instanceof Error ? err.message : "Could not create category.",
+        err instanceof Error
+          ? err.message
+          : t("documents.errorCreateCategory"),
       );
     } finally {
       setCategoryBusy(false);
@@ -232,12 +231,12 @@ export function DocumentsWorkspace({
 
   const viewTitle =
     initialView === "important"
-      ? "Important"
+      ? t("documents.viewTitleImportant")
       : initialView === "recent"
-        ? "Recent uploads"
+        ? t("documents.viewTitleRecent")
         : initialView === "reminders"
-          ? "Reminders"
-          : (selected?.name ?? "All documents");
+          ? t("documents.viewTitleReminders")
+          : (selected?.name ?? t("documents.allDocuments"));
 
   return (
     <>
@@ -246,19 +245,19 @@ export function DocumentsWorkspace({
         eyebrow={
           <>
             <Lock className="size-3.5" aria-hidden />
-            Private vault
+            {t("pages.documentsEyebrow")}
           </>
         }
         title={
           <>
-            Documents{" "}
+            {t("pages.documentsTitle")}{" "}
             <HintTooltip
-              tip={COPY.tips.privateDocuments}
-              label="About private documents"
+              tip={copy.tips.privateDocuments}
+              label={t("pages.documentsAbout")}
             />
           </>
         }
-        description="Organize policies, IDs, and paperwork with categories, tags, and reminders — visible only to you."
+        description={t("pages.documentsDescription")}
       />
 
       <div className="documents-vault app-page mx-auto max-w-6xl">
@@ -266,11 +265,11 @@ export function DocumentsWorkspace({
         <aside className="documents-vault-panel documents-vault-in space-y-4 rounded-2xl p-3 lg:sticky lg:top-6 lg:self-start">
           <div>
             <p className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[color:var(--doc-muted)]">
-              Categories
+              {t("pages.documentsCategories")}
             </p>
             <nav
               className="flex flex-col gap-0.5"
-              aria-label="Document categories"
+              aria-label={t("documents.categoriesAria")}
             >
               <button
                 type="button"
@@ -282,7 +281,9 @@ export function DocumentsWorkspace({
                     : "text-[color:var(--doc-muted)] hover:bg-black/5 hover:text-[color:var(--doc-ink)]",
                 )}
               >
-                <span className="min-w-0 flex-1 break-words">All documents</span>
+                <span className="min-w-0 flex-1 break-words">
+                  {t("documents.allDocuments")}
+                </span>
                 <span className="shrink-0 tabular-nums text-xs opacity-70">
                   {totalCount}
                 </span>
@@ -305,7 +306,7 @@ export function DocumentsWorkspace({
                       {cat.name}
                       {!cat.isDefault ? (
                         <span className="ml-1 text-[10px] font-normal uppercase tracking-wide opacity-60">
-                          custom
+                          {t("documents.customBadge")}
                         </span>
                       ) : null}
                     </span>
@@ -323,13 +324,13 @@ export function DocumentsWorkspace({
             className="border-t border-[color:var(--doc-line)] px-1 pt-3"
           >
             <label className="px-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[color:var(--doc-muted)]">
-              New category
+              {t("documents.newCategory")}
             </label>
             <div className="mt-1.5 flex gap-1.5">
               <input
                 value={newCategoryName}
                 onChange={(e) => setNewCategoryName(e.target.value)}
-                placeholder="e.g. Taxes 2025"
+                placeholder={t("documents.newCategoryPlaceholder")}
                 maxLength={120}
                 disabled={categoryBusy}
                 className="min-w-0 flex-1 rounded-md border border-[color:var(--doc-line)] bg-white/70 px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[color:var(--doc-accent)]"
@@ -338,7 +339,7 @@ export function DocumentsWorkspace({
                 type="submit"
                 disabled={categoryBusy || !newCategoryName.trim()}
                 className="inline-flex items-center rounded-md bg-[color:var(--doc-accent)] px-2.5 text-white hover:bg-[color:var(--doc-accent-deep)] disabled:opacity-40"
-                aria-label="Add category"
+                aria-label={t("documents.addCategory")}
               >
                 <FolderPlus className="size-4" />
               </button>
@@ -353,17 +354,17 @@ export function DocumentsWorkspace({
               Planning
             </p>
             <Link
-              href="/documents/legacy"
+              href="/legacy"
               className="mt-1.5 flex items-start gap-2.5 rounded-lg px-2 py-2.5 text-sm text-[color:var(--doc-muted)] transition hover:bg-[color:var(--doc-accent-soft)] hover:text-[color:var(--doc-accent-deep)]"
             >
               <Heart className="mt-0.5 size-4 shrink-0" aria-hidden />
               <span>
                 <span className="block font-medium text-[color:var(--doc-ink)]">
-                  Digital Legacy
+                  Legacy Plan
                 </span>
                 <span className="mt-0.5 block text-xs leading-relaxed">
-                  A calm place for messages, contacts, and instructions — private
-                  to you.
+                  Guided checklist and Legacy Strength — plus the private vault
+                  for messages and contacts.
                 </span>
               </span>
             </Link>
@@ -387,7 +388,7 @@ export function DocumentsWorkspace({
 
         <section className="min-w-0">
           <div className="documents-vault-in flex flex-wrap gap-2">
-            {VIEW_OPTIONS.map(({ id, label, icon: Icon }) => {
+            {viewOptions.map(({ id, label, icon: Icon }) => {
               const active = initialView === id;
               return (
                 <button
@@ -421,9 +422,9 @@ export function DocumentsWorkspace({
                 onKeyDown={(e) => {
                   if (e.key === "Enter") navigate({ query });
                 }}
-                placeholder="Search title, tags, or notes…"
+                placeholder={t("documents.searchPlaceholder")}
                 className="w-full rounded-lg border border-[color:var(--doc-line)] bg-[color:var(--doc-panel)] py-2.5 pl-10 pr-3 text-sm text-[color:var(--doc-ink)] outline-none ring-[color:var(--doc-accent)] placeholder:text-[color:var(--doc-muted)] focus:ring-2"
-                aria-label="Search documents"
+                aria-label={t("documents.searchAria")}
               />
             </div>
             <div className="flex shrink-0 gap-2">
@@ -432,7 +433,7 @@ export function DocumentsWorkspace({
                 onClick={() => navigate({ query })}
                 className="rounded-md border border-[color:var(--doc-line)] bg-[color:var(--doc-panel)] px-3 py-2.5 text-sm font-medium text-[color:var(--doc-ink)] transition hover:bg-[color:var(--doc-accent-soft)]"
               >
-                Search
+                {t("documents.search")}
               </button>
               <button
                 type="button"
@@ -441,7 +442,7 @@ export function DocumentsWorkspace({
                 className="inline-flex items-center gap-2 rounded-md bg-[color:var(--doc-accent)] px-3.5 py-2.5 text-sm font-medium text-white transition hover:bg-[color:var(--doc-accent-deep)] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Plus className="size-4" aria-hidden />
-                Upload
+                {t("common.upload")}
               </button>
             </div>
           </div>
@@ -455,11 +456,11 @@ export function DocumentsWorkspace({
           {selectedCount > 0 ? (
             <div className="documents-vault-panel mt-4 flex flex-col gap-3 rounded-xl px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-[color:var(--doc-ink)]">
-                {selectedCount} selected
+                {t("documents.selectedCount", { count: selectedCount })}
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <label className="flex items-center gap-2 text-sm text-[color:var(--doc-muted)]">
-                  <span className="sr-only">Move to category</span>
+                  <span className="sr-only">{t("documents.moveToCategory")}</span>
                   <select
                     disabled={bulkBusy}
                     defaultValue=""
@@ -471,7 +472,7 @@ export function DocumentsWorkspace({
                     className="rounded-md border border-[color:var(--doc-line)] bg-white/80 px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[color:var(--doc-accent)]"
                   >
                     <option value="" disabled>
-                      Move to…
+                      {t("documents.moveTo")}
                     </option>
                     {categories.map((c) => (
                       <option key={c.id} value={c.id}>
@@ -486,7 +487,7 @@ export function DocumentsWorkspace({
                   onClick={() => runBulk({ importantFlag: true })}
                   className="rounded-md border border-[color:var(--doc-line)] px-2.5 py-1.5 text-sm hover:bg-[color:var(--doc-accent-soft)] disabled:opacity-50"
                 >
-                  Mark important
+                  {t("documents.markImportantBulk")}
                 </button>
                 <button
                   type="button"
@@ -494,7 +495,7 @@ export function DocumentsWorkspace({
                   onClick={() => runBulk({ importantFlag: false })}
                   className="rounded-md border border-[color:var(--doc-line)] px-2.5 py-1.5 text-sm hover:bg-[color:var(--doc-accent-soft)] disabled:opacity-50"
                 >
-                  Clear important
+                  {t("documents.clearImportant")}
                 </button>
                 <button
                   type="button"
@@ -502,7 +503,7 @@ export function DocumentsWorkspace({
                   onClick={() => setSelectedIds(new Set())}
                   className="text-sm text-[color:var(--doc-muted)] hover:underline"
                 >
-                  Clear
+                  {t("documents.clearSelection")}
                 </button>
               </div>
             </div>
@@ -520,7 +521,9 @@ export function DocumentsWorkspace({
                 {viewTitle}
               </h2>
               <p className="text-xs text-[color:var(--doc-muted)]">
-                {pending || bulkBusy ? "Updating…" : `${documents.length} shown`}
+                {pending || bulkBusy
+                  ? t("documents.updating")
+                  : t("documents.shownCount", { count: documents.length })}
               </p>
             </div>
 
@@ -534,27 +537,31 @@ export function DocumentsWorkspace({
                 </span>
                 <p className="mt-4 font-display text-xl tracking-tight text-[color:var(--doc-ink)]">
                   {initialQuery.trim()
-                    ? COPY.empty.documentsSearch.title
+                    ? copy.empty.documentsSearch.title
                     : initialView === "reminders"
-                      ? "No reminders yet"
+                      ? t("documents.emptyRemindersTitle")
                       : initialView === "important"
-                        ? "Nothing marked important"
+                        ? t("documents.emptyImportantTitle")
                         : initialView === "recent"
-                          ? "No recent uploads"
-                          : COPY.empty.documentsCategory.title}
+                          ? t("documents.emptyRecentTitle")
+                          : copy.empty.documentsCategory.title}
                 </p>
                 <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-[color:var(--doc-muted)]">
                   {initialQuery.trim()
-                    ? COPY.empty.documentsSearch.description
+                    ? copy.empty.documentsSearch.description
                     : initialView === "reminders"
-                      ? "Add a reminder date and type on a document — renewals, contract end dates, and overdue items all appear here."
+                      ? t("documents.emptyRemindersBody")
                       : initialView === "important"
-                        ? "Star documents that matter most so you can find them quickly."
+                        ? t("documents.emptyImportantBody")
                         : initialView === "recent"
-                          ? "Uploads from the last 30 days will appear in this list."
+                          ? t("documents.emptyRecentBody")
                           : selected
-                            ? `No files in ${selected.name} yet. ${COPY.empty.documentsCategory.description}`
-                            : COPY.empty.documentsCategory.description}
+                            ? t("empty.documentsFolderEmpty", {
+                                name: selected.name,
+                                description:
+                                  copy.empty.documentsCategory.description,
+                              })
+                            : copy.empty.documentsCategory.description}
                 </p>
                 {initialView === "all" && !initialQuery.trim() ? (
                   <button
@@ -564,7 +571,7 @@ export function DocumentsWorkspace({
                     className="mt-6 inline-flex items-center gap-2 rounded-md bg-[color:var(--doc-accent)] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[color:var(--doc-accent-deep)] disabled:opacity-50"
                   >
                     <Plus className="size-4" aria-hidden />
-                    Upload a document
+                    {t("documents.uploadDocument")}
                   </button>
                 ) : (
                   <button
@@ -575,7 +582,7 @@ export function DocumentsWorkspace({
                     }}
                     className="mt-6 text-sm font-medium text-[color:var(--doc-accent-deep)] hover:underline"
                   >
-                    Show all documents
+                    {t("documents.showAllDocuments")}
                   </button>
                 )}
               </div>
@@ -592,16 +599,20 @@ export function DocumentsWorkspace({
                       onChange={toggleSelectAll}
                       className="size-3.5 rounded border-[color:var(--doc-line)]"
                     />
-                    Select all
+                    {t("documents.selectAll")}
                   </label>
                 </div>
                 <ul className="documents-list list-panel divide-y divide-[color:var(--doc-line)] overflow-hidden rounded-xl border border-[color:var(--doc-line)]">
                   {documents.map((doc) => {
                     const categoryName =
                       categories.find((c) => c.id === doc.categoryId)?.name ??
-                      "Uncategorized";
-                    const reminderLabel = formatShortDate(doc.reminderAt);
-                    const docDateLabel = formatShortDate(doc.documentDate);
+                      t("documents.uncategorized");
+                    const reminderLabel = doc.reminderAt
+                      ? format.date(doc.reminderAt)
+                      : null;
+                    const docDateLabel = doc.documentDate
+                      ? format.date(doc.documentDate)
+                      : null;
                     return (
                       <li
                         key={doc.id}
@@ -635,7 +646,7 @@ export function DocumentsWorkspace({
                               {doc.importantFlag ? (
                                 <Star
                                   className="ml-1.5 inline size-3.5 fill-[color:var(--doc-accent)] text-[color:var(--doc-accent)]"
-                                  aria-label="Important"
+                                  aria-label={t("documents.importantAria")}
                                 />
                               ) : null}
                             </span>
@@ -644,13 +655,15 @@ export function DocumentsWorkspace({
                               <span aria-hidden>·</span>
                               <span>{contentTypeLabel(doc.contentType)}</span>
                               <span aria-hidden>·</span>
-                              <span>{formatBytes(doc.sizeBytes)}</span>
+                              <span>{formatBytes(doc.sizeBytes, 0, format.locale)}</span>
                               <span aria-hidden>·</span>
-                              <span>{formatUploadedDate(doc.createdAt)}</span>
+                              <span>{format.date(doc.createdAt)}</span>
                               {docDateLabel ? (
                                 <>
                                   <span aria-hidden>·</span>
-                                  <span>Dated {docDateLabel}</span>
+                                  <span>
+                                    {t("documents.dated", { date: docDateLabel })}
+                                  </span>
                                 </>
                               ) : null}
                               {reminderLabel ? (
@@ -668,9 +681,9 @@ export function DocumentsWorkspace({
                                   >
                                     <Bell className="size-3" aria-hidden />
                                     {doc.reminderUrgency === "overdue"
-                                      ? "Overdue"
+                                      ? t("documents.overdue")
                                       : doc.reminderUrgency === "due_today"
-                                        ? "Due today"
+                                        ? t("documents.dueToday")
                                         : null}
                                     {(doc.reminderUrgency === "overdue" ||
                                       doc.reminderUrgency === "due_today") &&
