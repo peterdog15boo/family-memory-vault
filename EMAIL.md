@@ -6,12 +6,20 @@ Family Memory Vault sends optional transactional mail via [Resend](https://resen
 
 ```env
 RESEND_API_KEY=re_xxxxxxxx
-EMAIL_FROM="Family Memory Vault <hello@yourdomain.com>"
+EMAIL_FROM="Family Memory Vault <support@mail.familymemoryvault.ai>"
+EMAIL_REPLY_TO=support@familymemoryvault.ai
 NEXT_PUBLIC_APP_URL=https://yourdomain.com
 ```
 
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `RESEND_API_KEY` | For real sends | Resend API key |
+| `EMAIL_FROM` | Recommended | From header (display name + address). Defaults in code to `Family Memory Vault <support@mail.familymemoryvault.ai>` |
+| `EMAIL_REPLY_TO` | Optional | Default Reply-To. Defaults to `support@familymemoryvault.ai`. Per-send overrides still win (e.g. feedback replies to the submitter) |
+
 - Without `RESEND_API_KEY`, `sendEmail` **logs** the message to the console and returns `{ ok: true, logged: true }` — no network call.
-- `EMAIL_FROM` must use a domain verified in Resend for production. For quick tests, Resend’s `onboarding@resend.dev` works (limited recipients).
+- `EMAIL_FROM` must use a domain **verified in Resend**. Production uses the `mail.familymemoryvault.ai` subdomain (`support@mail.familymemoryvault.ai`).
+- All app-owned transactional mail (invites, lifecycle, admin alerts) goes through `src/lib/email.ts` and uses `EMAIL_FROM` / `EMAIL_REPLY_TO` unless a caller intentionally passes `from` / `replyTo`.
 
 ## Usage
 

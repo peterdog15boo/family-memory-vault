@@ -16,6 +16,7 @@ import {
 import { UpgradePrompt } from "@/components/billing/UpgradePrompt";
 import { celebrateFromJourney } from "@/lib/celebrations/bus";
 import { FamilyCircleStrength } from "@/components/family/FamilyCircleStrength";
+import { FamilyLocationMap } from "@/components/family/FamilyLocationMap";
 import type { JourneyCelebrationPayload } from "@/lib/gamification/types";
 import { useCopy, useFormat, useTranslations } from "@/components/i18n/LocaleProvider";
 import type { TranslateFn } from "@/lib/i18n";
@@ -24,6 +25,7 @@ import type {
   SerializedFamilyMember,
   SerializedFamilyWithMembership,
 } from "@/lib/families/serialize";
+import type { FamilyLocationsPayload } from "@/lib/location/types";
 import { INVITABLE_FAMILY_ROLES } from "@/lib/families/types";
 import { userFacingApiError } from "@/lib/http/user-messages";
 import type { PlanCapabilities } from "@/lib/plans/gates";
@@ -33,6 +35,7 @@ type FamilySettingsPanelProps = {
   viewerUserId: string;
   families: SerializedFamilyWithMembership[];
   membersByFamilyId: Record<string, SerializedFamilyMember[]>;
+  locationsByFamilyId: Record<string, FamilyLocationsPayload>;
   capabilities: PlanCapabilities;
 };
 
@@ -47,6 +50,7 @@ export function FamilySettingsPanel({
   viewerUserId,
   families: initialFamilies,
   membersByFamilyId: initialMembers,
+  locationsByFamilyId: initialLocations,
   capabilities,
 }: FamilySettingsPanelProps) {
   const router = useRouter();
@@ -250,6 +254,16 @@ export function FamilySettingsPanel({
             </div>
 
             <FamilyCircleStrength members={members} className="mt-5" />
+
+            <FamilyLocationMap
+              familyId={family.id}
+              viewerUserId={viewerUserId}
+              initialLocations={initialLocations[family.id]?.locations ?? []}
+              initialViewerDistanceEnabled={
+                initialLocations[family.id]?.viewerDistanceEnabled ?? false
+              }
+              className="mt-8"
+            />
 
             {isOwner ? (
               canInvite ? (

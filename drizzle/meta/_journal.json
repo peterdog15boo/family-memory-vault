@@ -274,6 +274,13 @@
       "when": 1785448100000,
       "tag": "0049_terms_acceptances",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1786067000000,
+      "tag": "0050_user_location_sharing",
+      "breakpoints": true
     }
   ]
 }

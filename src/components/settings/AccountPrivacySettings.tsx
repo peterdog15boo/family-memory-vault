@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { BrowserPushSettings } from "@/components/settings/BrowserPushSettings";
+import { LocationSharingSettings } from "@/components/settings/LocationSharingSettings";
 import type {
   AccountPreferenceToggleKey,
   PublicAccountPreferences,
@@ -506,6 +507,21 @@ export function AccountPrivacySettings({
             </button>
           </li>
         </ul>
+
+        <div
+          id="family-location"
+          className="mt-5 scroll-mt-24 border-t border-[color:var(--border-subtle)] pt-5"
+        >
+          <h4 className="text-sm font-medium text-ink">
+            {t("settings.locationSharingTitle")}
+          </h4>
+          <p className="mt-1 text-sm text-ink-muted">
+            {t("settings.locationSharingLead")}
+          </p>
+          <div className="mt-4">
+            <LocationSharingSettings />
+          </div>
+        </div>
 
         <div className="mt-5 border-t border-[color:var(--border-subtle)] pt-5">
           <ToggleRow

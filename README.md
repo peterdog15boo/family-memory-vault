@@ -95,7 +95,7 @@ Or drain once with `Authorization: Bearer $WORKER_SECRET`:
 | **Moderation** | `AI_MODERATION_*`, provider keys, `PHOTODNA_*`, `NCMEC_*`, `MODERATION_MOCK_SCENARIO` | Enable live vendors for production |
 | **Faces** | `FACE_DETECTION_*`, `FACE_GROUPING_*` | Optional |
 | **Stripe** | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_PRICE_*` | Optional; webhook secret required if Stripe is enabled |
-| **Email** | `RESEND_API_KEY`, `EMAIL_FROM` | Optional |
+| **Email** | `RESEND_API_KEY`, `EMAIL_FROM`, optional `EMAIL_REPLY_TO` | Optional |
 | **Admin** | `ADMIN_USER_IDS` | Optional bootstrap; prefer `npm run admin:promote` |
 
 Production boot validates required vars via `src/instrumentation.ts` (see [DEPLOYMENT.md](./DEPLOYMENT.md)).

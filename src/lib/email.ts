@@ -6,7 +6,8 @@
  *   await sendWelcomeEmail({ to: "you@example.com", firstName: "Alex" });
  *
  * Without RESEND_API_KEY, emails are logged to the console (dev-friendly)
- * and not sent. Set EMAIL_FROM to a verified Resend from-address in production.
+ * and not sent. Set EMAIL_FROM to the verified Resend from-address in production
+ * (mail.familymemoryvault.ai). Optional EMAIL_REPLY_TO sets a default Reply-To.
  */
 
 import { Resend } from "resend";
@@ -52,15 +53,33 @@ export {
 /* Config                                                                      */
 /* -------------------------------------------------------------------------- */
 
+/** Verified Resend subdomain — default for all app-owned transactional mail. */
+export const DEFAULT_EMAIL_FROM =
+  "Family Memory Vault <support@mail.familymemoryvault.ai>";
+
+export const DEFAULT_EMAIL_REPLY_TO = "support@familymemoryvault.ai";
+
 export function isEmailConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY?.trim());
 }
 
+/**
+ * From address for outbound Resend mail.
+ * Prefer EMAIL_FROM; falls back to the verified support@mail subdomain.
+ * Override per-send via `sendEmail({ from })` only when a different purpose
+ * address is intentionally required later.
+ */
 export function getEmailFromAddress(): string {
-  return (
-    process.env.EMAIL_FROM?.trim() ||
-    "Family Memory Vault <onboarding@resend.dev>"
-  );
+  return process.env.EMAIL_FROM?.trim() || DEFAULT_EMAIL_FROM;
+}
+
+/**
+ * Default Reply-To for outbound mail.
+ * Prefer EMAIL_REPLY_TO; otherwise support@familymemoryvault.ai.
+ * Per-send `replyTo` (e.g. feedback → submitter) overrides this.
+ */
+export function getEmailReplyToAddress(): string {
+  return process.env.EMAIL_REPLY_TO?.trim() || DEFAULT_EMAIL_REPLY_TO;
 }
 
 function getResendClient(): Resend | null {
@@ -113,13 +132,14 @@ export async function sendEmail(
   }
 
   const from = input.from?.trim() || getEmailFromAddress();
+  const replyTo = input.replyTo?.trim() || getEmailReplyToAddress();
   const payload = {
     from,
     to: recipients,
     subject: input.subject,
     html: input.html,
     text: input.text,
-    replyTo: input.replyTo,
+    replyTo,
     tags: input.tags,
   };
 
@@ -128,6 +148,7 @@ export async function sendEmail(
     console.info("[email] RESEND_API_KEY not set — logging email instead of sending", {
       from: payload.from,
       to: payload.to,
+      replyTo: payload.replyTo,
       subject: payload.subject,
       text: payload.text?.slice(0, 500),
     });
@@ -141,7 +162,7 @@ export async function sendEmail(
       subject: payload.subject,
       html: payload.html,
       text: payload.text,
-      replyTo: payload.replyTo,
+      ...(payload.replyTo ? { replyTo: payload.replyTo } : {}),
       tags: payload.tags,
     });
 

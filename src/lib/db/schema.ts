@@ -290,6 +290,10 @@ export const DEFAULT_USER_ACCOUNT_PREFERENCES = {
   locale: "en-US",
 } as const satisfies Required<UserAccountPreferences>;
 
+/** How much location a user shares with active family members. Default off. */
+export const LOCATION_SHARING_LEVELS = ["off", "city", "precise"] as const;
+export type LocationSharingLevel = (typeof LOCATION_SHARING_LEVELS)[number];
+
 export const users = pgTable(
   "users",
   {
@@ -307,6 +311,19 @@ export const users = pgTable(
       .$type<UserAccountPreferences>()
       .default(sql`'{}'::jsonb`)
       .notNull(),
+    /** Family map: off by default — never inferred from IP. */
+    locationSharing: text("location_sharing")
+      .$type<LocationSharingLevel>()
+      .default("off")
+      .notNull(),
+    /** Human-readable label shown to family, e.g. "Austin, TX". */
+    locationLabel: text("location_label"),
+    locationCity: text("location_city"),
+    locationRegion: text("location_region"),
+    locationCountry: text("location_country"),
+    latitude: doublePrecision("latitude"),
+    longitude: doublePrecision("longitude"),
+    locationUpdatedAt: timestamp("location_updated_at", { withTimezone: true }),
     /** Platform admin — access to /admin tools. Prefer DB flag; ADMIN_USER_IDS is bootstrap. */
     isAdmin: boolean("is_admin").default(false).notNull(),
     /** Soft suspend — blocks app access when set. */
@@ -326,6 +343,7 @@ export const users = pgTable(
     uniqueIndex("users_email_idx").on(table.email),
     index("users_suspended_at_idx").on(table.suspendedAt),
     index("users_last_active_at_idx").on(table.lastActiveAt),
+    index("users_location_sharing_idx").on(table.locationSharing),
   ],
 );
 

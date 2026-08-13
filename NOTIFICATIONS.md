@@ -71,7 +71,7 @@ See also [EMAIL.md](./EMAIL.md) for templates and env setup.
 
 `media_ready` is **in-app only** (avoids an email per photo).
 
-Without `RESEND_API_KEY`, `sendEmail` returns `{ ok: true, logged: true }` and prints from/to/subject/text.
+Without `RESEND_API_KEY`, `sendEmail` returns `{ ok: true, logged: true }` and prints from/to/subject/text. Outbound mail uses `EMAIL_FROM` (default `Family Memory Vault <support@mail.familymemoryvault.ai>`) and optional `EMAIL_REPLY_TO`.
 
 ---
 

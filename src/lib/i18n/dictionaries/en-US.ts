@@ -160,6 +160,76 @@ export const enUS = {
     readMorePrivacy: "Read more in our {privacy}.",
     termsOfService: "Terms of Service",
     readMoreLegal: "Also see our {terms} and {privacy}.",
+    locationSharingTitle: "Family location",
+    locationSharingLead:
+      "Optional family map snapshot — not live tracking. Off by default; only active family members can see what you choose to share.",
+    locationLoading: "Loading location settings…",
+    locationSharingLevel: "Location sharing",
+    locationLevelOff: "Off",
+    locationLevelOffHelp: "Your location is hidden from family members.",
+    locationLevelCity: "City or region",
+    locationLevelCityHelp:
+      "Share an approximate area only — no street address or precise GPS pin.",
+    locationLevelPrecise: "Precise location",
+    locationLevelPreciseHelp:
+      "Share an exact map pin. Requires browser permission and an explicit confirmation.",
+    locationCity: "City",
+    locationCityPlaceholder: "e.g. Austin",
+    locationRegion: "State / region",
+    locationRegionPlaceholder: "e.g. Texas",
+    locationCountry: "Country",
+    locationCountryPlaceholder: "e.g. United States",
+    locationUseApproximate: "Use my approximate location",
+    locationUsePrecise: "Update precise location",
+    locationPermissionCopy:
+      "Your browser will ask permission before we read location. We never infer location from your IP address. Approximate mode stores city/region only.",
+    locationPreviewTitle: "What family will see",
+    locationPreviewOff: "Nothing — location sharing is off.",
+    locationPreviewOn: "Family members will see: {label}",
+    locationPreviewIncomplete:
+      "Add a city or use approximate location to finish setup.",
+    locationPreviewCityDetail:
+      "City/region mode — family sees “{label}” only. No street address or precise GPS.",
+    locationPreviewCityIncomplete:
+      "City/region mode — add a place above so family can see your area.",
+    locationPreviewPreciseDetail:
+      "Precise mode — family sees a map pin near {label}.",
+    locationPreviewPreciseIncomplete:
+      "Precise mode — confirm and save your current location to show a pin.",
+    locationPreciseConfirmTitle: "Share precise location?",
+    locationPreciseConfirmBody:
+      "Family members you invited can see your exact map pin until you stop sharing or clear your data. This saves a snapshot — we do not track you in the background.",
+    locationPreciseConfirmAction: "Yes, share precise location",
+    locationGeolocationUnsupported:
+      "This browser does not support location access.",
+    locationPrivacyTitle: "Privacy",
+    locationStopSharing: "Stop sharing location",
+    locationStopSharingHelp:
+      "Hide your location from the family map immediately. Your saved place stays on this device until you clear it.",
+    locationClearData: "Clear saved location data",
+    locationClearDataHelp:
+      "Delete your city, region, and coordinates from Family Memory Vault.",
+    locationClearConfirm:
+      "Clear all saved location data? Family members will no longer see your place, and you will need to enter it again to share.",
+    locationManualHint:
+      "City and region are enough — no street address is required.",
+  },
+  locationPrivacy: {
+    title: "About family location",
+    optional:
+      "Location sharing is optional and off by default. You choose if, when, and how much to share.",
+    snapshot:
+      "This is a shared snapshot you save — not live tracking or real-time surveillance. The map updates only when you change your settings.",
+    cityLevel:
+      "City or region shows an approximate area (for example, “Austin, TX”). No street address is required or shown.",
+    preciseLevel:
+      "Precise shows a map pin at coordinates you explicitly save and confirm. Use only if you are comfortable with that level of detail.",
+    whoSees:
+      "Only active family members in vaults you share can see your location. It is never shown on public pages or to people outside your family.",
+    invitedWarning:
+      "Family members you invite can see whatever location level you turn on while sharing is enabled.",
+    notTracking:
+      "We do not track your movement in the background. We never infer location from your IP address.",
   },
   pages: {
     landing: "Landing",
@@ -1029,6 +1099,30 @@ export const enUS = {
     role: "Role",
     sendInvite: "Send invite",
     roleFor: "Role for {name}",
+    locationMapTitle: "Family map",
+    locationMapLead:
+      "An optional snapshot of places family members choose to share — not live tracking. Everyone controls their own level in Settings.",
+    locationMapAria: "Interactive family location map",
+    locationMapLoading: "Loading family map…",
+    locationMapError: "Could not load family map.",
+    locationMapEmptyBody:
+      "No family locations to show yet. Location sharing is optional in Settings.",
+    locationMapSettingsCta: "Open location settings",
+    locationMapNoCoords:
+      "Some family members shared a place name only. Their city or region appears in the list below.",
+    locationMapRefreshing: "Updating map…",
+    locationListAria: "Family locations list",
+    locationListTitle: "Family locations",
+    locationListNoCoords: "Map pin unavailable",
+    locationUnknownMember: "Family member",
+    locationYou: "You",
+    locationLevelCityBadge: "City/region",
+    locationLevelPreciseBadge: "Precise",
+    locationUpdated: "Updated {date}",
+    distanceSameCity: "Same city",
+    distanceNearby: "Nearby",
+    distanceMiles: "About {distance} miles away",
+    distanceShareHint: "Share your location in Settings to see distances.",
   },
   beta: {
     eyebrow: "Private beta",

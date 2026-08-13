@@ -9,6 +9,8 @@ import {
   getFamilyMembersWithProfiles,
   getUserFamilies,
 } from "@/lib/families";
+import { getFamilyMemberLocations } from "@/lib/location";
+import type { FamilyLocationsPayload } from "@/lib/location/types";
 import {
   serializeFamilyMemberForViewer,
   serializeFamilyWithMembership,
@@ -36,14 +38,19 @@ export default async function FamilyPage() {
   const serialized = families.map(serializeFamilyWithMembership);
 
   const membersByFamilyId: Record<string, SerializedFamilyMember[]> = {};
+  const locationsByFamilyId: Record<string, FamilyLocationsPayload> = {};
 
   await Promise.all(
     families.map(async (family) => {
       const viewerIsOwner = family.membership.role === "owner";
-      const members = await getFamilyMembersWithProfiles(family.id);
+      const [members, locationPayload] = await Promise.all([
+        getFamilyMembersWithProfiles(family.id),
+        getFamilyMemberLocations(family.id, userId),
+      ]);
       membersByFamilyId[family.id] = members.map((member) =>
         serializeFamilyMemberForViewer(member, { viewerIsOwner }),
       );
+      locationsByFamilyId[family.id] = locationPayload;
     }),
   );
 
@@ -68,6 +75,7 @@ export default async function FamilyPage() {
           viewerUserId={userId}
           families={serialized}
           membersByFamilyId={membersByFamilyId}
+          locationsByFamilyId={locationsByFamilyId}
           capabilities={capabilities}
         />
 
