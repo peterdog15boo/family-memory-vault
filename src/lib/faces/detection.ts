@@ -4,6 +4,10 @@
  * Runs a pluggable detector on clean photo or video media, then persists rows
  * into `faces` linked to that media. Videos are sampled via ffmpeg frames.
  *
+ * Face rows are scoped to an *actor* userId (the People graph owner). For
+ * owned media the actor is the media owner; for shared family media the actor
+ * is the family viewer so matches land on that viewer's People.
+ *
  * Provider switch: FACE_DETECTION_PROVIDER=rekognition|google_vision|mock
  * Enable live calls: FACE_DETECTION_ENABLED=true (+ provider credentials)
  *
@@ -52,10 +56,13 @@ export type {
 export { FaceDetectionError, FACE_DETECTION_PROVIDERS };
 
 export type DetectAndStoreFacesOptions = {
-  /** When set, must match media.user_id. */
+  /**
+   * Actor whose People graph receives face rows.
+   * Must be able to view the media (owner or family). Defaults to media owner.
+   */
   userId?: string;
   /**
-   * If faces already exist for this media:
+   * If faces already exist for this actor+media:
    * - false (default): skip detection and return existing rows
    * - true: delete existing faces then re-detect
    */
@@ -122,26 +129,13 @@ function assertCleanVisualMedia(row: Media): void {
   if (!isSafeToServe(row.moderationStatus) || row.status !== "ready") {
     throw new FaceDetectionError(
       "policy",
-      `Face detection requires clean/ready media (got moderation=${row.moderationStatus}, status=${row.status}).`,
+      "Media must be clean and ready for face detection.",
     );
   }
   if (row.type !== "photo" && row.type !== "video") {
     throw new FaceDetectionError(
       "policy",
-      "Face detection supports photos and videos only.",
-    );
-  }
-  const ct = row.contentType?.toLowerCase() ?? "";
-  if (row.type === "photo" && ct && !ct.startsWith("image/")) {
-    throw new FaceDetectionError(
-      "policy",
-      `Face detection requires an image content type (got ${row.contentType}).`,
-    );
-  }
-  if (row.type === "video" && ct && !ct.startsWith("video/")) {
-    throw new FaceDetectionError(
-      "policy",
-      `Face detection requires a video content type (got ${row.contentType}).`,
+      "Face detection only runs on photos or videos.",
     );
   }
 }
@@ -157,7 +151,6 @@ type ImageBufferSource = {
 
 async function loadPhotoBuffers(row: Media): Promise<ImageBufferSource[]> {
   // Prefer full-res for detection so small faces aren't missed on 480px thumbs.
-  // Thumbnail-first caused empty People results → movies fell back to center.
   const key =
     row.processedKey?.trim() ||
     row.originalKey?.trim() ||
@@ -178,13 +171,15 @@ async function loadPhotoBuffers(row: Media): Promise<ImageBufferSource[]> {
   ];
 }
 
-async function loadVideoFrameBuffers(row: Media): Promise<{
-  sources: ImageBufferSource[];
-  errors: string[];
-}> {
+async function loadVideoFrameBuffers(
+  row: Media,
+): Promise<{ sources: ImageBufferSource[]; errors: string[] }> {
   const key = row.originalKey || row.processedKey;
   if (!key) {
-    throw new FaceDetectionError("r2", "Missing video object key for face detection.");
+    throw new FaceDetectionError(
+      "r2",
+      "Missing video object key for face detection.",
+    );
   }
 
   const object = await getObjectBytes(key);
@@ -224,10 +219,49 @@ async function loadVideoFrameBuffers(row: Media): Promise<{
 }
 
 /**
- * Detect faces on a clean photo or video and store them in `faces`.
- *
- * Errors from the provider are logged and rethrown as FaceDetectionError
- * (callers / workers can retry). Policy skips return `{ skipped: true }`.
+ * Copy owner-detected face geometry/embeddings into the actor's face rows
+ * (without personId — grouping matches against the actor's People).
+ * Does not copy faceToken (provider collections are per-user).
+ */
+async function reuseOwnerFacesForActor(
+  mediaId: string,
+  ownerUserId: string,
+  actorUserId: string,
+): Promise<Face[]> {
+  const ownerFaces = await listFacesForMedia(mediaId, ownerUserId);
+  if (ownerFaces.length === 0) return [];
+
+  const stored: Face[] = [];
+  for (const ownerFace of ownerFaces) {
+    try {
+      const created = await createFace({
+        userId: actorUserId,
+        mediaId,
+        boundingBox: ownerFace.boundingBox,
+        embedding: ownerFace.embedding,
+        // Intentionally omit faceToken — identity collections are per actor.
+        confidence: ownerFace.confidence,
+        provider: ownerFace.provider
+          ? `reuse:${ownerFace.provider}`
+          : "reuse",
+        sourceFrameMs: ownerFace.sourceFrameMs,
+      });
+      stored.push(created);
+    } catch (error) {
+      console.error(`${LOG} failed to reuse owner face`, {
+        mediaId,
+        ownerFaceId: ownerFace.id,
+        actorUserId,
+        error,
+      });
+    }
+  }
+  return stored;
+}
+
+/**
+ * Detect faces on clean media and store rows for the actor's People graph.
+ * Policy skips return `{ skipped: true }` (callers / workers can retry).
  */
 export async function detectAndStoreFacesForMedia(
   mediaId: string,
@@ -248,8 +282,13 @@ export async function detectAndStoreFacesForMedia(
     throw new FaceDetectionError("input", `Media not found: ${mediaId}`);
   }
 
-  if (options.userId && row.userId !== options.userId) {
-    throw new FaceDetectionError("auth", "Media not found.");
+  const actorUserId = options.userId?.trim() || row.userId;
+
+  if (options.userId) {
+    const { canViewMedia } = await import("@/lib/permissions");
+    if (!(await canViewMedia(actorUserId, mediaId))) {
+      throw new FaceDetectionError("auth", "Media not found.");
+    }
   }
 
   try {
@@ -271,10 +310,11 @@ export async function detectAndStoreFacesForMedia(
     };
   }
 
-  const existing = await listFacesForMedia(mediaId, row.userId);
+  const existing = await listFacesForMedia(mediaId, actorUserId);
   if (existing.length > 0 && !options.replaceExisting) {
     console.info(`${LOG} faces already present — skipping`, {
       mediaId,
+      actorUserId,
       count: existing.length,
     });
     return {
@@ -289,8 +329,38 @@ export async function detectAndStoreFacesForMedia(
   }
 
   if (existing.length > 0 && options.replaceExisting) {
-    const removed = await deleteFacesForMedia(mediaId, row.userId);
-    console.info(`${LOG} replaced existing faces`, { mediaId, removed });
+    const removed = await deleteFacesForMedia(mediaId, actorUserId);
+    console.info(`${LOG} replaced existing faces`, {
+      mediaId,
+      actorUserId,
+      removed,
+    });
+  }
+
+  // Shared media: reuse owner detections when available (boxes + embeddings).
+  if (actorUserId !== row.userId) {
+    const reused = await reuseOwnerFacesForActor(
+      mediaId,
+      row.userId,
+      actorUserId,
+    );
+    if (reused.length > 0) {
+      console.info(`${LOG} reused owner faces for family viewer`, {
+        mediaId,
+        actorUserId,
+        ownerUserId: row.userId,
+        count: reused.length,
+      });
+      return {
+        mediaId,
+        provider: "reuse",
+        mock: false,
+        skipped: false,
+        detectedCount: reused.length,
+        stored: reused,
+        notes: "Reused owner face detections for family viewer.",
+      };
+    }
   }
 
   let sources: ImageBufferSource[];
@@ -332,6 +402,7 @@ export async function detectAndStoreFacesForMedia(
   const provider = options.provider ?? getFaceDetectionProvider();
   console.info(`${LOG} running detector`, {
     mediaId,
+    actorUserId,
     type: row.type,
     provider: provider.name,
     sources: sources.length,
@@ -413,7 +484,7 @@ export async function detectAndStoreFacesForMedia(
   for (const pending of allDetected) {
     try {
       const created = await createFace({
-        userId: row.userId,
+        userId: actorUserId,
         mediaId,
         boundingBox: pending.face.boundingBox,
         embedding: pending.face.embedding,
@@ -426,6 +497,7 @@ export async function detectAndStoreFacesForMedia(
     } catch (error) {
       console.error(`${LOG} failed to persist face`, {
         mediaId,
+        actorUserId,
         error,
         box: pending.face.boundingBox,
       });
@@ -435,6 +507,7 @@ export async function detectAndStoreFacesForMedia(
 
   console.info(`${LOG} complete`, {
     mediaId,
+    actorUserId,
     type: row.type,
     provider: lastProviderResult?.provider ?? provider.name,
     mock: lastProviderResult?.mock ?? provider.name === "mock",
@@ -450,7 +523,7 @@ export async function detectAndStoreFacesForMedia(
     skipped: false,
     detectedCount: allDetected.length,
     stored,
-    notes: notes.join(" | ") || lastProviderResult?.notes,
-    frameCount: row.type === "video" ? sources.length : undefined,
+    frameCount: sources.length,
+    notes: notes.join(" | ") || undefined,
   };
 }

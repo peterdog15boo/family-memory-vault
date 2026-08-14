@@ -296,6 +296,7 @@ export async function applyHumanReviewDecision(options: {
     await maybeGenerateThumbnailForMedia(updated);
     await maybeEnqueueFaceDetectionForMedia(updated, {
       source: "moderation.human_review.clean",
+      fanOutFamilyViewers: true,
     });
     await maybeEnqueueSceneAnalysisForMedia(updated, {
       source: "moderation.human_review.clean",

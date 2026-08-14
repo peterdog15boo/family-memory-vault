@@ -64,6 +64,7 @@ import {
   resolveSuggestionToLibraryId,
 } from "@/lib/movies/music/library";
 import { estimateMovieRenderTime } from "@/lib/movies/estimate";
+import { beginCriticalWork } from "@/lib/session/critical-activity";
 
 /** Panel accent colors keyed by movie style (presets set style; no theme picker). */
 const THEME_ACCENTS: Record<MovieStyle, string> = {
@@ -293,6 +294,28 @@ export function CreateMoviePanel({
   }, []);
 
   useEffect(() => () => stopPolling(), [stopPolling]);
+
+  // Keep idle logout aware of an in-flight render (warn, then still force if ignored).
+  const endMovieRenderRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    const rendering =
+      movie?.status === "queued" ||
+      movie?.status === "processing" ||
+      phase === "crafting";
+    if (rendering && !endMovieRenderRef.current) {
+      endMovieRenderRef.current = beginCriticalWork("movie_render");
+    } else if (!rendering && endMovieRenderRef.current) {
+      endMovieRenderRef.current();
+      endMovieRenderRef.current = null;
+    }
+  }, [movie?.status, phase]);
+  useEffect(
+    () => () => {
+      endMovieRenderRef.current?.();
+      endMovieRenderRef.current = null;
+    },
+    [],
+  );
 
   useEffect(() => {
     setMounted(true);

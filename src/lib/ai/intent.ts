@@ -37,6 +37,11 @@ import {
   detectMediaPreference,
 } from "@/lib/ai/media-preference";
 import { intentLocalePromptSuffix } from "@/lib/ai/locale";
+import {
+  disambiguatePeopleVsVisual,
+  matchKnownPersonName,
+} from "@/lib/ai/disambiguate";
+import { isCommonObjectOrSceneTerm } from "@/lib/ai/visual-lexicon";
 import type { AppLocale } from "@/lib/i18n";
 import { createTranslator, DEFAULT_LOCALE } from "@/lib/i18n";
 
@@ -274,7 +279,10 @@ export async function parseIntent(
     }
   }
 
-  const fallback = parseIntentFallback(raw, { now: options.now });
+  const fallback = parseIntentFallback(raw, {
+    now: options.now,
+    knownPeople: options.knownPeople,
+  });
   return finalizeIntent(fallback, options, { source: "fallback" });
 }
 
@@ -359,6 +367,7 @@ async function parseIntentWithLlm(
 
 export type FallbackParseOptions = {
   now?: Date;
+  knownPeople?: string[];
 };
 
 /**
@@ -402,8 +411,8 @@ export function parseIntentFallback(
 
   // Mixed: find photos + how-to → search first; help tip is appended later.
   if (isMixedHelpAndMediaRequest(raw) && SEARCH_CUES.test(lower)) {
-    const extractedPeople = extractPeople(raw);
-    const scrubbed = scrubFalsePeople(raw, extractedPeople);
+    const extractedPeople = extractPeople(raw, options.knownPeople);
+    const scrubbed = scrubFalsePeople(raw, extractedPeople, options.knownPeople);
     const people = scrubbed.people;
     const date_range = extractDateRange(raw, now);
     const qualities = uniqueStrings([
@@ -419,7 +428,12 @@ export function parseIntentFallback(
         ? visual_query
             .split(/\s+/)
             .map((w) => w.replace(/[^a-z0-9-]/gi, ""))
-            .filter((w) => w.length > 2)
+            .filter(
+              (w) =>
+                w.length > 2 &&
+                !STOP_WORDS.has(w.toLowerCase()) &&
+                !isWeakVisualPhrase(w),
+            )
         : []),
     ]);
     return {
@@ -435,8 +449,8 @@ export function parseIntentFallback(
   }
 
   const action = detectAction(lower);
-  const extractedPeople = extractPeople(raw);
-  const scrubbed = scrubFalsePeople(raw, extractedPeople);
+  const extractedPeople = extractPeople(raw, options.knownPeople);
+  const scrubbed = scrubFalsePeople(raw, extractedPeople, options.knownPeople);
   const people = scrubbed.people;
   const date_range = extractDateRange(raw, now);
   const tone = detectTone(lower);
@@ -451,7 +465,12 @@ export function parseIntentFallback(
       ? visual_query
           .split(/\s+/)
           .map((w) => w.replace(/[^a-z0-9-]/gi, ""))
-          .filter((w) => w.length > 2)
+          .filter(
+            (w) =>
+              w.length > 2 &&
+              !STOP_WORDS.has(w.toLowerCase()) &&
+              !isWeakVisualPhrase(w),
+          )
       : []),
   ]);
   const theme_preference = detectTheme(lower, tone);
@@ -565,7 +584,7 @@ const MOVIE_CUES =
 const MEMORY_CUES =
   /\b(memory|album|collection|scrapbook|gather|compile)\b/i;
 const SEARCH_CUES =
-  /\b(show\s+me|find|search|look\s+for|photos?\s+of|pictures?\s+of|images?\s+of|videos?\s+of)\b/i;
+  /\b(show\s+me|find|search|look\s+for|photos?\s+of|pictures?\s+of|images?\s+of|videos?\s+of|muéstrame|muestrame|muestra(?:me)?|busca(?:me)?|fotos?\s+de|imagens?\s+de|photos?\s+de|montre[- ]moi|cherche|zeige(?:\s+mir)?|fotos?\s+vom|bilder?\s+(?:von|vom)|mostra(?:mi)?)\b/i;
 const CREATE_CUES = /\b(create|make|build|put\s+together|generate)\b/i;
 
 function detectAction(lower: string): AssistantActionType {
@@ -855,6 +874,12 @@ const STOP_WORDS = new Set(
     "picture",
     "images",
     "image",
+    "fotos",
+    "foto",
+    "imagens",
+    "imagem",
+    "bilder",
+    "bild",
     "videos",
     "video",
     "slideshow",
@@ -926,22 +951,30 @@ function titleCaseName(value: string): string {
     .join(" ");
 }
 
-function extractPeople(raw: string): string[] {
+function extractPeople(raw: string, knownPeople?: string[]): string[] {
   const found: string[] = [];
 
   for (const match of raw.matchAll(KINSHIP)) {
     pushUnique(found, titleCaseName(match[1]!));
   }
 
-  // "for Craig", "of Noah", "about Sarah" — case-insensitive
+  // "for Craig", "of Noah", "about Sarah" — case-insensitive.
+  // Never treat "of a toilet" / "of an airplane" as a person name.
+  // Object/scene demotion happens in scrubFalsePeople (so qualities are harvested).
   for (const match of raw.matchAll(
     /\b(?:for|of|about)\s+([A-Za-z][A-Za-z'-]*(?:\s+[A-Za-z][A-Za-z'-]*)?)\b/gi,
   )) {
     const name = match[1]!;
+    if (/^(?:a|an|the)\s+/i.test(name)) {
+      continue;
+    }
     if (
       !STOP_WORDS.has(name.toLowerCase()) &&
       !/^(grade|christmas|summer|winter|spring|fall|autumn)$/i.test(name) &&
-      !isFalsePersonCandidate(name, raw)
+      !(
+        isCommonObjectOrSceneTerm(name) &&
+        !matchKnownPersonName(name, knownPeople)
+      )
     ) {
       pushUnique(found, titleCaseName(name));
     }
@@ -962,7 +995,12 @@ function extractPeople(raw: string): string[] {
     ) {
       continue;
     }
-    if (isFalsePersonCandidate(token, raw)) continue;
+    if (
+      isCommonObjectOrSceneTerm(token) &&
+      !matchKnownPersonName(token, knownPeople)
+    ) {
+      continue;
+    }
     pushUnique(found, token);
   }
 
@@ -1015,7 +1053,7 @@ const PEOPLE_CATEGORY_SEARCH_TERMS = new Set([
 
 /**
  * Objects / scene nouns that must never be treated as People-list names.
- * Keep focused on common false positives from activity prompts.
+ * Includes everyday object/scene words that often follow “photos of …”.
  */
 const NON_PERSON_NOUNS = new Set([
   "cigar",
@@ -1027,6 +1065,13 @@ const NON_PERSON_NOUNS = new Set([
   "wine",
   "coffee",
   "cake",
+  "toilet",
+  "toilets",
+  "bathroom",
+  "kitchen",
+  "bedroom",
+  "living",
+  "room",
   "boat",
   "car",
   "cars",
@@ -1037,6 +1082,7 @@ const NON_PERSON_NOUNS = new Set([
   "beach",
   "wedding",
   "party",
+  "birthday",
   "fishing",
   "golf",
   "smoking",
@@ -1060,6 +1106,7 @@ const NON_PERSON_NOUNS = new Set([
   "exterior",
   "office",
   "home",
+  "house",
   "inflatable",
   "inflatables",
   "bounce",
@@ -1074,6 +1121,13 @@ const NON_PERSON_NOUNS = new Set([
   "dog",
   "dogs",
   "puppy",
+  "cat",
+  "cats",
+  "food",
+  "airplane",
+  "plane",
+  "canoe",
+  "toaster",
   "photo",
   "photos",
   "picture",
@@ -1085,13 +1139,25 @@ const NON_PERSON_NOUNS = new Set([
   ...PEOPLE_CATEGORY_SEARCH_TERMS,
 ]);
 
-/** Phrases that strongly indicate object/scene search. */
+/** Phrases that strongly indicate object/scene search (EN + common locales). */
 const VISUAL_QUERY_PATTERNS = [
   /\b(?:images?|photos?|pictures?|pics?)\s+taken\s+(.+?)(?:\s+from\s+|\s+in\s+\d{4}|$)/i,
   /\b(?:images?|photos?|pictures?|pics?)\s+(?:with|of|showing|containing)\s+(.+?)(?:\s+from\s+|\s+in\s+\d{4}|$)/i,
   /\b(?:slideshow|movie|memory|album)\s+(?:of|with|from)\s+(.+?)(?:\s+photos?\b|\s+pictures?\b|\s+from\s+|$)/i,
   /\b(?:show|find|get)\s+me\s+(?:some\s+|any\s+)?(.+?)$/i,
-  /\b(.+?)\s+(?:photos?|pictures?|pics?|images?)\b/i,
+  // ES / PT: "muéstrame fotos de un inodoro", "fotos de la playa"
+  /\b(?:muéstrame|muestrame|muestra(?:me)?|busca(?:me)?|ens(?:eñ|en)ame)\s+(?:(?:unas?\s+|algunas?\s+|unos?\s+)?)?(?:fotos?|imagens?|fotos?|videos?)\s+(?:de(?:\s+l[ao]s?)?|del|da|do)\s+(.+?)$/iu,
+  /\b(?:fotos?|imagens?|videos?)\s+(?:de(?:\s+l[ao]s?)?|del|da|do)\s+(.+?)$/iu,
+  // FR: "photos de gâteau", "montre-moi des photos de plage"
+  /\b(?:montre[- ]moi|cherche(?:[- ]moi)?)\s+(?:(?:des?\s+|une?\s+|du\s+|de\s+la\s+)?)?(?:photos?|images?|vidéos?|videos?)\s+(?:de|d'|du|des)\s+(.+?)$/iu,
+  /\b(?:photos?|images?|vidéos?|videos?)\s+(?:de|d'|du|des)\s+(.+?)$/iu,
+  // DE: "Fotos vom Strand", "zeige mir Bilder von …"
+  /\b(?:zeige(?:\s+mir)?)\s+(?:(?:einige\s+|ein\s+|eine\s+)?)?(?:fotos?|bilder?|videos?)\s+(?:vom|von|mit)\s+(.+?)$/iu,
+  /\b(?:fotos?|bilder?)\s+(?:vom|von)\s+(.+?)$/iu,
+  // IT: "foto di …"
+  /\b(?:mostra(?:mi)?)\s+(?:(?:delle?\s+|una?\s+)?)?(?:foto|immagini|video)\s+(?:di|del|della|dei|delle)\s+(.+?)$/iu,
+  /\b(?:foto|immagini)\s+(?:di|del|della|dei|delle)\s+(.+?)$/iu,
+  /\b(.+?)\s+(?:photos?|pictures?|pics?|images?|fotos?|bilder?)\b/i,
 ];
 
 /** Known visual phrases we can pull even from short prompts ("bounce house"). */
@@ -1138,6 +1204,23 @@ const KNOWN_VISUAL_PHRASES = [
   "office",
   "party",
   "cake",
+  "toilet",
+  "toilets",
+  "bathroom",
+  "inodoro",
+  "bano",
+  "baño",
+  "playa",
+  "plage",
+  "strand",
+  "pastel",
+  "tarta",
+  "gateau",
+  "gâteau",
+  "perro",
+  "voiture",
+  "coche",
+  "kitchen",
   "dog",
   "dogs",
   "puppy",
@@ -1146,6 +1229,7 @@ const KNOWN_VISUAL_PHRASES = [
   "bike",
   "car",
   "cars",
+  "auto",
   "men",
   "man",
   "women",
@@ -1158,6 +1242,20 @@ const KNOWN_VISUAL_PHRASES = [
   "children",
 ];
 
+function stripLeadingArticle(value: string): string {
+  return value.replace(/^(?:a|an|the)\s+/i, "").trim();
+}
+
+/** True when prompt uses “photos of a/an/the <noun>” for this candidate. */
+function hasArticleObjectCue(prompt: string, noun: string): boolean {
+  const stem = singularize(noun.trim().toLowerCase());
+  if (!stem || stem.length < 2) return false;
+  return new RegExp(
+    `\\b(?:photos?|pictures?|pics?|images?|videos?)\\s+(?:of|with|showing|containing)\\s+(?:a|an|the)\\s+${escapeRegExp(stem)}s?\\b`,
+    "i",
+  ).test(prompt);
+}
+
 export function extractVisualQuery(prompt: string): string | undefined {
   const trimmed = prompt.trim();
   if (!trimmed) return undefined;
@@ -1169,14 +1267,17 @@ export function extractVisualQuery(prompt: string): string | undefined {
       // Drop leading create/show verbs left in capture groups
       phrase = phrase
         .replace(
-          /^(?:show me|find|create|make|build|gather)\s+/i,
+          /^(?:show me|find|create|make|build|gather|muéstrame|muestrame|muestra(?:me)?|busca(?:me)?|montre[- ]moi|zeige(?:\s+mir)?|mostra(?:mi)?)\s+/i,
           "",
         )
         .replace(
-          /^(?:a|an|the|some|any)\s+/i,
+          /^(?:a|an|the|some|any|un|una|unos|unas|el|la|los|las|le|les|du|des|der|die|das|ein|eine|einen|einem|einer|il|lo|gli|uno|una)\s+/i,
           "",
         )
-        .replace(/^(?:photos?|pictures?|pics?|images?)\s+(?:of|with)\s+/i, "")
+        .replace(
+          /^(?:photos?|pictures?|pics?|images?|fotos?|imagens?|bilder?|videos?|vidéos?)\s+(?:of|with|de|d'|du|des|del|da|do|vom|von|di|del|della)\s+/i,
+          "",
+        )
         .trim();
       // Strip trailing people/date glue when captured greedily
       phrase = phrase
@@ -1186,6 +1287,11 @@ export function extractVisualQuery(prompt: string): string | undefined {
 
       // Person-name-only phrases belong on the People path, not visual tags.
       if (looksLikePersonNameOnly(phrase)) {
+        continue;
+      }
+
+      // Reject leftover command glue ("show me", "find some", bare "photos").
+      if (isWeakVisualPhrase(phrase)) {
         continue;
       }
 
@@ -1218,12 +1324,32 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/** True when a captured visual phrase is only command/media glue, not content. */
+function isWeakVisualPhrase(phrase: string): boolean {
+  const tokens = phrase
+    .toLowerCase()
+    .split(/\s+/)
+    .map((t) => t.replace(/[^a-z0-9-]/g, ""))
+    .filter(Boolean);
+  if (tokens.length === 0) return true;
+  return tokens.every(
+    (token) =>
+      STOP_WORDS.has(token) ||
+      /^(some|any|me|us|them|please|show|find|get|create|make|build)$/i.test(
+        token,
+      ),
+  );
+}
+
 /** True when a phrase is only a likely personal name (not an object/scene). */
 function looksLikePersonNameOnly(phrase: string): boolean {
   const trimmed = phrase.trim();
   if (!trimmed) return false;
   const lower = trimmed.toLowerCase();
   if (NON_PERSON_NOUNS.has(lower) || PEOPLE_CATEGORY_SEARCH_TERMS.has(lower)) {
+    return false;
+  }
+  if (isCommonObjectOrSceneTerm(lower) || isCommonObjectOrSceneTerm(trimmed)) {
     return false;
   }
   if (KNOWN_VISUAL_PHRASES.some((p) => p === lower)) return false;
@@ -1238,16 +1364,62 @@ function looksLikePersonNameOnly(phrase: string): boolean {
 export function isFalsePersonCandidate(
   candidate: string,
   prompt: string,
+  knownPeople?: string[],
 ): boolean {
   const lower = candidate.trim().toLowerCase();
   if (!lower) return true;
-  if (GENERIC_ROLE_WORDS.has(lower)) return true;
-  if (PEOPLE_CATEGORY_SEARCH_TERMS.has(lower)) return true;
-  if (NON_PERSON_NOUNS.has(lower)) return true;
-  if (STOP_WORDS.has(lower)) return true;
+
+  // Known account people win even if the token also appears in object vocab
+  // (rare collision); kinship + catalog matches are never "false people".
+  if (matchKnownPersonName(candidate, knownPeople)) {
+    return false;
+  }
+
+  const routed = disambiguatePeopleVsVisual({
+    candidate,
+    prompt,
+    knownPeople,
+  });
+  if (routed.preferVisual) return true;
+  if (routed.route === "object" || routed.route === "scene" || routed.route === "visual") {
+    return true;
+  }
+
+  // "A Toilet", "the beach" — articles mark object/scene phrases, not people.
+  if (/^(?:a|an|the)\s+/.test(lower)) return true;
+
+  const stripped = stripLeadingArticle(lower);
+  const stem = singularize(stripped);
+
+  if (GENERIC_ROLE_WORDS.has(stripped) || GENERIC_ROLE_WORDS.has(stem)) {
+    return true;
+  }
+  if (
+    PEOPLE_CATEGORY_SEARCH_TERMS.has(stripped) ||
+    PEOPLE_CATEGORY_SEARCH_TERMS.has(stem)
+  ) {
+    return true;
+  }
+  if (
+    isCommonObjectOrSceneTerm(stripped) ||
+    isCommonObjectOrSceneTerm(stem) ||
+    NON_PERSON_NOUNS.has(stripped) ||
+    NON_PERSON_NOUNS.has(stem)
+  ) {
+    return true;
+  }
+  if (STOP_WORDS.has(stripped) || STOP_WORDS.has(stem)) return true;
+  if (KNOWN_VISUAL_PHRASES.some((p) => p === stripped || p === stem)) {
+    return true;
+  }
+  if (hasArticleObjectCue(prompt, stripped) || hasArticleObjectCue(prompt, stem)) {
+    return true;
+  }
 
   const objects = extractActivityObjects(prompt);
-  if (objects.some((o) => sameStem(lower, o))) return true;
+  if (objects.some((o) => sameStem(lower, o) || sameStem(stripped, o))) {
+    return true;
+  }
 
   return false;
 }
@@ -1271,6 +1443,7 @@ export function extractActivityObjects(prompt: string): string[] {
 export function scrubFalsePeople(
   prompt: string,
   candidates: string[],
+  knownPeople?: string[],
 ): { people: string[]; qualities: string[] } {
   const people: string[] = [];
   const qualities = extractActivityObjects(prompt);
@@ -1284,7 +1457,7 @@ export function scrubFalsePeople(
   }
 
   for (const candidate of candidates) {
-    if (isFalsePersonCandidate(candidate, prompt)) {
+    if (isFalsePersonCandidate(candidate, prompt, knownPeople)) {
       const stem = singularize(candidate.trim().toLowerCase());
       if (
         stem &&
@@ -1318,13 +1491,90 @@ export function looksLikeSceneSearch(prompt: string, people: string[]): boolean 
     return true;
   }
   if (
-    /\b(inflatable|bounce house|bouncy|obstacle course|birthday cake|christmas tree|beach|playground|sunset|cigar|suit|tie|indoor|outdoor|indoors|outdoors|gentlemen|men|women|girls|boys)\b/.test(
+    /\b(inflatable|bounce house|bouncy|obstacle course|birthday cake|christmas tree|beach|playground|sunset|cigar|suit|tie|indoor|outdoor|indoors|outdoors|gentlemen|men|women|girls|boys|toilet|kitchen|bathroom|playa|plage|strand|spiaggia|praia|inodoro|bano|baño|pastel|tarta|gateau|gâteau|perro|voiture|coche|auto)\b/i.test(
       lower,
     )
   ) {
     return true;
   }
   return false;
+}
+
+/** High-level Ask AI search/help kind for routing and tests. */
+export type AskIntentKind =
+  | "person_search"
+  | "object_search"
+  | "scene_search"
+  | "help"
+  | "mixed"
+  | "memory_or_movie"
+  | "clarify"
+  | "other";
+
+/**
+ * Classify a parsed intent into a clear routing kind.
+ * Person search is only reported when real people remain after object scrubbing.
+ */
+export function classifyAskIntent(intent: AssistantIntent): AskIntentKind {
+  if (intent.action === "answer_help") return "help";
+  if (
+    intent.action === "create_memory" ||
+    intent.action === "create_movie" ||
+    intent.action === "create_legacy_instruction"
+  ) {
+    return "memory_or_movie";
+  }
+  if (intent.action === "clarify") return "clarify";
+
+  const people = (intent.people ?? []).filter((name) => {
+    // Trust finalized people; only drop obvious object/scene false positives.
+    if (/^(?:a|an|the)\s+/i.test(name.trim())) return false;
+    if (isCommonObjectOrSceneTerm(name)) return false;
+    return true;
+  });
+  const hasPeople = people.length > 0;
+  const visualParts = [
+    intent.visual_query ?? "",
+    ...(intent.objects ?? []),
+    ...(intent.scenes ?? []),
+    ...(intent.qualities ?? []),
+  ];
+  const visualBlob = visualParts.join(" ").toLowerCase();
+  const promptBlob = `${intent.raw_prompt} ${visualBlob}`.toLowerCase();
+
+  const hasVisual =
+    Boolean(intent.visual_query?.trim()) ||
+    (intent.objects?.length ?? 0) > 0 ||
+    (intent.scenes?.length ?? 0) > 0 ||
+    (intent.qualities?.length ?? 0) > 0 ||
+    looksLikeSceneSearch(intent.raw_prompt, people);
+
+  const hasPeopleCategory = [...PEOPLE_CATEGORY_SEARCH_TERMS].some((term) =>
+    new RegExp(`\\b${escapeRegExp(term)}\\b`, "i").test(promptBlob),
+  );
+  const hasSceneOrEvent =
+    (intent.scenes?.length ?? 0) > 0 ||
+    /\b(beach|indoor|indoors|outdoor|outdoors|kitchen|bathroom|party|wedding|playground|office|home|birthday|park|school)\b/i.test(
+      promptBlob,
+    );
+
+  // Named person + visual, or people-category ("kids") + place/event → mixed.
+  if (hasPeople && hasVisual) return "mixed";
+  if (!hasPeople && hasPeopleCategory && hasSceneOrEvent) return "mixed";
+  if (hasPeople) return "person_search";
+
+  if (hasVisual) {
+    if (
+      hasSceneOrEvent ||
+      (intent.scenes?.length ?? 0) > 0
+    ) {
+      return "scene_search";
+    }
+    return "object_search";
+  }
+
+  if (intent.action === "search_media") return "object_search";
+  return "other";
 }
 
 function singularize(value: string): string {
@@ -1576,8 +1826,12 @@ function buildClarifyingQuestions(input: {
     );
   }
 
-  // Vague one-word-ish requests
-  if (input.lower.length < 12) {
+  // Vague one-word-ish requests — skip when we already have a clear person search.
+  if (
+    input.lower.length < 12 &&
+    input.people.length === 0 &&
+    input.action !== "search_media"
+  ) {
     questions.push("Can you share a bit more detail about what you want?");
   }
 
@@ -1640,37 +1894,61 @@ function finalizeIntent(
       ? findKnownPeopleMentions(intent.raw_prompt, options.knownPeople)
       : [];
 
-  // Drop objects/activities the model mistook for names ("Cigars", "Person").
-  const scrubbed = scrubFalsePeople(intent.raw_prompt, [
-    ...intent.people,
-    ...fromPrompt,
-  ]);
+  // Drop objects/activities the model mistook for names ("Cigars", "Person", "A Toilet").
+  const scrubbed = scrubFalsePeople(
+    intent.raw_prompt,
+    [...intent.people, ...fromPrompt],
+    options.knownPeople,
+  );
   const matched = matchKnownPeople(scrubbed.people, options.knownPeople);
+
+  // Unmatched names that still look like objects/scenes → visual qualities, not person clarify.
+  const demotedUnresolved: string[] = [];
+  const realUnresolved: string[] = [];
+  for (const name of matched.unresolved) {
+    const routed = disambiguatePeopleVsVisual({
+      candidate: name,
+      prompt: intent.raw_prompt,
+      knownPeople: options.knownPeople,
+      exactPersonMatch: false,
+    });
+    if (
+      routed.preferVisual ||
+      isFalsePersonCandidate(name, intent.raw_prompt, options.knownPeople)
+    ) {
+      demotedUnresolved.push(singularize(stripLeadingArticle(name.toLowerCase())));
+      continue;
+    }
+    realUnresolved.push(name);
+  }
+
   const mergedQualities = uniqueStrings([
     ...(intent.qualities ?? []),
     ...scrubbed.qualities,
     ...(intent.objects ?? []),
     ...(intent.scenes ?? []),
+    ...demotedUnresolved.filter((q) => q.length > 1),
   ]);
   const visual_query =
     intent.visual_query?.trim() ||
     extractVisualQuery(intent.raw_prompt) ||
     (mergedQualities.length ? mergedQualities.join(" ") : undefined);
-  const objects = uniqueStrings([
+  let objects = uniqueStrings([
     ...(intent.objects ?? []),
     ...scrubbed.qualities,
+    ...demotedUnresolved.filter((q) => q.length > 1),
   ]);
   const sceneHints = uniqueStrings([
     ...(intent.scenes ?? []),
     ...(visual_query &&
-    /\b(indoor|indoors|outdoor|outdoors|inside|outside|interior|exterior|beach|office|home|party|wedding|playground)\b/i.test(
+    /\b(indoor|indoors|outdoor|outdoors|inside|outside|interior|exterior|beach|office|home|party|wedding|playground|kitchen|bathroom|birthday)\b/i.test(
       visual_query,
     )
       ? visual_query
           .split(/\s+/)
           .map((w) => w.replace(/[^a-z0-9-]/gi, ""))
           .filter((w) =>
-            /^(indoor|indoors|outdoor|outdoors|inside|outside|interior|exterior|beach|office|home|party|wedding|playground)$/i.test(
+            /^(indoor|indoors|outdoor|outdoors|inside|outside|interior|exterior|beach|office|home|party|wedding|playground|kitchen|bathroom|birthday)$/i.test(
               w,
             ),
           )
@@ -1684,25 +1962,64 @@ function finalizeIntent(
     : undefined;
   let confidence = intent.confidence;
 
-  // Mentions that could not be matched to account people → ask to clarify.
-  // We still return the raw candidate names so the UI can show what was heard;
-  // executors must resolve against the account and never invent identities.
+  // Prefer visual for "photos of <unknown>" / object nouns.
+  // "Who did you mean?" is reserved for ambiguous person matches (resolve layer).
+  const personClarifyNames: string[] = [];
   if (
     options.knownPeople &&
     options.knownPeople.length > 0 &&
-    matched.unresolved.length > 0 &&
+    realUnresolved.length > 0 &&
     action !== "clarify"
   ) {
-    action = "clarify";
-    clarifying_questions = [
-      ...(clarifying_questions ?? []),
-      `I couldn't match ${matched.unresolved.map((n) => `"${n}"`).join(", ")} to people in your account. Which person did you mean?`,
-    ];
-    confidence = Math.min(confidence ?? 0.5, 0.4);
+    const visualAskNow =
+      Boolean(visual_query) || objects.length > 0 || scenes.length > 0;
+    for (const name of realUnresolved) {
+      const routed = disambiguatePeopleVsVisual({
+        candidate: name,
+        prompt: intent.raw_prompt,
+        knownPeople: options.knownPeople,
+      });
+      if (routed.preferVisual) {
+        const stem = singularize(stripLeadingArticle(name.toLowerCase()));
+        if (stem.length > 1) pushUnique(objects, stem);
+        continue;
+      }
+      // Soft person miss only when person intent is clear and not a visual-first ask.
+      if (!visualAskNow && routed.route === "person") {
+        personClarifyNames.push(name);
+      } else if (visualAskNow) {
+        const stem = singularize(stripLeadingArticle(name.toLowerCase()));
+        if (stem.length > 1) pushUnique(objects, stem);
+      } else {
+        personClarifyNames.push(name);
+      }
+    }
+
+    if (personClarifyNames.length > 0) {
+      action = "clarify";
+      clarifying_questions = [
+        ...(clarifying_questions ?? []),
+        `I couldn’t match ${personClarifyNames.map((n) => `"${n}"`).join(", ")} to people in your account.`,
+      ];
+      confidence = Math.min(confidence ?? 0.5, 0.4);
+    }
   }
 
-  const people =
-    matched.resolved.length > 0 ? matched.resolved : matched.candidates;
+  const people = (() => {
+    if (matched.resolved.length > 0) return matched.resolved;
+    if (options.knownPeople && options.knownPeople.length > 0) {
+      // Catalog present: only surface unmatched real person names while clarifying.
+      return action === "clarify" ? personClarifyNames : [];
+    }
+    return scrubbed.people.filter(
+      (candidate) =>
+        !isFalsePersonCandidate(
+          candidate,
+          intent.raw_prompt,
+          options.knownPeople,
+        ),
+    );
+  })();
 
   // Scene / object asks → search (do not invent people / do not dead-end).
   // Keep clarify when a named person could not be matched to the account.
@@ -1714,7 +2031,9 @@ function finalizeIntent(
       mergedQualities.length > 0);
 
   const hasUnresolvedPeople =
-    Boolean(options.knownPeople?.length) && matched.unresolved.length > 0;
+    Boolean(options.knownPeople?.length) &&
+    personClarifyNames.length > 0 &&
+    action === "clarify";
 
   if (
     isVisualAsk &&
@@ -1727,7 +2046,9 @@ function finalizeIntent(
       (q) =>
         !/what.?s happening in the picture/i.test(q) &&
         !/who should i look for/i.test(q) &&
-        !/who is in the photo/i.test(q),
+        !/who is in the photo/i.test(q) &&
+        !/couldn'?t match .+ to people/i.test(q) &&
+        !/couldn'?t find anyone named/i.test(q),
     );
     if (clarifying_questions.length === 0) clarifying_questions = undefined;
     confidence = Math.max(confidence ?? 0.7, 0.75);

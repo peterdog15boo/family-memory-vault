@@ -11,6 +11,12 @@ import {
   type UserAccountPreferences,
 } from "@/lib/db/schema";
 import { DEFAULT_LOCALE, isAppLocale } from "@/lib/i18n/locales";
+import { getUserPlan } from "@/lib/plans";
+import {
+  buildIdleTimeoutPolicy,
+  canDisableIdleTimeout,
+  type IdleTimeoutPolicy,
+} from "@/lib/session/idle-timeout-policy";
 
 export {
   DEFAULT_USER_ACCOUNT_PREFERENCES,
@@ -33,10 +39,20 @@ export const ACCOUNT_PREFERENCE_TOGGLE_KEYS = [
   "celebrationSoundEnabled",
   "emailMilestoneCelebrations",
   "productUpdatesEmail",
+  "idleTimeoutEnabled",
 ] as const satisfies readonly (keyof UserAccountPreferences)[];
 
 export type AccountPreferenceToggleKey =
   (typeof ACCOUNT_PREFERENCE_TOGGLE_KEYS)[number];
+
+export class IdleTimeoutPreferenceError extends Error {
+  readonly code = "idle_timeout_paid_required" as const;
+
+  constructor(message = "Idle timeout can only be disabled on a paid plan.") {
+    super(message);
+    this.name = "IdleTimeoutPreferenceError";
+  }
+}
 
 export function resolveAccountPreferences(
   raw: UserAccountPreferences | null | undefined,
@@ -58,7 +74,6 @@ export function resolveAccountPreferences(
   if (isAppLocale(raw.locale)) {
     out.locale = raw.locale;
   } else {
-    // Missing, null, or unsupported → US English (never crash on bad values).
     out.locale = DEFAULT_LOCALE;
   }
   return out;
@@ -99,6 +114,22 @@ export async function getAccountPreferences(
   return resolveAccountPreferences(row?.accountPreferences);
 }
 
+/**
+ * Resolve idle-timeout policy from prefs + current plan (server-enforced).
+ */
+export async function getIdleTimeoutPolicyForUser(
+  userId: string,
+): Promise<IdleTimeoutPolicy> {
+  const [prefs, planCtx] = await Promise.all([
+    getAccountPreferences(userId),
+    getUserPlan(userId),
+  ]);
+  return buildIdleTimeoutPolicy({
+    preferenceEnabled: prefs.idleTimeoutEnabled,
+    planSlug: String(planCtx.plan.slug),
+  });
+}
+
 export async function updateAccountPreferences(
   userId: string,
   patch: Partial<UserAccountPreferences>,
@@ -107,9 +138,21 @@ export async function updateAccountPreferences(
   const next: ResolvedAccountPreferences = { ...current };
 
   for (const key of ACCOUNT_PREFERENCE_TOGGLE_KEYS) {
+    if (key === "idleTimeoutEnabled") continue;
     const value = patch[key];
     if (typeof value === "boolean") next[key] = value;
   }
+
+  if (typeof patch.idleTimeoutEnabled === "boolean") {
+    if (patch.idleTimeoutEnabled === false) {
+      const planCtx = await getUserPlan(userId);
+      if (!canDisableIdleTimeout(String(planCtx.plan.slug))) {
+        throw new IdleTimeoutPreferenceError();
+      }
+    }
+    next.idleTimeoutEnabled = patch.idleTimeoutEnabled;
+  }
+
   if (patch.lastStorageWarningAt !== undefined) {
     next.lastStorageWarningAt = patch.lastStorageWarningAt;
   }

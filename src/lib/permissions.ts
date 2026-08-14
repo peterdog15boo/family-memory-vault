@@ -244,6 +244,17 @@ export const getAccessibleOwnerIds = cache(
   },
 );
 
+/**
+ * Active family co-members who can view this owner's media (excludes owner).
+ * Used to fan-out face detection/matching for shared clean photos.
+ */
+export async function getFamilyViewerIdsForOwner(
+  ownerUserId: string,
+): Promise<string[]> {
+  const accessible = await getAccessibleOwnerIds(ownerUserId);
+  return accessible.filter((id) => id !== ownerUserId);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Media safety                                                               */
 /* -------------------------------------------------------------------------- */
@@ -295,6 +306,31 @@ export async function canViewMedia(
   if (!row) return false;
   if (!isCleanReadyMedia(row)) return false;
   return canViewOwnedBy(userId, row.userId);
+}
+
+/**
+ * Edit user tags / keywords on media.
+ * - Owner: always (when clean/ready)
+ * - Family: contribute-capable roles only (member/owner); viewers are read-only
+ */
+export async function canEditMedia(
+  userId: string,
+  mediaId: string,
+): Promise<boolean> {
+  const db = getDb();
+  const [row] = await db
+    .select({
+      userId: media.userId,
+      moderationStatus: media.moderationStatus,
+      status: media.status,
+    })
+    .from(media)
+    .where(eq(media.id, mediaId))
+    .limit(1);
+
+  if (!row) return false;
+  if (!isCleanReadyMedia(row)) return false;
+  return canContributeOwnedBy(userId, row.userId);
 }
 
 /**

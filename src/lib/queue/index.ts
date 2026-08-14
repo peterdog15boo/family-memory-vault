@@ -160,7 +160,9 @@ export type EnqueueFaceDetectionJobInput = {
 };
 
 /**
- * Enqueue a `face.detect` job (detect + group). Requires clean/ready photo.
+ * Enqueue a `face.detect` job (detect + group). Requires clean/ready photo/video.
+ * `userId` is the actor (People owner): media owner or a family viewer who can
+ * view the media. Jobs for viewers store faces under that viewer.
  */
 export async function enqueueFaceDetectionJob(
   input: EnqueueFaceDetectionJobInput,
@@ -187,8 +189,14 @@ export async function enqueueFaceDetectionJob(
     throw new Error(`enqueueFaceDetectionJob: media not found (${input.mediaId}).`);
   }
 
-  if (input.userId && input.userId !== row.userId) {
-    throw new Error("enqueueFaceDetectionJob: userId does not own this media.");
+  const actorUserId = input.userId?.trim() || row.userId;
+  if (actorUserId !== row.userId) {
+    const { canViewMedia } = await import("@/lib/permissions");
+    if (!(await canViewMedia(actorUserId, input.mediaId))) {
+      throw new Error(
+        "enqueueFaceDetectionJob: user cannot access this media.",
+      );
+    }
   }
 
   if (!isSafeToServe(row.moderationStatus) || row.status !== "ready") {
@@ -216,11 +224,9 @@ export async function enqueueFaceDetectionJob(
     );
   }
 
-  const ownerUserId = input.userId ?? row.userId;
-
   const payload: Record<string, unknown> = {
     mediaId: input.mediaId,
-    userId: ownerUserId,
+    userId: actorUserId,
     ...(input.replaceExisting ? { replaceExisting: true } : {}),
     ...(input.extra ?? {}),
     enqueuedAt: new Date().toISOString(),
@@ -241,6 +247,7 @@ export async function enqueueFaceDetectionJob(
       console.info("[queue] face.detect job enqueued", {
         jobId: job.id,
         mediaId: input.mediaId,
+        actorUserId,
         attempt: i,
       });
       return job;
@@ -264,13 +271,21 @@ export async function enqueueFaceDetectionJob(
   );
 }
 
-/** True when a face.detect job is already pending or processing for this media. */
+/**
+ * True when a face.detect job is already pending/processing for this media.
+ * When `actorUserId` is set, only jobs for that actor count (so owner + family
+ * viewer jobs can coexist).
+ */
 export async function hasActiveFaceDetectionJob(
   mediaId: string,
+  actorUserId?: string,
 ): Promise<boolean> {
   const db = getDb();
-  const [row] = await db
-    .select({ id: processingJobs.id })
+  const rows = await db
+    .select({
+      id: processingJobs.id,
+      payload: processingJobs.payload,
+    })
     .from(processingJobs)
     .where(
       and(
@@ -278,9 +293,19 @@ export async function hasActiveFaceDetectionJob(
         inArray(processingJobs.type, [...FACE_DETECTION_JOB_TYPES]),
         inArray(processingJobs.status, ["pending", "processing"]),
       ),
-    )
-    .limit(1);
-  return Boolean(row);
+    );
+
+  if (!actorUserId) {
+    return rows.length > 0;
+  }
+
+  for (const row of rows) {
+    const payload = (row.payload ?? {}) as Record<string, unknown>;
+    const payloadUserId =
+      typeof payload.userId === "string" ? payload.userId : undefined;
+    if (payloadUserId === actorUserId) return true;
+  }
+  return false;
 }
 
 export type EnqueueSceneAnalysisJobInput = {

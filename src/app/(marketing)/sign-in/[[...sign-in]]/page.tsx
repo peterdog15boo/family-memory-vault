@@ -1,6 +1,8 @@
+import { Suspense } from "react";
 import { SignIn } from "@clerk/nextjs";
 import { AuthClerkMount } from "@/components/auth/AuthClerkMount";
 import { AuthPageShell } from "@/components/auth/AuthPageShell";
+import { InactivitySignInNotice } from "@/components/auth/InactivitySignInNotice";
 import { authClerkAppearance } from "@/lib/auth/clerk-appearance";
 
 /**
@@ -14,6 +16,9 @@ export default function SignInPage() {
       title="Your family’s memories are waiting."
       support="Sign in to a calm, private vault — shared only with the people you choose."
     >
+      <Suspense fallback={null}>
+        <InactivitySignInNotice />
+      </Suspense>
       <AuthClerkMount>
         <SignIn
           fallbackRedirectUrl="/dashboard"

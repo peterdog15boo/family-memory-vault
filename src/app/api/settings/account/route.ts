@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import {
   publicAccountPreferences,
   getAccountPreferences,
+  getIdleTimeoutPolicyForUser,
+  IdleTimeoutPreferenceError,
   updateAccountPreferences,
 } from "@/lib/account-preferences";
 import { requireApiUser } from "@/lib/auth/api";
@@ -27,13 +29,14 @@ const prefsPatchSchema = z
     celebrationSoundEnabled: z.boolean().optional(),
     emailMilestoneCelebrations: z.boolean().optional(),
     productUpdatesEmail: z.boolean().optional(),
+    idleTimeoutEnabled: z.boolean().optional(),
     locale: z.enum(APP_LOCALES).optional(),
   })
   .strict();
 
 /**
- * GET  — current account preferences
- * PATCH — update notification / privacy toggles
+ * GET  — current account preferences + idle-timeout policy
+ * PATCH — update notification / privacy toggles (idle disable is paid-only)
  */
 export async function GET() {
   const authResult = await requireApiUser();
@@ -41,10 +44,14 @@ export async function GET() {
 
   try {
     await ensureAppUser(authResult.userId);
-    const prefs = await getAccountPreferences(authResult.userId);
+    const [prefs, idleTimeout] = await Promise.all([
+      getAccountPreferences(authResult.userId),
+      getIdleTimeoutPolicyForUser(authResult.userId),
+    ]);
     return NextResponse.json({
       ok: true,
       preferences: publicAccountPreferences(prefs),
+      idleTimeout,
     });
   } catch (error) {
     return apiErrorFromUnknown(error, "Failed to load account preferences");
@@ -89,11 +96,19 @@ export async function PATCH(request: Request) {
   try {
     await ensureAppUser(authResult.userId);
     const prefs = await updateAccountPreferences(authResult.userId, patch);
+    const idleTimeout = await getIdleTimeoutPolicyForUser(authResult.userId);
     return NextResponse.json({
       ok: true,
       preferences: publicAccountPreferences(prefs),
+      idleTimeout,
     });
   } catch (error) {
+    if (error instanceof IdleTimeoutPreferenceError) {
+      return apiError(error.message, {
+        status: 403,
+        code: error.code,
+      });
+    }
     return apiErrorFromUnknown(error, "Failed to update account preferences");
   }
 }

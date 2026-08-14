@@ -3,11 +3,11 @@
  * Only clean/ready media is exposed to the UI.
  */
 
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { faces, media, type Face, type Media } from "@/lib/db/schema";
+import { faces, type Face, type Media } from "@/lib/db/schema";
 import {
-  cleanReadyMediaFilter,
+  loadCleanAccessibleMediaByIds,
   toSafeMediaItem,
   type SafeMediaItem,
 } from "@/lib/media/queries";
@@ -154,7 +154,7 @@ export async function listFacesForMediaLabeled(
   userId: string,
 ): Promise<MediaFaceLabel[]> {
   const db = getDb();
-  const mediaRows = await loadCleanOwnedMedia(userId, [mediaId]);
+  const mediaRows = await loadCleanAccessibleMedia(userId, [mediaId]);
   if (mediaRows.length === 0) return [];
 
   const mediaById = await signMediaMap(mediaRows);
@@ -194,16 +194,11 @@ export async function listFacesForMediaLabeled(
   });
 }
 
-async function loadCleanOwnedMedia(
+async function loadCleanAccessibleMedia(
   userId: string,
   mediaIds: string[],
 ): Promise<Media[]> {
-  if (mediaIds.length === 0) return [];
-  const db = getDb();
-  return db
-    .select()
-    .from(media)
-    .where(and(cleanReadyMediaFilter(userId), inArray(media.id, mediaIds)));
+  return loadCleanAccessibleMediaByIds(userId, mediaIds);
 }
 
 async function signMediaMap(
@@ -221,8 +216,8 @@ async function signMediaMap(
 }
 
 /**
- * Pick a cover face per person: preferred coverFaceId, else earliest face.
- * Only returns faces whose media is clean/ready (signed).
+ * Pick a cover face per person: preferred coverFaceId, else earliest face
+ * whose media is clean/ready and visible to the viewer (owned or family-shared).
  */
 async function resolveCoversForPeople(
   userId: string,
@@ -236,6 +231,7 @@ async function resolveCoversForPeople(
     .filter((id): id is string => Boolean(id));
 
   const db = getDb();
+  const personIds = peopleRows.map((p) => p.id);
 
   const preferredFaces =
     preferredIds.length > 0
@@ -249,47 +245,49 @@ async function resolveCoversForPeople(
 
   const preferredById = new Map(preferredFaces.map((f) => [f.id, f]));
 
-  const missingPersonIds = peopleRows
-    .filter((p) => !p.coverFaceId || !preferredById.has(p.coverFaceId))
-    .map((p) => p.id);
+  const linkedFaces =
+    personIds.length > 0
+      ? await db
+          .select()
+          .from(faces)
+          .where(
+            and(eq(faces.userId, userId), inArray(faces.personId, personIds)),
+          )
+          .orderBy(asc(faces.createdAt))
+      : [];
 
-  let fallbackFaces: Face[] = [];
-  if (missingPersonIds.length > 0) {
-    fallbackFaces = await db
-      .select()
-      .from(faces)
-      .where(
-        and(
-          eq(faces.userId, userId),
-          inArray(faces.personId, missingPersonIds),
-        ),
-      )
-      .orderBy(asc(faces.createdAt));
-  }
-
-  const firstFaceByPerson = new Map<string, Face>();
-  for (const face of fallbackFaces) {
-    if (face.personId && !firstFaceByPerson.has(face.personId)) {
-      firstFaceByPerson.set(face.personId, face);
-    }
-  }
-
-  const faceByPerson = new Map<string, Face>();
+  const candidatesByPerson = new Map<string, Face[]>();
   for (const person of peopleRows) {
+    const ordered: Face[] = [];
     const preferred =
       person.coverFaceId && preferredById.get(person.coverFaceId);
-    const preferredOk =
+    if (
       preferred &&
-      (preferred.personId === person.id || preferred.personId == null);
-    const face = preferredOk ? preferred : firstFaceByPerson.get(person.id);
-    if (face) faceByPerson.set(person.id, face);
+      (preferred.personId === person.id || preferred.personId == null)
+    ) {
+      ordered.push(preferred);
+    }
+    for (const face of linkedFaces) {
+      if (face.personId !== person.id) continue;
+      if (ordered.some((f) => f.id === face.id)) continue;
+      ordered.push(face);
+    }
+    if (ordered.length > 0) candidatesByPerson.set(person.id, ordered);
   }
 
-  const mediaIds = [...new Set([...faceByPerson.values()].map((f) => f.mediaId))];
-  const mediaRows = await loadCleanOwnedMedia(userId, mediaIds);
+  const mediaIds = [
+    ...new Set(
+      [...candidatesByPerson.values()].flatMap((facesForPerson) =>
+        facesForPerson.map((f) => f.mediaId),
+      ),
+    ),
+  ];
+  const mediaRows = await loadCleanAccessibleMedia(userId, mediaIds);
   const mediaById = await signMediaMap(mediaRows);
 
-  for (const [personId, face] of faceByPerson) {
+  for (const [personId, candidates] of candidatesByPerson) {
+    const face = candidates.find((f) => mediaById.has(f.mediaId));
+    if (!face) continue;
     const safe = mediaById.get(face.mediaId);
     if (!safe) continue;
     result.set(personId, {
@@ -323,23 +321,20 @@ export async function getPersonWithPhotos(
   const person = await getPersonForUser(personId, userId);
   if (!person) return null;
 
-  const db = getDb();
+  const { listVisibleMediaLinkedToPerson } = await import(
+    "@/lib/people/person-media"
+  );
+  const visible = await listVisibleMediaLinkedToPerson(userId, personId);
+  if (!visible) return null;
+
   /** Cap gallery size so person detail stays fast; newest photos first. */
   const PERSON_PHOTO_LIMIT = 100;
-  const personFaces = await db
-    .select()
-    .from(faces)
-    .where(and(eq(faces.personId, personId), eq(faces.userId, userId)))
-    .orderBy(desc(faces.createdAt))
-    .limit(PERSON_PHOTO_LIMIT * 3);
-
-  const mediaIds = [...new Set(personFaces.map((f) => f.mediaId))];
-  const mediaRows = await loadCleanOwnedMedia(userId, mediaIds);
-  const mediaById = await signMediaMap(mediaRows);
+  const mediaById = await signMediaMap(visible.mediaRows);
+  const accessibleMediaIds = new Set(visible.mediaIds);
 
   // One gallery tile per photo; prefer cover face bbox, else first face on that media.
   const faceForMedia = new Map<string, Face>();
-  for (const face of personFaces) {
+  for (const face of visible.faces) {
     if (person.coverFaceId && face.id === person.coverFaceId) {
       faceForMedia.set(face.mediaId, face);
     } else if (!faceForMedia.has(face.mediaId)) {
@@ -348,7 +343,7 @@ export async function getPersonWithPhotos(
   }
 
   const photos: PersonPhotoItem[] = [];
-  for (const mediaId of mediaIds) {
+  for (const mediaId of [...accessibleMediaIds]) {
     const safe = mediaById.get(mediaId);
     const face = faceForMedia.get(mediaId);
     if (!safe || !face) continue;
@@ -378,7 +373,7 @@ export async function getPersonWithPhotos(
 
   const listShape: PersonWithFaceCount = {
     ...person,
-    faceCount: personFaces.length,
+    faceCount: visible.debug.visibleFaceCount,
     photoCount: photos.length,
   };
   const covers = await resolveCoversForPeople(userId, [listShape]);

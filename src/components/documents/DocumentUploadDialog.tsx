@@ -14,6 +14,7 @@ import {
 } from "@/lib/documents/types";
 import { formatBytes } from "@/lib/billing/quotas";
 import { useOverlayA11y } from "@/hooks/useOverlayA11y";
+import { beginUploadActivity } from "@/lib/session/upload-activity";
 import { cn } from "@/lib/utils";
 
 type DocumentUploadDialogProps = {
@@ -166,6 +167,7 @@ export function DocumentUploadDialog({
     setPhase("uploading");
     setProgress(0);
 
+    const endUpload = beginUploadActivity();
     try {
       const presignRes = await fetch("/api/documents/upload-url", {
         method: "POST",
@@ -227,6 +229,8 @@ export function DocumentUploadDialog({
     } catch (err) {
       setPhase("error");
       setError(err instanceof Error ? err.message : t("documents.errorUpload"));
+    } finally {
+      endUpload();
     }
   }
 

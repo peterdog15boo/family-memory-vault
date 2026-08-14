@@ -178,4 +178,79 @@ describe("resolveIntentWithCatalog", () => {
     expect(resolved.needsClarification).toBe(true);
     expect(resolved.unresolvedPeople[0]?.reason).toBe("ambiguous");
   });
+
+  it("does not person-miss ordinary nouns like toilet", () => {
+    const resolved = resolveIntentWithCatalog(
+      baseIntent({
+        people: ["A Toilet"],
+        raw_prompt: "show me photos of a toilet",
+        action: "search_media",
+      }),
+      catalog,
+    );
+    expect(resolved.needsClarification).toBe(false);
+    expect(resolved.unresolvedPeople).toHaveLength(0);
+    expect(resolved.intent.people).toEqual([]);
+    expect(
+      [
+        resolved.intent.visual_query,
+        ...(resolved.intent.objects ?? []),
+        ...(resolved.intent.qualities ?? []),
+      ]
+        .join(" ")
+        .toLowerCase(),
+    ).toMatch(/toilet/);
+    expect(
+      resolved.clarifyingQuestions.some((q) =>
+        /couldn't find anyone named|who did you mean/i.test(q),
+      ),
+    ).toBe(false);
+  });
+
+  it("tries visual first for photos of unknown person names", () => {
+    const resolved = resolveIntentWithCatalog(
+      baseIntent({
+        people: ["Scott"],
+        raw_prompt: "show me photos of Scott",
+        action: "search_media",
+      }),
+      catalog,
+    );
+    expect(resolved.needsClarification).toBe(false);
+    expect(resolved.unresolvedPeople).toHaveLength(0);
+    expect(resolved.peopleIds).toEqual([]);
+    expect(
+      [
+        resolved.intent.visual_query,
+        ...(resolved.intent.objects ?? []),
+        ...(resolved.intent.qualities ?? []),
+      ]
+        .join(" ")
+        .toLowerCase(),
+    ).toMatch(/scott/);
+    expect(
+      resolved.clarifyingQuestions.some((q) => /who did you mean/i.test(q)),
+    ).toBe(false);
+  });
+
+  it("asks which person only for ambiguous name matches", () => {
+    const resolved = resolveIntentWithCatalog(
+      baseIntent({
+        people: ["Alex"],
+        raw_prompt: "Photos of Alex",
+        action: "search_media",
+      }),
+      catalog,
+    );
+    expect(resolved.needsClarification).toBe(true);
+    expect(resolved.unresolvedPeople[0]?.reason).toBe("ambiguous");
+    expect(
+      resolved.clarifyingQuestions.some((q) =>
+        /matches more than one person/i.test(q),
+      ),
+    ).toBe(true);
+    expect(
+      resolved.clarifyingQuestions.some((q) => /who did you mean/i.test(q)),
+    ).toBe(false);
+  });
 });

@@ -3,8 +3,8 @@
  *
  * SAFETY: every read path that returns media for a memory only includes items
  * with moderation_status = clean and status = ready. Writes that attach media
- * (cover or members) reject anything that is not clean + ready and owned by
- * the memory owner.
+ * (cover or members) reject anything that is not clean + ready and accessible
+ * to the memory owner (owned or family-shared).
  */
 
 import { and, asc, count, desc, eq, inArray, max } from "drizzle-orm";
@@ -26,6 +26,7 @@ import {
 import {
   cleanReadyMediaFilter,
   cleanReadyMediaOwnedByFilter,
+  loadCleanAccessibleMediaByIds,
   toSafeMediaItem,
   type SafeMediaItem,
 } from "@/lib/media/queries";
@@ -161,25 +162,14 @@ async function getOwnedMemory(
 }
 
 /**
- * Load clean + ready media owned by userId among the given ids.
+ * Load clean + ready media the user may use (own + family-shared).
  * Order of returned rows is not guaranteed — callers re-sort as needed.
  */
 async function loadCleanOwnedMedia(
   userId: string,
   mediaIds: string[],
 ): Promise<Media[]> {
-  if (mediaIds.length === 0) return [];
-
-  const db = getDb();
-  return db
-    .select()
-    .from(media)
-    .where(
-      and(
-        cleanReadyMediaFilter(userId),
-        inArray(media.id, mediaIds),
-      ),
-    );
+  return loadCleanAccessibleMediaByIds(userId, mediaIds);
 }
 
 /**
@@ -259,7 +249,7 @@ export async function createMemory(
     const [cover] = await loadCleanOwnedMedia(parsed.userId, [coverMediaId]);
     if (!cover) {
       throw new MemoryError(
-        "Cover media must belong to you and be clean / ready.",
+        "Cover media must be clean / ready and accessible to you.",
       );
     }
   }
@@ -312,11 +302,12 @@ export async function createMemory(
 }
 
 /**
- * Attach clean / ready media owned by the memory owner.
+ * Attach clean / ready media the memory owner can access
+ * (owned or family-shared).
  *
  * SAFETY: `userId` is required. Only media with moderation_status=clean and
- * status=ready that belongs to that user can be linked. Unclean, quarantined,
- * foreign, or unknown ids are skipped (never inserted).
+ * status=ready that the user may view can be linked. Unclean, quarantined,
+ * unauthorized, or unknown ids are skipped (never inserted).
  */
 export async function addMediaToMemory(
   memoryId: string,
@@ -337,7 +328,7 @@ export async function addMediaToMemory(
   const ownerId = memoryRow.userId;
   const db = getDb();
 
-  // Only clean + ready + owned by this user may be linked.
+  // Only clean + ready + accessible to this user may be linked.
   const cleanRows = await loadCleanOwnedMedia(ownerId, uniqueIds);
   const cleanIds = new Set(cleanRows.map((r) => r.id));
 

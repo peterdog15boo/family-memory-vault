@@ -238,6 +238,7 @@ export async function processModerationJob(
       await maybeGenerateThumbnailForMedia(row);
       await maybeEnqueueFaceDetectionForMedia(row, {
         source: "worker.moderation.idempotent_clean",
+        fanOutFamilyViewers: true,
       });
       await maybeEnqueueSceneAnalysisForMedia(row, {
         source: "worker.moderation.idempotent_clean",
@@ -359,6 +360,7 @@ export async function processModerationJob(
       await maybeGenerateThumbnailForMedia(finalMedia);
       await maybeEnqueueFaceDetectionForMedia(finalMedia, {
         source: "worker.moderation.clean",
+        fanOutFamilyViewers: true,
       });
       await maybeEnqueueSceneAnalysisForMedia(finalMedia, {
         source: "worker.moderation.clean",

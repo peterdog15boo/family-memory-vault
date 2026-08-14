@@ -17,6 +17,7 @@ import {
   type VisionAnalysisResult,
 } from "@/lib/ai/vision";
 import { extractVideoSampleFrames } from "@/lib/media/video-frames";
+import { suppressDismissedLabels } from "@/lib/media/tags";
 import { isSafeToServe } from "@/lib/moderation/types";
 import { getObjectBytes } from "@/lib/r2";
 
@@ -51,6 +52,33 @@ export function isEligibleSceneMedia(
     return true;
   }
   return false;
+}
+
+/**
+ * True when the media row already has searchable AI/scene labels for Ask AI
+ * and Photos filtering. Used to skip re-analysis / decide backfill.
+ */
+export function hasSearchableVisualLabels(
+  row: Pick<
+    Media,
+    | "aiTags"
+    | "aiObjects"
+    | "aiScenes"
+    | "sceneTags"
+    | "aiCaption"
+    | "sceneCaption"
+    | "visualAnalyzedAt"
+  >,
+): boolean {
+  if (!row.visualAnalyzedAt) return false;
+  return (
+    (row.aiTags?.length ?? 0) > 0 ||
+    (row.aiObjects?.length ?? 0) > 0 ||
+    (row.aiScenes?.length ?? 0) > 0 ||
+    (row.sceneTags?.length ?? 0) > 0 ||
+    Boolean(row.aiCaption?.trim()) ||
+    Boolean(row.sceneCaption?.trim())
+  );
 }
 
 function resolvePhotoSourceKey(
@@ -167,12 +195,11 @@ export async function analyzeAndStoreSceneForMedia(
     };
   }
 
-  const alreadyRich =
+  if (
+    !options?.force &&
     row.sceneAnalysisStatus === "ready" &&
-    row.visualAnalyzedAt &&
-    ((row.aiTags?.length ?? 0) > 0 || (row.sceneTags?.length ?? 0) > 0);
-
-  if (!options?.force && alreadyRich) {
+    hasSearchableVisualLabels(row)
+  ) {
     return {
       mediaId,
       skipped: true,
@@ -188,6 +215,9 @@ export async function analyzeAndStoreSceneForMedia(
         updatedAt: new Date(),
       })
       .where(eq(media.id, mediaId));
+    console.warn(`${LOG} skipped — scene analysis disabled / vision not configured`, {
+      mediaId,
+    });
     return {
       mediaId,
       skipped: true,
@@ -248,20 +278,24 @@ export async function analyzeAndStoreSceneForMedia(
     }
 
     const now = new Date();
+    const dismissed = row.dismissedAiTags ?? [];
+    const tags = suppressDismissedLabels(result.tags, dismissed);
+    const objects = suppressDismissedLabels(result.objects, dismissed);
+    const scenes = suppressDismissedLabels(result.scenes, dismissed);
 
     await db
       .update(media)
       .set({
         // Legacy scene columns (assistant + older code paths)
         sceneCaption: result.caption || null,
-        sceneTags: result.tags,
+        sceneTags: tags,
         sceneAnalyzedAt: now,
         sceneAnalysisStatus: "ready",
-        // Rich visual metadata
+        // Rich visual metadata — queryable by Ask AI + Photos tag search
         aiCaption: result.caption || null,
-        aiTags: result.tags,
-        aiObjects: result.objects,
-        aiScenes: result.scenes,
+        aiTags: tags,
+        aiObjects: objects,
+        aiScenes: scenes,
         aiDescription: result.description || null,
         aiEmbedding: result.embedding,
         visualAnalyzedAt: now,
@@ -273,10 +307,12 @@ export async function analyzeAndStoreSceneForMedia(
       mediaId,
       type: row.type,
       frameCount,
-      tags: result.tags.slice(0, 12),
-      objects: result.objects.slice(0, 8),
+      tags: tags.slice(0, 12),
+      objects: objects.slice(0, 8),
+      scenes: scenes.slice(0, 8),
       caption: result.caption,
       provider: result.provider,
+      suppressedDismissed: dismissed.length,
     });
 
     return { mediaId, skipped: false, result, frameCount };
@@ -290,4 +326,83 @@ export async function analyzeAndStoreSceneForMedia(
       .where(eq(media.id, mediaId));
     throw error;
   }
+}
+
+/**
+ * Manually set AI tags on owned media (owner only). Keeps objects/scenes intact
+ * unless provided; always refreshes visualAnalyzedAt for search readiness.
+ */
+export async function updateMediaVisualTags(input: {
+  userId: string;
+  mediaId: string;
+  aiTags?: string[];
+  aiObjects?: string[];
+  aiScenes?: string[];
+  aiCaption?: string | null;
+}): Promise<Media> {
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(media)
+    .where(eq(media.id, input.mediaId))
+    .limit(1);
+
+  if (!row || row.userId !== input.userId) {
+    throw new Error("Media not found.");
+  }
+  if (!isEligibleSceneMedia(row)) {
+    throw new Error("Only clean, ready photos or videos can have tags.");
+  }
+
+  const clean = (values: string[] | undefined, max: number) => {
+    if (!values) return undefined;
+    const out: string[] = [];
+    for (const raw of values) {
+      const n = raw.trim().toLowerCase();
+      if (n.length < 2 || n.length > 48) continue;
+      if (out.includes(n)) continue;
+      out.push(n);
+      if (out.length >= max) break;
+    }
+    return out;
+  };
+
+  const now = new Date();
+  const dismissed = row.dismissedAiTags ?? [];
+  const nextTags = suppressDismissedLabels(
+    clean(input.aiTags, 48) ?? row.aiTags ?? [],
+    dismissed,
+  );
+  const nextObjects = suppressDismissedLabels(
+    clean(input.aiObjects, 28) ?? row.aiObjects ?? [],
+    dismissed,
+  );
+  const nextScenes = suppressDismissedLabels(
+    clean(input.aiScenes, 18) ?? row.aiScenes ?? [],
+    dismissed,
+  );
+  const nextCaption =
+    input.aiCaption !== undefined
+      ? input.aiCaption?.trim() || null
+      : row.aiCaption;
+
+  const [updated] = await db
+    .update(media)
+    .set({
+      aiTags: nextTags,
+      sceneTags: nextTags,
+      aiObjects: nextObjects,
+      aiScenes: nextScenes,
+      aiCaption: nextCaption,
+      sceneCaption: nextCaption,
+      sceneAnalysisStatus: "ready",
+      sceneAnalyzedAt: row.sceneAnalyzedAt ?? now,
+      visualAnalyzedAt: now,
+      updatedAt: now,
+    })
+    .where(eq(media.id, input.mediaId))
+    .returning();
+
+  if (!updated) throw new Error("Failed to update media tags.");
+  return updated;
 }

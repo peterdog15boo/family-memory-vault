@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
+import { AdminUserRowActions } from "@/components/admin/AdminUserRowActions";
 import { listAdminUsers } from "@/lib/admin/users";
 import { requireAdmin } from "@/lib/auth/admin";
 import { PLAN_SLUGS } from "@/lib/db/schema";
-import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
+import { listActivePlans, seedPlans } from "@/lib/plans";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -53,12 +55,16 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
     ? planRaw
     : "all";
 
-  const { users, total } = await listAdminUsers(actorId, {
-    q,
-    status,
-    plan,
-    limit: 100,
-  });
+  const [{ users, total }, plans] = await Promise.all([
+    listAdminUsers(actorId, {
+      q,
+      status,
+      plan,
+      limit: 100,
+    }),
+    seedPlans().then(() => listActivePlans()),
+  ]);
+  const planOptions = plans.map((p) => ({ slug: p.slug, name: p.name }));
 
   const filterHref = (next: Record<string, string | undefined>) => {
     const sp = new URLSearchParams();
@@ -74,8 +80,8 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
     <div>
       <h1 className="font-display text-3xl tracking-tight text-ink">Users</h1>
       <p className="mt-2 max-w-2xl text-sm text-ink-muted">
-        Search accounts, review usage, suspend users, or change plans for
-        support.
+        Search accounts, change plans, and grant or revoke admin access from
+        this list. Open a user for suspend and full account detail.
       </p>
 
       <form
@@ -174,6 +180,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
               <th className="px-3 py-2 font-medium">Joined</th>
               <th className="px-3 py-2 font-medium">Last active</th>
               <th className="px-3 py-2 font-medium">Status</th>
+              <th className="px-3 py-2 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-ink/8">
@@ -213,6 +220,16 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                       </span>
                     ) : null}
                   </div>
+                </td>
+                <td className="px-3 py-2 align-top">
+                  <AdminUserRowActions
+                    userId={user.id}
+                    email={user.email}
+                    isAdmin={user.isAdmin}
+                    planSlug={user.planSlug}
+                    plans={planOptions}
+                    isSelf={actorId === user.id}
+                  />
                 </td>
               </tr>
             ))}

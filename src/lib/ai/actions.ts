@@ -31,6 +31,8 @@ import {
   type AssistantMediaQueryResult,
   type MediaQueryExplanation,
 } from "@/lib/ai/media-query";
+import { formatEmptySearchMessage } from "@/lib/ai/empty-reply";
+import { classifyAskIntent } from "@/lib/ai/intent";
 import { formatMediaTypeCounts } from "@/lib/ai/media-preference";
 import type { ResolvedIntent } from "@/lib/ai/resolve";
 import {
@@ -376,6 +378,7 @@ function executeSearch(
   input: ExecuteAssistantActionInput,
 ): Omit<ExecuteAssistantActionOutcome, "actionId"> {
   const { media, resolved, intent } = input;
+  const intentKind = classifyAskIntent(intent);
   const visualLabel =
     intent.visual_query?.trim() ||
     [...(intent.objects ?? []), ...(intent.scenes ?? [])].join(" / ") ||
@@ -383,7 +386,12 @@ function executeSearch(
   const explanation = explainSparseMediaResults({
     diagnostics: media.diagnostics,
     matchedPeople: resolved.matchedPeople,
+    unresolvedPeople: resolved.unresolvedPeople,
+    peopleNames: intent.people,
     visualQuery: intent.visual_query,
+    objects: intent.objects,
+    scenes: intent.scenes,
+    intentKind,
   });
 
   const mediaIds = media.items.map((item) => item.id);
@@ -396,17 +404,32 @@ function executeSearch(
   const helpAside = formatSecondaryHelpTip(intent.raw_prompt, input.t) ?? "";
 
   if (media.totalCount === 0) {
+    // Intent-aware empty body: object/scene vs person (never cross-wire).
+    const emptyBody =
+      intentKind === "object_search" ||
+      intentKind === "scene_search" ||
+      intentKind === "person_search" ||
+      intentKind === "mixed"
+        ? formatEmptySearchMessage({
+            kind:
+              intentKind === "person_search" || intentKind === "mixed"
+                ? "person"
+                : "object_scene",
+            summary: explanation.summary,
+            suggestions: explanation.suggestions,
+          })
+        : [
+            explanation.summary,
+            ...explanation.reasons,
+            ...explanation.suggestions.map((s) => `• ${s}`),
+          ]
+            .filter(Boolean)
+            .join("\n");
+
     return {
       status: "succeeded",
       result,
-      assistantMessage: [
-        explanation.summary,
-        ...explanation.reasons,
-        ...explanation.suggestions.map((s) => `Suggestion: ${s}`),
-      ]
-        .filter(Boolean)
-        .join("\n")
-        .concat(helpAside),
+      assistantMessage: `${emptyBody}${helpAside}`,
       explanation,
     };
   }
@@ -617,8 +640,13 @@ function refuseIfTooFewMedia(
   const explanation = explainSparseMediaResults({
     diagnostics: input.media.diagnostics,
     matchedPeople: input.resolved.matchedPeople,
+    unresolvedPeople: input.resolved.unresolvedPeople,
+    peopleNames: input.intent.people,
     sparseThreshold: min,
     visualQuery: input.intent.visual_query,
+    objects: input.intent.objects,
+    scenes: input.intent.scenes,
+    intentKind: classifyAskIntent(input.intent),
   });
 
   if (input.media.totalCount >= min && input.media.items.length >= min) {

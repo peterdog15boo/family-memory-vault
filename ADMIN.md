@@ -35,7 +35,7 @@ npm run admin:promote -- --userId=user_xxxxxxxx
 | Route | Purpose |
 |-------|---------|
 | `/admin` | Overview snapshot + links |
-| `/admin/users` | Search users, filters, storage / plan / last active |
+| `/admin/users` | Search users; change plan + grant/revoke admin inline; storage / last active |
 | `/admin/users/[id]` | Detail, plan override, suspend, admin grant |
 | `/admin/safety` | Moderation counts, quarantines, NCMEC, paginated media |
 | `/admin/safety/[mediaId]` | Metadata-only inspect (no CSAM previews) |

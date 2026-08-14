@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  classifyAskIntent,
   parseIntent,
   parseIntentFallback,
 } from "@/lib/ai/intent";
+import { resolveIntentWithCatalog } from "@/lib/ai/resolve";
 
 describe("parseIntentFallback", () => {
   it("parses slideshow of Noah from 7th grade", () => {
@@ -244,5 +246,153 @@ describe("parseIntent", () => {
     expect(intent._meta?.source).toBe("fallback");
     expect(intent.action).toBe("search_media");
     expect(intent.people).toContain("Grandpa");
+  });
+});
+
+describe("Ask AI intent routing (person vs object/scene)", () => {
+  it('routes "show me photos of a toilet" as object search, not a person', async () => {
+    const intent = await parseIntent("show me photos of a toilet", {
+      preferFallback: true,
+      knownPeople: ["Scott", "Noah Roberts"],
+    });
+    expect(intent.action).toBe("search_media");
+    expect(intent.people).toEqual([]);
+    expect(
+      intent.visual_query?.toLowerCase() ||
+        intent.objects?.join(" ").toLowerCase() ||
+        intent.qualities?.join(" ").toLowerCase(),
+    ).toMatch(/toilet/);
+    expect(intent.clarifying_questions ?? []).toHaveLength(0);
+    expect(classifyAskIntent(intent)).toBe("object_search");
+
+    const resolved = resolveIntentWithCatalog(intent, [
+      { id: "scott", name: "Scott" },
+      { id: "noah", name: "Noah Roberts" },
+    ]);
+    expect(resolved.needsClarification).toBe(false);
+    expect(resolved.unresolvedPeople).toHaveLength(0);
+    expect(
+      resolved.clarifyingQuestions.some((q) =>
+        /couldn't find anyone named/i.test(q),
+      ),
+    ).toBe(false);
+  });
+
+  it('routes "show me beach photos" as scene search', () => {
+    const intent = parseIntentFallback("show me beach photos");
+    expect(intent.action).toBe("search_media");
+    expect(intent.people).toEqual([]);
+    expect(intent.visual_query?.toLowerCase()).toMatch(/beach/);
+    expect(classifyAskIntent(intent)).toBe("scene_search");
+  });
+
+  it('routes "show me photos of Scott" as person search', async () => {
+    const intent = await parseIntent("show me photos of Scott", {
+      preferFallback: true,
+      knownPeople: ["Scott", "Noah Roberts"],
+    });
+    expect(intent.action).toBe("search_media");
+    expect(intent.people.map((p) => p.toLowerCase())).toContain("scott");
+    expect(classifyAskIntent(intent)).toBe("person_search");
+  });
+
+  it('routes "show me Scott at the beach" as mixed person + scene', async () => {
+    const intent = await parseIntent("show me Scott at the beach", {
+      preferFallback: true,
+      knownPeople: ["Scott"],
+    });
+    expect(intent.action).toBe("search_media");
+    expect(intent.people.map((p) => p.toLowerCase())).toContain("scott");
+    expect(
+      [
+        intent.visual_query,
+        ...(intent.scenes ?? []),
+        ...(intent.qualities ?? []),
+        ...(intent.objects ?? []),
+      ]
+        .join(" ")
+        .toLowerCase(),
+    ).toMatch(/beach/);
+    expect(classifyAskIntent(intent)).toBe("mixed");
+  });
+
+  it('routes "how do I invite family members" as help', () => {
+    const intent = parseIntentFallback("how do I invite family members");
+    expect(intent.action).toBe("answer_help");
+    expect(classifyAskIntent(intent)).toBe("help");
+  });
+
+  it("demotes LLM-invented person A Toilet into visual search", async () => {
+    const intent = await parseIntent("show me photos of a toilet", {
+      knownPeople: ["Scott"],
+      llmComplete: async () => ({
+        content: JSON.stringify({
+          action: "search_media",
+          people: ["A Toilet"],
+          date_range: null,
+          tone: null,
+          qualities: null,
+          objects: null,
+          scenes: null,
+          visual_query: null,
+          theme_preference: null,
+          title_suggestion: null,
+          clarifying_questions: null,
+          confidence: 0.9,
+        }),
+        model: "test-model",
+        usage: { promptTokens: 1, completionTokens: 1 },
+      }),
+    });
+    expect(intent.people).toEqual([]);
+    expect(intent.action).toBe("search_media");
+    expect(
+      [
+        intent.visual_query,
+        ...(intent.objects ?? []),
+        ...(intent.qualities ?? []),
+      ]
+        .join(" ")
+        .toLowerCase(),
+    ).toMatch(/toilet/);
+    expect(intent.clarifying_questions ?? []).toHaveLength(0);
+  });
+
+  it("tries visual search first for photos of unknown names (not Who did you mean)", async () => {
+    const intent = await parseIntent("show me photos of Scott", {
+      preferFallback: true,
+      knownPeople: ["Noah Roberts"],
+    });
+    expect(intent.action).toBe("search_media");
+    expect(intent.people).toEqual([]);
+    expect(
+      [
+        intent.visual_query,
+        ...(intent.objects ?? []),
+        ...(intent.qualities ?? []),
+      ]
+        .join(" ")
+        .toLowerCase(),
+    ).toMatch(/scott/);
+    expect(
+      (intent.clarifying_questions ?? []).some((q) =>
+        /who did you mean|which person/i.test(q),
+      ),
+    ).toBe(false);
+    expect(classifyAskIntent(intent)).toBe("object_search");
+  });
+
+  it("does not ask Who did you mean for ordinary object nouns", async () => {
+    const intent = await parseIntent("show me photos of cigars", {
+      preferFallback: true,
+      knownPeople: ["Scott"],
+    });
+    expect(intent.action).toBe("search_media");
+    expect(intent.people).toEqual([]);
+    expect(
+      (intent.clarifying_questions ?? []).some((q) =>
+        /who did you mean|couldn't match/i.test(q),
+      ),
+    ).toBe(false);
   });
 });

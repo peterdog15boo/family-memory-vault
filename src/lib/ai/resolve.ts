@@ -21,6 +21,12 @@
  *   → label kept, isConcrete: false, clarification suggested
  */
 
+import {
+  disambiguatePeopleVsVisual,
+  shouldAskWhoDidYouMean,
+} from "@/lib/ai/disambiguate";
+import { isFalsePersonCandidate } from "@/lib/ai/intent";
+import { isCommonObjectOrSceneTerm } from "@/lib/ai/visual-lexicon";
 import { listPeopleForUser } from "@/lib/people";
 import type { AssistantDateRange, AssistantIntent } from "@/lib/assistant/types";
 
@@ -129,39 +135,157 @@ export function resolveIntentWithCatalog(
   options: ResolveIntentOptions = {},
 ): ResolvedIntent {
   const now = options.now ?? new Date();
-  const peopleResult = resolvePeopleNames(intent.people, catalog);
+  const knownPeople = catalog.map((entry) => entry.name);
+
+  // Drop object/scene false positives before People matching / not-found copy.
+  const realPeopleQueries: string[] = [];
+  const demotedVisual: string[] = [];
+  for (const name of intent.people) {
+    if (isFalsePersonCandidate(name, intent.raw_prompt, knownPeople)) {
+      const stem = singularizePersonNoun(name);
+      if (stem) demotedVisual.push(stem);
+      continue;
+    }
+    realPeopleQueries.push(name);
+  }
+
+  const peopleResult = resolvePeopleNames(realPeopleQueries, catalog);
+
+  // Unmatched ordinary nouns / photos-of-unknown → demote to visual, never person miss.
+  // Keep ambiguous matches for "which person?" clarify only.
+  const keptUnresolved: typeof peopleResult.unresolved = [];
+  const visualFromUnresolved: string[] = [];
+  for (const unresolved of peopleResult.unresolved) {
+    if (unresolved.reason === "ambiguous") {
+      const ask = shouldAskWhoDidYouMean({
+        personIntentLikely: true,
+        ambiguousPersonMatch: true,
+        isNormalObject: isCommonObjectOrSceneTerm(unresolved.query),
+      });
+      if (ask) {
+        keptUnresolved.push(unresolved);
+      } else {
+        const stem = singularizePersonNoun(unresolved.query);
+        if (stem) visualFromUnresolved.push(stem);
+      }
+      continue;
+    }
+
+    const routed = disambiguatePeopleVsVisual({
+      candidate: unresolved.query,
+      prompt: intent.raw_prompt,
+      knownPeople,
+      exactPersonMatch: false,
+    });
+    if (
+      unresolved.reason === "not_found" &&
+      (routed.preferVisual ||
+        isFalsePersonCandidate(
+          unresolved.query,
+          intent.raw_prompt,
+          knownPeople,
+        ))
+    ) {
+      const stem = singularizePersonNoun(unresolved.query);
+      if (stem) visualFromUnresolved.push(stem);
+      continue;
+    }
+
+    // Soft not-found without "Who did you mean?" — only keep when person intent
+    // is strong and not a photos-of visual-first ask.
+    if (unresolved.reason === "not_found" && routed.route === "person") {
+      keptUnresolved.push(unresolved);
+      continue;
+    }
+
+    const stem = singularizePersonNoun(unresolved.query);
+    if (stem) visualFromUnresolved.push(stem);
+  }
+
+  const filteredPeopleResult = {
+    matched: peopleResult.matched,
+    unresolved: keptUnresolved,
+  };
 
   const dateFilter = resolveDateReference(intent.date_range, {
     now,
-    matchedPeople: peopleResult.matched,
+    matchedPeople: filteredPeopleResult.matched,
     birthYearByPersonId: options.birthYearByPersonId,
     kindergartenStartAge: options.kindergartenStartAge ?? 5,
   });
 
   const clarifyingQuestions = buildResolveClarifications({
     intent,
-    peopleResult,
+    peopleResult: filteredPeopleResult,
     dateFilter,
   });
 
+  const foldedVisual = uniqueStrings([
+    ...demotedVisual,
+    ...visualFromUnresolved,
+  ]);
+  const nextIntent: AssistantIntent =
+    foldedVisual.length > 0
+      ? {
+          ...intent,
+          people: filteredPeopleResult.matched.map((p) => p.name),
+          objects: uniqueStrings([...(intent.objects ?? []), ...foldedVisual]),
+          qualities: uniqueStrings([
+            ...(intent.qualities ?? []),
+            ...foldedVisual,
+          ]),
+          visual_query:
+            intent.visual_query?.trim() || foldedVisual.join(" ") || undefined,
+          action:
+            intent.action === "clarify" &&
+            filteredPeopleResult.unresolved.length === 0
+              ? "search_media"
+              : intent.action,
+          clarifying_questions:
+            filteredPeopleResult.unresolved.length === 0
+              ? undefined
+              : intent.clarifying_questions,
+        }
+      : {
+          ...intent,
+          people:
+            realPeopleQueries.length !== intent.people.length
+              ? filteredPeopleResult.matched.length > 0
+                ? filteredPeopleResult.matched.map((p) => p.name)
+                : realPeopleQueries
+              : intent.people,
+        };
+
   const needsClarification =
-    intent.action === "clarify" ||
-    peopleResult.unresolved.length > 0 ||
+    (nextIntent.action === "clarify" &&
+      filteredPeopleResult.unresolved.length > 0) ||
+    filteredPeopleResult.unresolved.length > 0 ||
     clarifyingQuestions.length > 0 ||
     Boolean(dateFilter?.resolutionNote && !dateFilter.isConcrete);
 
   return {
-    intent,
-    peopleIds: peopleResult.matched.map((p) => p.id),
-    matchedPeople: peopleResult.matched,
-    unresolvedPeople: peopleResult.unresolved,
+    intent: nextIntent,
+    peopleIds: filteredPeopleResult.matched.map((p) => p.id),
+    matchedPeople: filteredPeopleResult.matched,
+    unresolvedPeople: filteredPeopleResult.unresolved,
     dateFilter,
     needsClarification,
     clarifyingQuestions: uniqueStrings([
-      ...(intent.clarifying_questions ?? []),
+      ...(nextIntent.clarifying_questions ?? []),
       ...clarifyingQuestions,
     ]),
   };
+}
+
+function singularizePersonNoun(value: string): string {
+  const stripped = value
+    .trim()
+    .toLowerCase()
+    .replace(/^(?:a|an|the)\s+/i, "");
+  if (stripped.length > 3 && stripped.endsWith("s") && !stripped.endsWith("ss")) {
+    return stripped.slice(0, -1);
+  }
+  return stripped;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -573,7 +697,10 @@ function buildResolveClarifications(input: {
   for (const unresolved of input.peopleResult.unresolved) {
     if (unresolved.reason === "not_found") {
       questions.push(
-        `I couldn't find anyone named “${unresolved.query}” in your People list. Who did you mean?`,
+        `I couldn’t find anyone named ${unresolved.query} in People.`,
+      );
+      questions.push(
+        "Check People for the right spelling or nickname, or manually assign faces from People or the media viewer.",
       );
       continue;
     }

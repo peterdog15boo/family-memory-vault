@@ -416,7 +416,7 @@ export function isProductHelpQuestion(prompt: string): boolean {
 
   // Limit / upgrade / feature orientation without requiring how-
   if (
-    /\b(more than \d+\s+movies|movies?\s+per\s+month|movie\s+(limit|quota|cap)|invite\s+(family|members|someone)|digital\s+legacy|change\s+(my\s+)?avatar|upgrade\s+(my\s+)?plan|storage\s+(full|limit|quota)|family\s+members?\s+limit)\b/i.test(
+    /\b(more than \d+\s+movies|movies?\s+per\s+month|movie\s+(limit|quota|cap)|invite\s+(family|members|someone)|invitar\s+(a\s+)?(mi\s+)?familia|invito\s+a\s+mi\s+familia|digital\s+legacy|change\s+(my\s+)?avatar|upgrade\s+(my\s+)?plan|storage\s+(full|limit|quota)|family\s+members?\s+limit)\b/i.test(
       lower,
     )
   ) {

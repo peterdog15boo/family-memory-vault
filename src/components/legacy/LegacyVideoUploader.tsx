@@ -12,6 +12,7 @@ import {
   LEGACY_VIDEO_MAX_BYTES,
   normalizeLegacyVideoContentType,
 } from "@/lib/legacy/video-constants";
+import { beginUploadActivity } from "@/lib/session/upload-activity";
 
 const ACCEPT = [
   "video/mp4",
@@ -209,6 +210,7 @@ export function LegacyVideoUploader({
     setPhase("uploading");
     setProgress(0);
 
+    const endUpload = beginUploadActivity();
     try {
       const presignRes = await fetch("/api/legacy/videos/upload-url", {
         method: "POST",
@@ -275,6 +277,8 @@ export function LegacyVideoUploader({
           ? err.message
           : "Something went wrong while uploading. Please try again.",
       );
+    } finally {
+      endUpload();
     }
   }
 

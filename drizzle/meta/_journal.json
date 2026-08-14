@@ -281,6 +281,20 @@
       "when": 1786067000000,
       "tag": "0050_user_location_sharing",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1786070000000,
+      "tag": "0051_media_user_tags",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1786071000000,
+      "tag": "0052_media_dismissed_ai_tags",
+      "breakpoints": true
     }
   ]
 }

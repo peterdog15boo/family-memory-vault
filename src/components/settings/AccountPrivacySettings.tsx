@@ -26,12 +26,18 @@ type Preferences = Omit<PublicAccountPreferences, "locale">;
 
 type AccountPrivacySettingsProps = {
   initialPreferences: PublicAccountPreferences;
+  /** Paid plans only — free users never see the idle-timeout toggle. */
+  canDisableIdleTimeout?: boolean;
+  /** Effective idle timeout (forced ON for free). */
+  idleTimeoutEnabled?: boolean;
 };
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
 export function AccountPrivacySettings({
   initialPreferences,
+  canDisableIdleTimeout = false,
+  idleTimeoutEnabled = true,
 }: AccountPrivacySettingsProps) {
   const { user, isLoaded } = useUser();
   const { openUserProfile } = useClerk();
@@ -167,6 +173,13 @@ export function AccountPrivacySettings({
         const { locale: _locale, ...toggles } = data.preferences as PublicAccountPreferences;
         void _locale;
         setPrefs(toggles);
+      }
+      if (key === "idleTimeoutEnabled" && data.idleTimeout) {
+        window.dispatchEvent(
+          new CustomEvent("fmv:idle-timeout-policy", {
+            detail: data.idleTimeout,
+          }),
+        );
       }
       if (key === "notificationSoundEnabled") {
         window.dispatchEvent(
@@ -507,6 +520,18 @@ export function AccountPrivacySettings({
             </button>
           </li>
         </ul>
+
+        {canDisableIdleTimeout ? (
+          <div className="mt-5 border-t border-[color:var(--border-subtle)] pt-5">
+            <ToggleRow
+              label={t("settings.idleTimeout")}
+              description={t("settings.idleTimeoutHelp")}
+              checked={prefs.idleTimeoutEnabled ?? idleTimeoutEnabled}
+              disabled={prefsState === "saving"}
+              onChange={(v) => void savePreference("idleTimeoutEnabled", v)}
+            />
+          </div>
+        ) : null}
 
         <div
           id="family-location"

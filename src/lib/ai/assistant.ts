@@ -39,7 +39,7 @@ import {
   MIN_MEDIA_FOR_MEMORY,
   MIN_MEDIA_FOR_MOVIE,
 } from "@/lib/ai/actions";
-import { parseIntent, type ParseIntentOptions } from "@/lib/ai/intent";
+import { parseIntent, classifyAskIntent, type ParseIntentOptions } from "@/lib/ai/intent";
 import {
   explainSparseMediaResults,
   loadAssistantMediaByIds,
@@ -297,6 +297,8 @@ export async function handleAssistantTurn(
 
   let resolved = await resolveIntent(userId, intent);
   resolved = await revalidateResolvedPeople(userId, resolved);
+  const intentKind = classifyAskIntent(resolved.intent);
+  resolved = preferVisualSearchOverPersonClarify(resolved, intentKind);
 
   if (isPrivateVaultAction(intent.action)) {
     const vaultResponse = await handlePrivateVaultTurn({
@@ -312,6 +314,8 @@ export async function handleAssistantTurn(
       conversationId,
       status: vaultResponse.status,
       action: intent.action,
+      intentKind,
+      searchMode: "none",
     });
     return vaultResponse;
   }
@@ -333,6 +337,8 @@ export async function handleAssistantTurn(
       conversationId,
       status: helpResponse.status,
       action: intent.action,
+      intentKind,
+      searchMode: "none",
     });
     return helpResponse;
   }
@@ -376,7 +382,12 @@ export async function handleAssistantTurn(
       conversationId,
       status: "clarify",
       action: intent.action,
+      intentKind,
+      searchMode: "clarify",
       peopleCount: resolved.peopleIds.length,
+      visualQuery: intent.visual_query ?? null,
+      objects: intent.objects ?? [],
+      scenes: intent.scenes ?? [],
     });
     return clarifyResponse;
   }
@@ -388,6 +399,7 @@ export async function handleAssistantTurn(
       intent.action === "search_media" ? "newest" : "chronological",
   });
 
+  const searchMode = media.diagnostics.searchMode;
   const minRequired =
     intent.action === "create_movie"
       ? MIN_MEDIA_FOR_MOVIE
@@ -412,8 +424,14 @@ export async function handleAssistantTurn(
       status: "clarify",
       action: intent.action,
       reason: "sparse_media",
+      intentKind,
+      searchMode,
       mediaCount: media.totalCount,
       minRequired,
+      visualQuery: intent.visual_query ?? null,
+      visualLabeledTotal: media.diagnostics.visualLabeledTotal,
+      visualUnlabeledTotal: media.diagnostics.visualUnlabeledTotal,
+      lowVisualCoverage: media.diagnostics.lowVisualCoverage,
     });
     return sparseResponse;
   }
@@ -438,8 +456,11 @@ export async function handleAssistantTurn(
       conversationId,
       status: "preview",
       action: intent.action,
+      intentKind,
+      searchMode,
       mediaCount: media.totalCount,
       theme: chooseMovieStyle(intent),
+      visualQuery: intent.visual_query ?? null,
     });
     return previewResponse;
   }
@@ -459,8 +480,17 @@ export async function handleAssistantTurn(
     conversationId,
     status: completed.status,
     action: intent.action,
+    intentKind,
+    searchMode,
     mediaCount: media.totalCount,
-    actionId: completed.actionId,
+    peopleCount: resolved.peopleIds.length,
+    visualQuery: intent.visual_query ?? null,
+    objects: intent.objects ?? [],
+    scenes: intent.scenes ?? [],
+      visualLabeledTotal: media.diagnostics.visualLabeledTotal,
+      visualUnlabeledTotal: media.diagnostics.visualUnlabeledTotal,
+      lowVisualCoverage: media.diagnostics.lowVisualCoverage,
+      actionId: completed.actionId,
   });
   return completed;
 }
@@ -759,8 +789,13 @@ async function respondSparse(input: {
   const explanation = explainSparseMediaResults({
     diagnostics: input.media.diagnostics,
     matchedPeople: input.resolved.matchedPeople,
+    unresolvedPeople: input.resolved.unresolvedPeople,
+    peopleNames: input.intent.people,
     sparseThreshold: input.minRequired,
     visualQuery: input.intent.visual_query,
+    objects: input.intent.objects,
+    scenes: input.intent.scenes,
+    intentKind: classifyAskIntent(input.intent),
   });
 
   const questions = [
@@ -1317,6 +1352,10 @@ function emptyMediaResult(): AssistantMediaQueryResult {
     diagnostics: {
       matchedCount: 0,
       cleanReadyTotal: 0,
+      visualLabeledTotal: 0,
+      visualUnlabeledTotal: 0,
+      lowVisualCoverage: false,
+      visualLabeledRatio: 0,
       withPeopleOnly: null,
       withDateOnly: null,
       peopleWithoutFaces: [],
@@ -1325,6 +1364,55 @@ function emptyMediaResult(): AssistantMediaQueryResult {
       textHintsApplied: false,
       peopleMatch: "any",
       peopleIdCount: 0,
+      searchMode: "browse",
+    },
+  };
+}
+
+/**
+ * Object/scene asks must search visual labels — never stall on People clarify.
+ */
+function preferVisualSearchOverPersonClarify(
+  resolved: ResolvedIntent,
+  intentKind: ReturnType<typeof classifyAskIntent>,
+): ResolvedIntent {
+  if (intentKind !== "object_search" && intentKind !== "scene_search") {
+    return resolved;
+  }
+
+  const hasVisual =
+    Boolean(resolved.intent.visual_query?.trim()) ||
+    (resolved.intent.objects?.length ?? 0) > 0 ||
+    (resolved.intent.scenes?.length ?? 0) > 0 ||
+    (resolved.intent.qualities?.length ?? 0) > 0;
+
+  if (!hasVisual && resolved.matchedPeople.length > 0) {
+    return resolved;
+  }
+
+  const clarifyingQuestions = resolved.clarifyingQuestions.filter(
+    (q) =>
+      !/couldn'?t find anyone named/i.test(q) &&
+      !/couldn'?t match .+ to people/i.test(q) &&
+      !/matches more than one person/i.test(q) &&
+      !/which person did you mean/i.test(q) &&
+      !/who did you mean/i.test(q),
+  );
+
+  return {
+    ...resolved,
+    peopleIds: [],
+    matchedPeople: [],
+    unresolvedPeople: [],
+    needsClarification: clarifyingQuestions.length > 0,
+    clarifyingQuestions,
+    intent: {
+      ...resolved.intent,
+      people: [],
+      action:
+        resolved.intent.action === "clarify" ? "search_media" : resolved.intent.action,
+      clarifying_questions:
+        clarifyingQuestions.length > 0 ? clarifyingQuestions : undefined,
     },
   };
 }

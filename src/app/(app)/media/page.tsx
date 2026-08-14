@@ -45,6 +45,14 @@ export default async function MediaLibraryPage() {
     console.error("[media.page] getSafeMediaLibrary failed", error);
     throw error;
   }
+
+  // Best-effort: enqueue AI tagging for older clean photos still missing labels.
+  void import("@/lib/media/scene")
+    .then(({ maybeBackfillUnlabeledSceneAnalysisForUser }) =>
+      maybeBackfillUnlabeledSceneAnalysisForUser(userId, { limit: 8 }),
+    )
+    .catch(() => undefined);
+
   const own = library.own.map(serializeSafeMediaItem);
   const shared = library.shared.map(serializeSafeMediaItem);
 

@@ -13,6 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useTranslations } from "@/components/i18n/LocaleProvider";
 import type { TranslateFn } from "@/lib/i18n";
+import { notifyUserActivity } from "@/lib/session/idle-session-sync";
 
 type AssistantChatProps = {
   /** Resume an existing conversation when provided. */
@@ -611,7 +612,11 @@ export function AssistantChat({
             id={composerId}
             ref={inputRef}
             value={draft}
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={(event) => {
+              setDraft(event.target.value);
+              // Idle timeout: composer typing counts as activity (incl. cross-tab).
+              notifyUserActivity();
+            }}
             onKeyDown={onKeyDown}
             rows={isPanel ? 1 : 2}
             enterKeyHint="send"

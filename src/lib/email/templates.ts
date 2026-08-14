@@ -5,6 +5,12 @@
 
 import { getAppUrl } from "@/lib/env";
 import {
+  BETA_DISCORD_BLURB,
+  BETA_DISCORD_CTA_LABEL,
+  getBetaDiscordUrl,
+} from "@/lib/beta-discord";
+import { discordIconEmailHtml } from "@/components/icons/DiscordIcon";
+import {
   createTranslator,
   DEFAULT_LOCALE,
   type AppLocale,
@@ -38,6 +44,11 @@ function layout(options: {
   bodyHtml: string;
   ctaLabel?: string;
   ctaHref?: string;
+  /** Optional second button (e.g. Discord) under the primary CTA. */
+  secondaryCtaLabel?: string;
+  secondaryCtaHref?: string;
+  /** Optional decorative HTML (e.g. inline SVG) before the secondary label. */
+  secondaryCtaLeadingHtml?: string;
   /** Shown under the CTA for clients that strip buttons */
   plainLinkHref?: string;
   footerNote?: string;
@@ -49,6 +60,18 @@ function layout(options: {
         <a href="${escapeHtml(options.ctaHref)}"
            style="display:inline-block;background:#4a7c6f;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:12px 20px;border-radius:8px;">
           ${escapeHtml(options.ctaLabel)}
+        </a>
+      </p>`
+      : "";
+
+  const secondaryLeading = options.secondaryCtaLeadingHtml ?? "";
+  const secondaryCta =
+    options.secondaryCtaLabel && options.secondaryCtaHref
+      ? `
+      <p style="margin:12px 0 8px;">
+        <a href="${escapeHtml(options.secondaryCtaHref)}"
+           style="display:inline-block;background:#ffffff;color:#4a7c6f;text-decoration:none;font-weight:600;font-size:14px;padding:11px 18px;border-radius:8px;border:1px solid #4a7c6f;line-height:1.2;">
+          ${secondaryLeading}${escapeHtml(options.secondaryCtaLabel)}
         </a>
       </p>`
       : "";
@@ -94,6 +117,7 @@ function layout(options: {
             <td style="padding:8px 28px 32px;font-family:system-ui,-apple-system,sans-serif;font-size:15px;line-height:1.6;color:#4a4641;">
               ${options.bodyHtml}
               ${cta}
+              ${secondaryCta}
               ${plainLink}
               <p style="margin:32px 0 0;font-size:12px;line-height:1.5;color:#8a847c;">
                 ${footer}
@@ -126,6 +150,7 @@ export function welcomeEmail(data: {
 }): EmailContent {
   const name = data.firstName?.trim() || "there";
   const href = appUrl("/dashboard");
+  const discordUrl = getBetaDiscordUrl();
   const subject = `Welcome to ${BRAND}`;
   const text = [
     `Hi ${name},`,
@@ -135,6 +160,9 @@ export function welcomeEmail(data: {
     `Every upload is checked for safety before it can appear in Photos.`,
     ``,
     `Open your vault: ${href}`,
+    ``,
+    BETA_DISCORD_BLURB,
+    `${BETA_DISCORD_CTA_LABEL}: ${discordUrl}`,
   ].join("\n");
 
   return {
@@ -146,9 +174,13 @@ export function welcomeEmail(data: {
       bodyHtml: paragraphs([
         `Your vault is ready. Upload photos and videos, gather them into memories, and turn special moments into short movies — all with safety checks built in.`,
         `Start with a few photos from a recent gathering, or invite family when you’re ready to share.`,
+        BETA_DISCORD_BLURB,
       ]),
       ctaLabel: "Open your vault",
       ctaHref: href,
+      secondaryCtaLabel: BETA_DISCORD_CTA_LABEL,
+      secondaryCtaHref: discordUrl,
+      secondaryCtaLeadingHtml: discordIconEmailHtml("#5865F2"),
     }),
   };
 }

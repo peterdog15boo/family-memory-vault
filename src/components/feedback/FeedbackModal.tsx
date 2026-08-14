@@ -25,8 +25,10 @@ import {
   X,
 } from "lucide-react";
 import { FeedbackScreenshotField } from "@/components/feedback/FeedbackScreenshotField";
+import { DiscordIcon } from "@/components/icons/DiscordIcon";
 import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { useOverlayA11y } from "@/hooks/useOverlayA11y";
+import { getBetaDiscordUrl } from "@/lib/beta-discord";
 import { getBetaSurveyUrl } from "@/lib/beta-survey";
 import {
   FEEDBACK_CATEGORIES,
@@ -258,6 +260,7 @@ export function FeedbackModal({
   if (!mounted || !open) return null;
 
   const surveyUrl = getBetaSurveyUrl();
+  const discordUrl = getBetaDiscordUrl();
   const liveContext = context;
 
   return createPortal(
@@ -338,13 +341,24 @@ export function FeedbackModal({
                 </p>
               </div>
             ) : null}
-            <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
+            <div className="mt-1 flex w-full max-w-sm flex-col items-stretch gap-2 sm:max-w-none sm:flex-row sm:flex-wrap sm:items-center sm:justify-center">
+              <a
+                href={discordUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ui-btn ui-btn-secondary ui-btn-sm inline-flex w-full items-center justify-center gap-2 sm:w-auto"
+              >
+                <DiscordIcon className="size-4 text-[#5865F2]" />
+                {t("feedback.discordCta")}
+                <ExternalLink className="size-3 opacity-70" aria-hidden />
+                <span className="sr-only">{t("feedback.discordOpensNew")}</span>
+              </a>
               {surveyUrl ? (
                 <a
                   href={surveyUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="ui-btn ui-btn-secondary ui-btn-sm inline-flex items-center gap-1.5"
+                  className="ui-btn ui-btn-secondary ui-btn-sm inline-flex w-full items-center justify-center gap-1.5 sm:w-auto"
                 >
                   <ClipboardList className="size-3.5" aria-hidden />
                   {t("feedback.surveyCta")}
@@ -353,7 +367,7 @@ export function FeedbackModal({
               ) : null}
               <button
                 type="button"
-                className="ui-btn ui-btn-primary ui-btn-sm"
+                className="ui-btn ui-btn-primary ui-btn-sm w-full sm:w-auto"
                 onClick={onClose}
               >
                 {t("feedback.done")}
@@ -736,6 +750,27 @@ export function FeedbackModal({
             </div>
 
             <div className="flex flex-col gap-3 border-t border-ink/8 px-5 py-4 sm:px-6">
+              <div className="flex flex-col gap-2 rounded-xl border border-ink/10 bg-ink/[0.03] px-3.5 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-ink">
+                    {t("feedback.discordPromoTitle")}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">
+                    {t("feedback.discordPromoBody")}
+                  </p>
+                </div>
+                <a
+                  href={discordUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ui-btn ui-btn-secondary ui-btn-sm inline-flex w-full items-center justify-center gap-2 sm:w-auto sm:self-start"
+                >
+                  <DiscordIcon className="size-4 text-[#5865F2]" />
+                  {t("feedback.discordCta")}
+                  <ExternalLink className="size-3 opacity-70" aria-hidden />
+                  <span className="sr-only">{t("feedback.discordOpensNew")}</span>
+                </a>
+              </div>
               {surveyUrl ? (
                 <div className="flex flex-col gap-2 rounded-xl border border-accent/15 bg-accent/5 px-3.5 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                   <div className="min-w-0">
@@ -750,7 +785,7 @@ export function FeedbackModal({
                     href={surveyUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="ui-btn ui-btn-secondary ui-btn-sm inline-flex shrink-0 items-center justify-center gap-1.5"
+                    className="ui-btn ui-btn-secondary ui-btn-sm inline-flex w-full shrink-0 items-center justify-center gap-1.5 sm:w-auto"
                   >
                     <ClipboardList className="size-3.5" aria-hidden />
                     {t("feedback.surveyCta")}

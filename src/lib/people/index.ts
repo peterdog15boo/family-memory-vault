@@ -1,8 +1,9 @@
 /**
  * Face grouping helpers — people identities and face assignments.
  *
- * Faces should only be created for the owner's media. Person records are
- * always scoped to userId. Detection / embedding providers come later.
+ * Faces are stored under the actor's userId. Media may be owned by the actor
+ * or family-shared (clean/ready) when assigning to a person.
+ * Person records are always scoped to userId.
  */
 
 import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
@@ -362,17 +363,23 @@ export async function setPersonAvatarFraming(
 }
 
 /**
- * List people for a user (newest first) with face counts.
+ * List people for a user (newest first) with face/photo counts.
+ *
+ * Counts use the same rule as Person detail + Ask AI person search:
+ * faces for this person (viewer-scoped) whose media is clean/ready and
+ * visible to the user (owned or family-shared). See person-media.ts.
  */
 export async function listPeopleForUser(
   userId: string,
 ): Promise<PersonWithFaceCount[]> {
   const db = getDb();
+  const { getAccessibleOwnerIds } = await import("@/lib/permissions");
+  const accessibleOwnerIds = await getAccessibleOwnerIds(userId);
 
   const rows = await db
     .select({
       person: people,
-      // Only faces on clean/ready media (matches People UI galleries).
+      // Faces whose media joined (clean + accessible). Null media = excluded.
       faceCount: sql<number>`cast(count(${media.id}) as int)`,
       photoCount: sql<number>`cast(count(distinct ${media.id}) as int)`,
     })
@@ -385,9 +392,9 @@ export async function listPeopleForUser(
       media,
       and(
         eq(media.id, faces.mediaId),
-        eq(media.userId, people.userId),
         eq(media.moderationStatus, "clean"),
         eq(media.status, "ready"),
+        inArray(media.userId, accessibleOwnerIds),
       ),
     )
     .where(eq(people.userId, userId))
@@ -422,8 +429,9 @@ export async function getPersonForUser(
 /* -------------------------------------------------------------------------- */
 
 /**
- * Record a detected face on a media item owned by userId.
- * Media must be clean + ready (defense in depth — detection also gates).
+ * Record a detected face on a media item the user can access
+ * (owned or family-shared clean/ready). Face row stays under the actor's userId
+ * so People identities remain owner-scoped.
  */
 export async function createFace(input: CreateFaceInput): Promise<Face> {
   const box = boundingBoxSchema.safeParse(input.boundingBox);
@@ -436,10 +444,15 @@ export async function createFace(input: CreateFaceInput): Promise<Face> {
   const [mediaRow] = await db
     .select()
     .from(media)
-    .where(and(eq(media.id, input.mediaId), eq(media.userId, input.userId)))
+    .where(eq(media.id, input.mediaId))
     .limit(1);
 
   if (!mediaRow) {
+    throw new PeopleError("Photo not found.");
+  }
+
+  const { canViewMedia } = await import("@/lib/permissions");
+  if (!(await canViewMedia(input.userId, input.mediaId))) {
     throw new PeopleError("Photo not found.");
   }
 
@@ -805,7 +818,8 @@ export type AssignMediaToPersonResult = {
 };
 
 /**
- * Manually attach clean/ready owner photos or videos to a person.
+ * Manually attach clean/ready photos or videos the user can access
+ * (owned or family-shared) to a person they own.
  *
  * Prefer reusing an unlabeled detected face on the media; otherwise create a
  * manual full-frame face link so assignment works when recognition missed them.
@@ -830,17 +844,20 @@ export async function assignMediaToPerson(input: {
     });
   }
 
+  const { loadCleanAccessibleMediaByIds } = await import("@/lib/media/queries");
+  const accessibleRows = await loadCleanAccessibleMediaByIds(
+    input.userId,
+    uniqueIds,
+  );
+  const accessibleById = new Map(accessibleRows.map((row) => [row.id, row]));
+
   const db = getDb();
   const assigned: string[] = [];
   const alreadyAssigned: string[] = [];
   const skipped: { mediaId: string; reason: string }[] = [];
 
   for (const mediaId of uniqueIds) {
-    const [mediaRow] = await db
-      .select()
-      .from(media)
-      .where(and(eq(media.id, mediaId), eq(media.userId, input.userId)))
-      .limit(1);
+    const mediaRow = accessibleById.get(mediaId);
 
     if (!mediaRow) {
       skipped.push({ mediaId, reason: "Media not found." });

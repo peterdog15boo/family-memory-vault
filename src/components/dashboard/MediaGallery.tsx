@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { MediaThumb } from "@/components/memories/MediaThumb";
 import { MediaViewerMedia } from "@/components/media/MediaViewerMedia";
 import { AssignMediaToPersonControl } from "@/components/people/AssignMediaToPersonControl";
+import { MediaTagsControl } from "@/components/media/MediaTagsControl";
 import { useCopy, useTranslations } from "@/components/i18n/LocaleProvider";
 import { useLightboxKeyboardNav } from "@/hooks/useLightboxKeyboardNav";
 import { useOverlayA11y } from "@/hooks/useOverlayA11y";
@@ -33,6 +34,14 @@ type MediaGalleryProps = {
   /** Owner-only delete from the preview lightbox. */
   onDelete?: (item: GalleryItem) => void | Promise<void>;
   deletingId?: string | null;
+  /**
+   * Photos tag mode: click selects a photo for batch tagging (no lightbox).
+   * When set, `activeId` is highlighted in the grid.
+   */
+  tagMode?: {
+    activeId: string | null;
+    onSelect: (id: string) => void;
+  } | null;
 };
 
 /** Above shell chrome / notification panel so the viewer covers the viewport. */
@@ -96,9 +105,13 @@ const VideoThumbnail = memo(function VideoThumbnail({
 const GalleryTile = memo(function GalleryTile({
   item,
   onOpen,
+  tagModeActive,
+  tagModeEnabled,
 }: {
   item: GalleryItem;
   onOpen: (id: string) => void;
+  tagModeActive?: boolean;
+  tagModeEnabled?: boolean;
 }) {
   const t = useTranslations();
   const label = item.originalFilename || t("mediaUi.familyMedia");
@@ -107,17 +120,23 @@ const GalleryTile = memo(function GalleryTile({
     <li>
       <button
         type="button"
+        data-media-id={item.id}
         onClick={() => onOpen(item.id)}
         aria-label={
-          item.type === "video"
-            ? `Open video: ${label}`
-            : `Open photo: ${label}`
+          tagModeEnabled
+            ? t("mediaUi.tagModeSelectPhoto", { name: label })
+            : item.type === "video"
+              ? `Open video: ${label}`
+              : `Open photo: ${label}`
         }
+        aria-current={tagModeActive ? "true" : undefined}
         className={cn(
           "media-tile group relative aspect-square w-full overflow-hidden rounded-lg",
-          "border border-ink/8 bg-canvas-deep text-left transition",
-          "hover:border-accent/40 hover:shadow-sm focus-visible:outline-none",
-          "focus-visible:ring-2 focus-visible:ring-accent/40",
+          "border bg-canvas-deep text-left transition",
+          tagModeActive
+            ? "border-accent ring-2 ring-accent/50 ring-offset-2 ring-offset-canvas"
+            : "border-ink/8 hover:border-accent/40 hover:shadow-sm",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
         )}
       >
         {item.previewUrl && (item.type === "photo" || item.hasThumbnail) ? (
@@ -144,11 +163,17 @@ const GalleryTile = memo(function GalleryTile({
             </span>
           </div>
         )}
-        <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink/50 to-transparent px-2 pb-2 pt-8 text-[11px] text-accent-foreground opacity-0 transition group-hover:opacity-100">
-          <span className="line-clamp-1">
-            {item.originalFilename || t("nav.memories")}
+        {tagModeActive ? (
+          <span className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-accent/80 to-transparent px-2 pb-6 pt-2 text-[11px] font-medium text-accent-foreground">
+            {t("mediaUi.tagModeActiveBadge")}
           </span>
-        </span>
+        ) : (
+          <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink/50 to-transparent px-2 pb-2 pt-8 text-[11px] text-accent-foreground opacity-0 transition group-hover:opacity-100">
+            <span className="line-clamp-1">
+              {item.originalFilename || t("nav.memories")}
+            </span>
+          </span>
+        )}
       </button>
     </li>
   );
@@ -163,6 +188,7 @@ export function MediaGallery({
   emptySecondaryAction,
   onDelete,
   deletingId = null,
+  tagMode = null,
 }: MediaGalleryProps) {
   const copy = useCopy();
   const t = useTranslations();
@@ -180,15 +206,30 @@ export function MediaGallery({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const viewerRef = useRef<HTMLDivElement>(null);
+  const tagModeEnabled = Boolean(tagMode);
   const active = items.find((item) => item.id === activeId) ?? null;
   const deleting = Boolean(active && deletingId === active.id);
 
-  const open = useCallback((id: string) => setActiveId(id), []);
+  const open = useCallback(
+    (id: string) => {
+      if (tagMode) {
+        tagMode.onSelect(id);
+        return;
+      }
+      setActiveId(id);
+    },
+    [tagMode],
+  );
   const close = useCallback(() => setActiveId(null), []);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Leave lightbox when entering tag mode.
+  useEffect(() => {
+    if (tagModeEnabled) setActiveId(null);
+  }, [tagModeEnabled]);
 
   const handleDelete = useCallback(async () => {
     if (!active || !onDelete || deleting) return;
@@ -201,7 +242,7 @@ export function MediaGallery({
   }, [active, deleting, onDelete, t]);
 
   useOverlayA11y({
-    open: Boolean(active),
+    open: Boolean(active) && !tagModeEnabled,
     onClose: close,
     containerRef: viewerRef,
     lockScrollPadding: true,
@@ -209,7 +250,7 @@ export function MediaGallery({
 
   const itemIds = useMemo(() => items.map((item) => item.id), [items]);
   const { canNavigate, index, count, goPrev, goNext } = useLightboxKeyboardNav({
-    open: Boolean(active),
+    open: Boolean(active) && !tagModeEnabled,
     itemIds,
     activeId,
     onActiveIdChange: setActiveId,
@@ -244,7 +285,7 @@ export function MediaGallery({
   }
 
   const viewer =
-    active && mounted
+    active && mounted && !tagModeEnabled
       ? createPortal(
           <div
             ref={viewerRef}
@@ -327,10 +368,19 @@ export function MediaGallery({
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col items-stretch gap-2 sm:max-w-md sm:items-end">
                   {active.type === "photo" || active.type === "video" ? (
-                    <AssignMediaToPersonControl
-                      mediaId={active.id}
-                      className="w-full sm:max-w-sm"
-                    />
+                    <>
+                      <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-end">
+                        <MediaTagsControl
+                          mediaId={active.id}
+                          compact
+                          className="w-full sm:w-auto"
+                        />
+                      </div>
+                      <AssignMediaToPersonControl
+                        mediaId={active.id}
+                        className="w-full sm:max-w-sm"
+                      />
+                    </>
                   ) : null}
                   {onDelete ? (
                     <button
@@ -355,7 +405,13 @@ export function MediaGallery({
     <>
       <ul className="media-gallery-grid grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4">
         {items.map((item) => (
-          <GalleryTile key={item.id} item={item} onOpen={open} />
+          <GalleryTile
+            key={item.id}
+            item={item}
+            onOpen={open}
+            tagModeEnabled={tagModeEnabled}
+            tagModeActive={tagMode?.activeId === item.id}
+          />
         ))}
       </ul>
       {viewer}

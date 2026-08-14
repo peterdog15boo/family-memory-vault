@@ -29,7 +29,8 @@ const mediaIdsBodySchema = z.object({
 /**
  * POST /api/people/[id]/photos
  *
- * Manually assign clean/ready owner photos or videos to this person.
+ * Manually assign clean/ready photos or videos the user can access
+ * (owned or family-shared) to this person.
  * Uses an unlabeled detected face when present; otherwise creates a manual
  * full-frame face link (works when auto recognition missed them).
  */

@@ -2,7 +2,7 @@
  * Synonym expansion + visual search helpers for Ask AI.
  *
  * Expands everyday concepts (objects, settings, people categories) so
- * retrieval matches related ai_tags / ai_objects / ai_scenes labels.
+ * retrieval matches related ai_tags / user_tags / ai_objects / ai_scenes labels.
  */
 
 import { normalizeVisionToken } from "@/lib/ai/vision";
@@ -79,7 +79,26 @@ const VISUAL_SYNONYMS: Record<string, string[]> = {
   children: ["child", "kid", "kids", "boys", "girls"],
 
   // Settings / scenes
-  beach: ["ocean", "shore", "shoreline", "sand", "seaside", "coast", "seaside"],
+  beach: ["ocean", "shore", "shoreline", "sand", "seaside", "coast"],
+  shore: ["beach", "ocean", "sand", "shoreline", "coast"],
+  // Bathroom / fixtures
+  toilet: ["bathroom", "restroom", "washroom", "lavatory", "wc", "toilets"],
+  toilets: ["toilet", "bathroom", "restroom", "washroom"],
+  bathroom: ["toilet", "restroom", "washroom", "bath", "shower", "sink"],
+  restroom: ["toilet", "bathroom", "washroom", "lavatory", "wc"],
+  washroom: ["bathroom", "restroom", "toilet"],
+  lavatory: ["toilet", "bathroom", "restroom"],
+  wc: ["toilet", "bathroom", "restroom"],
+  // Multilingual bathroom / toilet
+  inodoro: ["toilet", "bathroom", "restroom", "washroom", "wc"],
+  inodoros: ["toilet", "bathroom", "restroom", "wc"],
+  bano: ["bathroom", "toilet", "restroom", "bath", "shower", "washroom"],
+  banos: ["bathroom", "toilet", "restroom", "bath"],
+  toilettes: ["toilet", "bathroom", "restroom", "wc"],
+  toilette: ["toilet", "bathroom", "restroom"],
+  badezimmer: ["bathroom", "toilet", "restroom", "bath"],
+  klo: ["toilet", "bathroom", "restroom", "wc"],
+  kitchen: ["cooking", "stove", "oven", "counter", "kitchenette"],
   // Multilingual aliases → English vision labels (stored captions/tags are English)
   playa: ["beach", "ocean", "shore", "sand", "coast", "seaside"],
   playas: ["beach", "ocean", "shore", "sand", "coast"],
@@ -108,6 +127,7 @@ const VISUAL_SYNONYMS: Record<string, string[]> = {
   torte: ["cake", "birthday cake", "dessert"],
   bolo: ["cake", "birthday cake", "dessert"],
   tarta: ["cake", "birthday cake", "dessert"],
+  tarte: ["cake", "birthday cake", "dessert", "pie"],
   boda: ["wedding", "bride", "groom", "ceremony"],
   mariage: ["wedding", "bride", "groom", "ceremony"],
   hochzeit: ["wedding", "bride", "groom", "ceremony"],
@@ -130,6 +150,19 @@ const VISUAL_SYNONYMS: Record<string, string[]> = {
   gatto: ["cat", "kitten", "pet"],
   猫: ["cat", "kitten", "pet"],
   고양이: ["cat", "kitten", "pet"],
+  // Vehicles (multilingual)
+  voiture: ["car", "cars", "automobile", "vehicle"],
+  voitures: ["car", "cars", "automobile", "vehicle"],
+  coche: ["car", "cars", "automobile", "vehicle"],
+  coches: ["car", "cars", "automobile", "vehicle"],
+  auto: ["car", "cars", "automobile", "vehicle"],
+  autos: ["car", "cars", "automobile", "vehicle"],
+  wagen: ["car", "cars", "automobile", "vehicle"],
+  macchina: ["car", "cars", "automobile", "vehicle"],
+  carro: ["car", "cars", "automobile", "vehicle"],
+  车: ["car", "cars", "automobile", "vehicle"],
+  車: ["car", "cars", "automobile", "vehicle"],
+  자동차: ["car", "cars", "automobile", "vehicle"],
   piscina: ["pool", "swimming pool", "swim"],
   piscine: ["pool", "swimming pool", "swim"],
   schwimmbad: ["pool", "swimming pool", "swim"],
@@ -215,6 +248,7 @@ function addSynonymsForKey(key: string, terms: Set<string>) {
 
 /**
  * Expand a visual query into searchable tokens (original + synonyms + words).
+ * Multilingual words (e.g. inodoro, playa, voiture) expand to English AI tags.
  */
 export function expandVisualQueryTerms(query: string): string[] {
   const base = normalizeVisionToken(query);
@@ -244,12 +278,30 @@ export function expandVisualQueryTerms(query: string): string[] {
     addSynonymsForKey(singular, terms);
   }
 
-  return [...terms].slice(0, 36);
+  return [...terms].slice(0, 48);
+}
+
+/**
+ * Build retrieval terms from the user utterance + any English-normalized hints.
+ * Keeps original-language tokens and expands them onto English AI labels.
+ */
+export function buildVisualSearchTerms(
+  ...parts: Array<string | null | undefined>
+): string[] {
+  const joined = parts
+    .map((p) => (typeof p === "string" ? p.trim() : ""))
+    .filter(Boolean)
+    .join(" ");
+  return expandVisualQueryTerms(joined);
 }
 
 /**
  * Score how well a media row's visual fields match expanded terms.
- * Higher is better. Exact object/scene hits outweigh caption substrings.
+ * Higher is better. Exact object/scene/user-tag hits outweigh caption substrings.
+ * Primary query terms (original ask) score higher than synonym expansions.
+ *
+ * User tags are first-class: a manual “toilet” tag ranks like an AI object hit
+ * so Ask AI / Photos search recall works when vision missed the label.
  */
 export function scoreVisualMatch(
   terms: string[],
@@ -257,12 +309,24 @@ export function scoreVisualMatch(
     caption?: string | null;
     description?: string | null;
     tags?: string[] | null;
+    /** Manual keywords — ranked with object-level weight. */
+    userTags?: string[] | null;
     objects?: string[] | null;
     scenes?: string[] | null;
     filename?: string | null;
   },
+  options?: {
+    /** Original query terms — boosted over synonym-only hits. */
+    primaryTerms?: string[];
+  },
 ): number {
   if (terms.length === 0) return 0;
+
+  const primary = new Set(
+    (options?.primaryTerms ?? [])
+      .map((t) => normalizeVisionToken(String(t)))
+      .filter(Boolean),
+  );
 
   const objects = (fields.objects ?? []).map((t) =>
     normalizeVisionToken(String(t)),
@@ -270,9 +334,13 @@ export function scoreVisualMatch(
   const scenes = (fields.scenes ?? []).map((t) =>
     normalizeVisionToken(String(t)),
   );
+  const userTags = (fields.userTags ?? []).map((t) =>
+    normalizeVisionToken(String(t)),
+  );
   const tags = (fields.tags ?? []).map((t) => normalizeVisionToken(String(t)));
 
   const bag = [
+    ...userTags,
     ...tags,
     ...objects,
     ...scenes,
@@ -289,20 +357,28 @@ export function scoreVisualMatch(
   let score = 0;
   for (const term of terms) {
     if (!term) continue;
+    const boost = primary.has(term) || [...primary].some((p) => p.includes(term) || term.includes(p))
+      ? 1.75
+      : 1;
+    // Manual tags first — intentional signal equal to AI objects.
+    if (userTags.some((t) => t === term || t.includes(term))) {
+      score += Math.round(Math.min(12, 4 + Math.floor(term.length / 3)) * boost);
+      continue;
+    }
     if (objects.some((o) => o === term || o.includes(term))) {
-      score += Math.min(12, 4 + Math.floor(term.length / 3));
+      score += Math.round(Math.min(12, 4 + Math.floor(term.length / 3)) * boost);
       continue;
     }
     if (scenes.some((s) => s === term || s.includes(term))) {
-      score += Math.min(11, 3 + Math.floor(term.length / 3));
+      score += Math.round(Math.min(11, 3 + Math.floor(term.length / 3)) * boost);
       continue;
     }
     if (tags.some((t) => t === term || t.includes(term))) {
-      score += Math.min(9, 2 + Math.floor(term.length / 4));
+      score += Math.round(Math.min(9, 2 + Math.floor(term.length / 4)) * boost);
       continue;
     }
     if (bag.includes(term)) {
-      score += Math.min(6, 1 + Math.floor(term.length / 5));
+      score += Math.round(Math.min(6, 1 + Math.floor(term.length / 5)) * boost);
     }
   }
   return score;
@@ -321,8 +397,8 @@ export function suggestVisualAlternatives(query: string): string[] {
     if (suggestions.length >= 4) break;
   }
   if (suggestions.length === 0) {
-    suggestions.push("try a simpler object word (cake, beach, dog, suit, tie)");
-    suggestions.push("try a scene word (indoors, outdoors, beach, party, office)");
+    suggestions.push("try a simpler object word (cake, beach, dog, toilet, suit)");
+    suggestions.push("try a scene word (indoors, outdoors, beach, kitchen, bathroom, party)");
   }
   return suggestions;
 }

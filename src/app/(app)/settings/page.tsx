@@ -12,6 +12,7 @@ import { ThemeSettingsSection } from "@/components/theme/ThemeSettingsSection";
 import { AppPageIntro } from "@/components/ui/AppPageIntro";
 import {
   getAccountPreferences,
+  getIdleTimeoutPolicyForUser,
   publicAccountPreferences,
 } from "@/lib/account-preferences";
 import { getAccountUsageSummary } from "@/lib/billing/account-usage";
@@ -32,9 +33,10 @@ export default async function SettingsPage() {
   await ensureAppUser(userId);
   await ensureFreeSubscription(userId);
 
-  const [summary, preferences, t] = await Promise.all([
+  const [summary, preferences, idleTimeout, t] = await Promise.all([
     getAccountUsageSummary(userId),
     getAccountPreferences(userId),
+    getIdleTimeoutPolicyForUser(userId),
     getTranslations(),
   ]);
   const stripeConfigured = isStripeConfigured();
@@ -82,6 +84,8 @@ export default async function SettingsPage() {
 
           <AccountPrivacySettings
             initialPreferences={publicAccountPreferences(preferences)}
+            canDisableIdleTimeout={idleTimeout.canDisable}
+            idleTimeoutEnabled={idleTimeout.enabled}
           />
         </div>
 

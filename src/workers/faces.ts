@@ -106,24 +106,29 @@ export async function processFaceDetectionJob(
   }
 
   if (payloadUserId && payloadUserId !== row.userId) {
-    log("warn", "Payload userId does not own media — completing without work", {
-      jobId: job.id,
-      mediaId,
-      payloadUserId,
-      ownerUserId: row.userId,
-    });
-    await completeJob(job.id);
-    return {
-      jobId: job.id,
-      mediaId,
-      skipped: true,
-      skipReason: "Job userId does not match media owner.",
-    };
+    const { canViewMedia } = await import("@/lib/permissions");
+    if (!(await canViewMedia(payloadUserId, mediaId))) {
+      log("warn", "Payload userId cannot view media — completing without work", {
+        jobId: job.id,
+        mediaId,
+        payloadUserId,
+        ownerUserId: row.userId,
+      });
+      await completeJob(job.id);
+      return {
+        jobId: job.id,
+        mediaId,
+        skipped: true,
+        skipReason: "Job userId cannot access this media.",
+      };
+    }
   }
+
+  const actorUserId = payloadUserId ?? row.userId;
 
   try {
     const result = await processFacesForMedia(mediaId, {
-      userId: row.userId,
+      userId: actorUserId,
       replaceExisting,
     });
 
@@ -131,6 +136,7 @@ export async function processFaceDetectionJob(
     log("info", "Face processing complete", {
       jobId: job.id,
       mediaId,
+      actorUserId,
       skipped,
       skipReason: result.detection.skipReason,
       provider: result.detection.provider,

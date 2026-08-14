@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Film, Images } from "lucide-react";
 import { MovieCard } from "@/components/movies/MovieCard";
 import { MoviePlayer } from "@/components/movies/MoviePlayer";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useCopy, useTranslations } from "@/components/i18n/LocaleProvider";
 import type { SerializedMovie } from "@/lib/movies/serialize";
+import { beginCriticalWork } from "@/lib/session/critical-activity";
 
 type MovieLibraryProps = {
   initialMovies: SerializedMovie[];
@@ -88,6 +89,27 @@ export function MovieLibrary({
     }, 4000);
     return () => clearInterval(id);
   }, [movies, load]);
+
+  // Idle session: treat library renders as critical work (warn before logout).
+  const endMovieRenderRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    const pending = movies.some(
+      (m) => m.status === "queued" || m.status === "processing",
+    );
+    if (pending && !endMovieRenderRef.current) {
+      endMovieRenderRef.current = beginCriticalWork("movie_render");
+    } else if (!pending && endMovieRenderRef.current) {
+      endMovieRenderRef.current();
+      endMovieRenderRef.current = null;
+    }
+  }, [movies]);
+  useEffect(
+    () => () => {
+      endMovieRenderRef.current?.();
+      endMovieRenderRef.current = null;
+    },
+    [],
+  );
 
   async function handleDelete(movie: SerializedMovie) {
     const ok = window.confirm(

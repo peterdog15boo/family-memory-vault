@@ -110,6 +110,12 @@ describe("visual search", () => {
     expect(expandVisualQueryTerms("beach")).toEqual(
       expect.arrayContaining(["ocean", "shore", "sand"]),
     );
+    expect(expandVisualQueryTerms("toilet")).toEqual(
+      expect.arrayContaining(["bathroom", "restroom", "washroom"]),
+    );
+    expect(expandVisualQueryTerms("indoors")).toEqual(
+      expect.arrayContaining(["indoor", "inside", "interior"]),
+    );
   });
 
   it("scores caption/object hits higher for specific phrases", () => {
@@ -145,6 +151,65 @@ describe("visual search", () => {
       scenes: [],
     });
     expect(objectHit).toBeGreaterThan(captionOnly);
+  });
+
+  it("boosts primary toilet terms over synonym-only bathroom hits", () => {
+    const terms = expandVisualQueryTerms("toilet");
+    const primary = scoreVisualMatch(
+      terms,
+      { objects: ["toilet"], tags: [], scenes: [], caption: null },
+      { primaryTerms: ["toilet"] },
+    );
+    const synonym = scoreVisualMatch(
+      terms,
+      { objects: ["bathroom"], tags: [], scenes: [], caption: null },
+      { primaryTerms: ["toilet"] },
+    );
+    expect(primary).toBeGreaterThan(synonym);
+    expect(synonym).toBeGreaterThan(0);
+  });
+
+  it("matches Ask AI object queries via manual user tags alone", () => {
+    const terms = expandVisualQueryTerms("toilet");
+    const userOnly = scoreVisualMatch(
+      terms,
+      {
+        userTags: ["toilet"],
+        tags: [],
+        objects: [],
+        scenes: [],
+        caption: null,
+      },
+      { primaryTerms: ["toilet"] },
+    );
+    const aiMiss = scoreVisualMatch(
+      terms,
+      {
+        userTags: [],
+        tags: [],
+        objects: [],
+        scenes: [],
+        caption: "Family photo indoors",
+      },
+      { primaryTerms: ["toilet"] },
+    );
+    expect(userOnly).toBeGreaterThan(0);
+    expect(userOnly).toBeGreaterThan(aiMiss);
+  });
+
+  it("ranks a manual toilet tag with object-level weight", () => {
+    const terms = expandVisualQueryTerms("toilet");
+    const userTag = scoreVisualMatch(
+      terms,
+      { userTags: ["toilet"], tags: [], objects: [], scenes: [] },
+      { primaryTerms: ["toilet"] },
+    );
+    const aiObject = scoreVisualMatch(
+      terms,
+      { userTags: [], tags: [], objects: ["toilet"], scenes: [] },
+      { primaryTerms: ["toilet"] },
+    );
+    expect(userTag).toBe(aiObject);
   });
 
   it("suggests broader alternatives when empty", () => {

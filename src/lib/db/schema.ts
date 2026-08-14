@@ -267,6 +267,12 @@ export type UserAccountPreferences = {
   emailMilestoneCelebrations?: boolean;
   /** Occasional product updates — opt-in only. */
   productUpdatesEmail?: boolean;
+  /**
+   * Automatically log out after inactivity (bank-style idle timeout).
+   * Persisted as `idle_timeout_enabled` conceptually / `idleTimeoutEnabled` in JSON.
+   * Default ON. Free plans always enforce ON regardless of this value.
+   */
+  idleTimeoutEnabled?: boolean;
   /** Internal dedupe for storage warning emails when in-app is off. */
   lastStorageWarningAt?: string | null;
   /** UI locale (BCP 47), e.g. en-US. */
@@ -286,6 +292,7 @@ export const DEFAULT_USER_ACCOUNT_PREFERENCES = {
   celebrationSoundEnabled: false,
   emailMilestoneCelebrations: true,
   productUpdatesEmail: false,
+  idleTimeoutEnabled: true,
   lastStorageWarningAt: null,
   locale: "en-US",
 } as const satisfies Required<UserAccountPreferences>;
@@ -411,6 +418,21 @@ export const media = pgTable(
     aiDescription: text("ai_description"),
     aiEmbedding: jsonb("ai_embedding").$type<number[] | null>(),
     visualAnalyzedAt: timestamp("visual_analyzed_at", { withTimezone: true }),
+
+    /**
+     * User-edited keywords (distinct from AI tags). Merged into Ask AI /
+     * Photos search alongside ai_tags. Case-insensitive unique per media.
+     */
+    userTags: jsonb("user_tags").$type<string[]>().default([]).notNull(),
+
+    /**
+     * AI labels the user explicitly removed. Kept so re-analysis does not
+     * restore them; also used to filter display/search if arrays are stale.
+     */
+    dismissedAiTags: jsonb("dismissed_ai_tags")
+      .$type<string[]>()
+      .default([])
+      .notNull(),
 
     /**
      * Cached Ken Burns / subject framing (normalized 0–1).

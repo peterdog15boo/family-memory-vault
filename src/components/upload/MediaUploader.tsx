@@ -14,6 +14,7 @@ import { prepareUploadFile } from "@/lib/upload/prepare-upload-file";
 import { UpgradePrompt } from "@/components/billing/UpgradePrompt";
 import { useCopy, useTranslations } from "@/components/i18n/LocaleProvider";
 import { userFacingApiError } from "@/lib/http/user-messages";
+import { beginUploadActivity } from "@/lib/session/upload-activity";
 import { cn } from "@/lib/utils";
 
 type UploadItemStatus =
@@ -156,6 +157,7 @@ export function MediaUploader({
 
   const processFile = useCallback(
     async (item: UploadItem) => {
+      const endUpload = beginUploadActivity();
       try {
         updateItem(item.id, {
           status: "requesting_url",
@@ -285,6 +287,8 @@ export function MediaUploader({
           status: "error",
           error: uploadFailureMessage(error),
         });
+      } finally {
+        endUpload();
       }
     },
     [planName, updateItem],

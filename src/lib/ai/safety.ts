@@ -2,9 +2,10 @@
  * Assistant safety constraints — ownership, clean media, and user-facing errors.
  *
  * Invariants:
- * - Media for search/create is always the current user's clean+ready rows
- *   (family gallery sharing is intentionally not used for creates; people/faces
- *   remain owner-only).
+ * - Media for Ask AI search uses clean/ready media the user can view
+ *   (owned + family-shared), via the same person-media rule as People pages.
+ * - Creates attach only media the user can access; people/faces stay
+ *   scoped to the current user's People graph.
  * - People IDs must belong to the current user; never trust client/proposal IDs alone.
  * - User-facing errors stay generic; details go to structured logs only.
  */

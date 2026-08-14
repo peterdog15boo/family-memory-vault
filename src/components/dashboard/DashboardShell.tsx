@@ -15,8 +15,10 @@ import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { CelebrationHost } from "@/components/celebrations/CelebrationHost";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { PushSubscriptionSync } from "@/components/notifications/PushSubscriptionSync";
+import { IdleSessionGuard } from "@/components/session/IdleSessionGuard";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import type { AvaProgress } from "@/lib/ava/types";
+import type { IdleTimeoutPolicy } from "@/lib/session/idle-timeout-policy";
 import { cn } from "@/lib/utils";
 
 type DashboardShellProps = {
@@ -25,6 +27,7 @@ type DashboardShellProps = {
   isAdmin?: boolean;
   initialUnreadCount?: number;
   initialAvaProgress?: AvaProgress | null;
+  idleTimeoutPolicy?: IdleTimeoutPolicy;
   children: ReactNode;
 };
 
@@ -46,6 +49,7 @@ function DashboardShellInner({
   isAdmin = false,
   initialUnreadCount = 0,
   initialAvaProgress = null,
+  idleTimeoutPolicy,
   children,
 }: DashboardShellProps) {
   const { isModern } = useTheme();
@@ -119,6 +123,7 @@ function DashboardShellInner({
       <AvaHelper initialProgress={initialAvaProgress} />
       <CelebrationHost />
       <PushSubscriptionSync />
+      <IdleSessionGuard initialPolicy={idleTimeoutPolicy} />
       <AskAiFab />
       <AskAiPanel />
     </div>

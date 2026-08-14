@@ -9,6 +9,7 @@ import { shouldRedirectToBetaNda } from "@/lib/beta-nda/gate";
 import { shouldRedirectToTerms } from "@/lib/terms/gate";
 import { getUnreadCount } from "@/lib/notifications";
 import type { AvaProgress } from "@/lib/ava/types";
+import { getIdleTimeoutPolicyForUser } from "@/lib/account-preferences";
 import { ensureAppUser } from "@/lib/users";
 
 /**
@@ -123,12 +124,13 @@ export default async function AppLayout({
     redirect(`/terms-agree?redirect_url=${encodeURIComponent(safe)}`);
   }
 
-  const [{ displayName, email }, unreadCount, admin, avaProgress] =
+  const [{ displayName, email }, unreadCount, admin, avaProgress, idleTimeoutPolicy] =
     await Promise.all([
       resolveShellUser(userId),
       safeUnreadCount(userId),
       isAdmin(userId),
       safeAvaProgress(userId),
+      safeIdleTimeoutPolicy(userId),
     ]);
 
   return (
@@ -138,6 +140,7 @@ export default async function AppLayout({
       isAdmin={admin}
       initialUnreadCount={unreadCount}
       initialAvaProgress={avaProgress}
+      idleTimeoutPolicy={idleTimeoutPolicy}
     >
       {children}
     </DashboardShell>
@@ -164,5 +167,27 @@ async function safeAvaProgress(
   } catch (error) {
     console.warn("[app.layout] getAvaProgress failed", error);
     return null;
+  }
+}
+
+async function safeIdleTimeoutPolicy(userId: string | null | undefined) {
+  if (!userId) {
+    return {
+      enabled: true,
+      preferenceEnabled: true,
+      canDisable: false,
+      planSlug: "free",
+    };
+  }
+  try {
+    return await getIdleTimeoutPolicyForUser(userId);
+  } catch (error) {
+    console.warn("[app.layout] getIdleTimeoutPolicyForUser failed", error);
+    return {
+      enabled: true,
+      preferenceEnabled: true,
+      canDisable: false,
+      planSlug: "free",
+    };
   }
 }

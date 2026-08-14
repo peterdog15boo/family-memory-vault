@@ -48,6 +48,15 @@ export const HELP_KNOWLEDGE: readonly HelpKnowledgeEntry[] = [
       "household",
       "add someone",
       "invitation",
+      // Multilingual help cues
+      "invitar",
+      "invito",
+      "familia",
+      "famille",
+      "einladen",
+      "familie",
+      "convidar",
+      "invitare",
     ],
     summary:
       "Invite people you trust from the Family page. They’ll get an invitation to join your household vault.",

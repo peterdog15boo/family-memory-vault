@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, sql, SQL } from "drizzle-orm";
+import { and, count, desc, eq, ilike, inArray, or, sql, SQL } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { media, type Media } from "@/lib/db/schema";
 import { isSafeToServe } from "@/lib/moderation/types";
@@ -101,6 +101,39 @@ export function cleanReadyMediaOwnedByFilter(ownerIds: string[]): SQL {
     eq(media.status, "ready"),
     inArray(media.userId, ownerIds),
   )!;
+}
+
+/**
+ * Load clean/ready media IDs the user may view (own + family co-member).
+ * Canonical helper for People assignment, Ask AI, and person galleries.
+ * Returns [] for unknown / unauthorized / non-clean ids (never throws).
+ */
+export async function loadCleanAccessibleMediaByIds(
+  userId: string,
+  mediaIds: string[],
+): Promise<Media[]> {
+  const unique = [
+    ...new Set(mediaIds.map((id) => id.trim()).filter(Boolean)),
+  ];
+  if (unique.length === 0) return [];
+
+  const db = getDb();
+  const accessFilter = await getAccessibleMediaFilter(userId);
+  return db
+    .select()
+    .from(media)
+    .where(and(accessFilter, inArray(media.id, unique)));
+}
+
+/**
+ * True when the user may view this media id as clean/ready own or family-shared.
+ */
+export async function canAccessCleanMedia(
+  userId: string,
+  mediaId: string,
+): Promise<boolean> {
+  const rows = await loadCleanAccessibleMediaByIds(userId, [mediaId]);
+  return rows.length > 0;
 }
 
 /**
@@ -222,11 +255,12 @@ export type MediaLibraryScope = "own" | "shared";
 
 /**
  * One page of clean/ready media for a scope (used by load-more API).
+ * Optional `q` filters by user tags + AI tags / objects / scenes / captions / filename.
  */
 export async function getSafeMediaPage(
   userId: string,
   scope: MediaLibraryScope,
-  options?: { limit?: number; offset?: number },
+  options?: { limit?: number; offset?: number; q?: string },
 ): Promise<{ items: SafeMediaItem[]; hasMore: boolean }> {
   const limit = Math.min(
     Math.max(options?.limit ?? MEDIA_PAGE_SIZE, 1),
@@ -247,10 +281,13 @@ export async function getSafeMediaPage(
     filter = cleanReadyMediaOwnedByFilter(sharedOwnerIds);
   }
 
+  const tagFilter = visualTagSearchSql(options?.q);
+  const where = tagFilter ? and(filter, tagFilter)! : filter;
+
   const rows = await db
     .select(mediaGalleryColumns)
     .from(media)
-    .where(filter)
+    .where(where)
     .orderBy(desc(media.createdAt))
     .limit(limit + 1)
     .offset(offset);
@@ -259,6 +296,27 @@ export async function getSafeMediaPage(
   const page = hasMore ? rows.slice(0, limit) : rows;
   const items = await mapSafeMediaRows(page);
   return { items, hasMore };
+}
+
+/**
+ * SQL fragment matching searchable keywords on media (Ask AI + Photos search).
+ * Includes AI tags/objects/scenes/captions and manual user_tags.
+ * Always AND with clean/ready (+ permission) filters at the call site.
+ */
+export function visualTagSearchSql(query: string | null | undefined): SQL | null {
+  const raw = query?.trim() ?? "";
+  if (raw.length < 2) return null;
+  const pattern = `%${raw.replace(/[\\%_]/g, (ch) => `\\${ch}`).toLowerCase()}%`;
+  return or(
+    sql`${media.userTags}::text ilike ${pattern}`,
+    sql`${media.aiTags}::text ilike ${pattern}`,
+    sql`${media.aiObjects}::text ilike ${pattern}`,
+    sql`${media.aiScenes}::text ilike ${pattern}`,
+    sql`${media.sceneTags}::text ilike ${pattern}`,
+    ilike(media.aiCaption, pattern),
+    ilike(media.sceneCaption, pattern),
+    ilike(media.originalFilename, pattern),
+  )!;
 }
 
 /**

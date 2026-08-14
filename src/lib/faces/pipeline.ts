@@ -3,6 +3,10 @@
  *
  * Designed so moderation never waits on face work: enqueue is best-effort and
  * swallows errors; the faces worker runs asynchronously.
+ *
+ * Shared family media: jobs may target an actorUserId (family viewer) so
+ * detections/matches land on that viewer's People graph. Owner face rows are
+ * reused when present; otherwise detection runs for the actor.
  */
 
 import { and, eq } from "drizzle-orm";
@@ -29,6 +33,10 @@ import {
 const LOG = "[faces.pipeline]";
 
 export type ProcessFacesForMediaOptions = {
+  /**
+   * Actor whose People receive matches. Defaults to media owner.
+   * For shared media, pass the family viewer.
+   */
   userId?: string;
   replaceExisting?: boolean;
   /** Skip grouping after detect (rare; tests). Default false. */
@@ -62,16 +70,12 @@ function isEligibleFaceMedia(
 
 /**
  * Detect faces on a clean photo or video, then assign/create people for new faces.
+ * Grouping always runs against the actor userId (owner or family viewer).
  */
 export async function processFacesForMedia(
   mediaId: string,
   options: ProcessFacesForMediaOptions = {},
 ): Promise<ProcessFacesForMediaResult> {
-  const detection = await detectAndStoreFacesForMedia(mediaId, {
-    userId: options.userId,
-    replaceExisting: options.replaceExisting,
-  });
-
   const db = getDb();
   const [row] = await db
     .select({ userId: media.userId })
@@ -79,22 +83,27 @@ export async function processFacesForMedia(
     .where(eq(media.id, mediaId))
     .limit(1);
 
-  const userId = row?.userId ?? options.userId;
-  if (!userId) {
-    throw new Error(`Cannot group faces — missing userId for media ${mediaId}`);
+  const actorUserId = options.userId?.trim() || row?.userId;
+  if (!actorUserId) {
+    throw new Error(`Cannot process faces — missing userId for media ${mediaId}`);
   }
+
+  const detection = await detectAndStoreFacesForMedia(mediaId, {
+    userId: actorUserId,
+    replaceExisting: options.replaceExisting,
+  });
 
   let grouping: GroupFacesResult | null = null;
   if (!options.skipGrouping) {
     const faceIds = detection.stored.map((f) => f.id);
     if (faceIds.length > 0) {
       grouping = shouldUseRekognitionIdentity()
-        ? await groupFacesWithRekognitionIdentity(userId, faceIds)
-        : await groupFaces(userId, faceIds);
+        ? await groupFacesWithRekognitionIdentity(actorUserId, faceIds)
+        : await groupFaces(actorUserId, faceIds);
     }
   }
 
-  return { mediaId, userId, detection, grouping };
+  return { mediaId, userId: actorUserId, detection, grouping };
 }
 
 export type MaybeEnqueueFaceDetectionOptions = {
@@ -103,6 +112,13 @@ export type MaybeEnqueueFaceDetectionOptions = {
   /** Enqueue even if faces already exist (implies replaceExisting on the job). */
   force?: boolean;
   delayMs?: number;
+  /**
+   * Viewer whose People graph should receive faces.
+   * Defaults to media owner. Family members use their own userId.
+   */
+  actorUserId?: string;
+  /** Also enqueue face.detect for active family co-members (owner clean path). */
+  fanOutFamilyViewers?: boolean;
 };
 
 /**
@@ -127,9 +143,12 @@ export async function maybeEnqueueFaceDetectionForMedia(
       return null;
     }
 
-    if (await hasActiveFaceDetectionJob(row.id)) {
+    const actorUserId = options.actorUserId?.trim() || row.userId;
+
+    if (await hasActiveFaceDetectionJob(row.id, actorUserId)) {
       console.info(`${LOG} skip enqueue — active face.detect job exists`, {
         mediaId: row.id,
+        actorUserId,
       });
       return null;
     }
@@ -141,20 +160,25 @@ export async function maybeEnqueueFaceDetectionForMedia(
       const [existingFace] = await db
         .select({ id: faces.id })
         .from(faces)
-        .where(and(eq(faces.mediaId, row.id), eq(faces.userId, row.userId)))
+        .where(and(eq(faces.mediaId, row.id), eq(faces.userId, actorUserId)))
         .limit(1);
 
       if (existingFace) {
-        console.info(`${LOG} skip enqueue — faces already stored`, {
+        console.info(`${LOG} skip enqueue — faces already stored for actor`, {
           mediaId: row.id,
+          actorUserId,
         });
+        // Still fan-out to family viewers when requested (owner path).
+        if (options.fanOutFamilyViewers && actorUserId === row.userId) {
+          await maybeEnqueueFaceDetectionForFamilyViewers(row, options);
+        }
         return null;
       }
     }
 
     const job = await enqueueFaceDetectionJob({
       mediaId: row.id,
-      userId: row.userId,
+      userId: actorUserId,
       replaceExisting,
       delayMs: options.delayMs ?? 1_000,
       extra: {
@@ -165,8 +189,14 @@ export async function maybeEnqueueFaceDetectionForMedia(
     console.info(`${LOG} face.detect enqueued`, {
       mediaId: row.id,
       jobId: job.id,
+      actorUserId,
       source: options.source ?? "pipeline.maybeEnqueue",
     });
+
+    if (options.fanOutFamilyViewers && actorUserId === row.userId) {
+      await maybeEnqueueFaceDetectionForFamilyViewers(row, options);
+    }
+
     return job;
   } catch (error) {
     console.error(`${LOG} enqueue failed (non-fatal)`, {
@@ -174,5 +204,34 @@ export async function maybeEnqueueFaceDetectionForMedia(
       error: error instanceof Error ? error.message : String(error),
     });
     return null;
+  }
+}
+
+async function maybeEnqueueFaceDetectionForFamilyViewers(
+  row: Pick<
+    Media,
+    "id" | "userId" | "type" | "status" | "moderationStatus" | "contentType"
+  >,
+  options: MaybeEnqueueFaceDetectionOptions,
+): Promise<void> {
+  try {
+    const { getFamilyViewerIdsForOwner } = await import("@/lib/permissions");
+    const viewers = await getFamilyViewerIdsForOwner(row.userId);
+    for (const viewerId of viewers) {
+      await maybeEnqueueFaceDetectionForMedia(row, {
+        actorUserId: viewerId,
+        source: `${options.source ?? "pipeline.maybeEnqueue"}.family_viewer`,
+        delayMs: (options.delayMs ?? 1_000) + 500,
+        // Do not recurse fan-out.
+        fanOutFamilyViewers: false,
+        force: options.force,
+        replaceExisting: options.replaceExisting,
+      });
+    }
+  } catch (error) {
+    console.error(`${LOG} family viewer fan-out failed (non-fatal)`, {
+      mediaId: row.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }

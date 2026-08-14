@@ -40,7 +40,8 @@ import {
   type Movie,
   type MovieStyle,
 } from "@/lib/db/schema";
-import { cleanReadyMediaFilter } from "@/lib/media/queries";
+import { loadCleanAccessibleMediaByIds } from "@/lib/media/queries";
+import { getAccessibleMediaFilter } from "@/lib/permissions";
 import { isSafeToServe } from "@/lib/moderation/types";
 import { MovieError } from "@/lib/movies/errors";
 import { updateMovieStatus } from "@/lib/movies/lifecycle";
@@ -466,6 +467,7 @@ async function loadGenerationContext(
 
 /**
  * Load only clean+ready media linked to the memory, in album order.
+ * Includes family-shared media the memory owner can access.
  * Photos and videos are both eligible for the movie timeline.
  */
 export async function loadCleanMemoryMedia(
@@ -479,6 +481,7 @@ export async function loadCleanMemoryMedia(
   }>
 > {
   const db = getDb();
+  const accessFilter = await getAccessibleMediaFilter(ownerUserId);
 
   const links = await db
     .select({
@@ -491,20 +494,28 @@ export async function loadCleanMemoryMedia(
     .where(
       and(
         eq(memoryMedia.memoryId, memoryId),
-        // SAFETY GATE — never pull non-clean / non-ready media into a movie
-        cleanReadyMediaFilter(ownerUserId),
+        // SAFETY GATE — never pull non-clean / non-ready inaccessible media
+        accessFilter,
       ),
     )
     .orderBy(asc(memoryMedia.sortOrder), asc(memoryMedia.addedAt));
 
+  const allowedIds = new Set(
+    (
+      await loadCleanAccessibleMediaByIds(
+        ownerUserId,
+        links.map((row) => row.media.id),
+      )
+    ).map((row) => row.id),
+  );
+
   return links
     .filter((row) => {
-      // Defense in depth — SQL already gates, but never trust a stale join.
       const m = row.media;
       return (
+        allowedIds.has(m.id) &&
         isSafeToServe(m.moderationStatus) &&
-        m.status === "ready" &&
-        m.userId === ownerUserId
+        m.status === "ready"
       );
     })
     .map((row) => ({

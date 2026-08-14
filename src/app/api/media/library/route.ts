@@ -8,9 +8,10 @@ import {
 import { serializeSafeMediaItem } from "@/lib/memories";
 
 /**
- * GET /api/media/library?scope=own|shared&offset=0&limit=48
+ * GET /api/media/library?scope=own|shared&offset=0&limit=48&q=
  *
  * Paginated clean/ready media for load-more on the media library page.
+ * Optional `q` filters by user tags + AI tags / objects / scenes / captions / filename.
  */
 export async function GET(request: Request) {
   const authResult = await requireApiUser();
@@ -33,10 +34,12 @@ export async function GET(request: Request) {
     Math.max(Number.isFinite(limitRaw) ? limitRaw : MEDIA_PAGE_SIZE, 1),
     MEDIA_PAGE_SIZE,
   );
+  const q = searchParams.get("q")?.trim() || undefined;
 
   const { items, hasMore } = await getSafeMediaPage(userId, scope, {
     limit,
     offset,
+    q,
   });
 
   return NextResponse.json({
@@ -44,5 +47,6 @@ export async function GET(request: Request) {
     hasMore,
     offset,
     limit,
+    q: q ?? null,
   });
 }

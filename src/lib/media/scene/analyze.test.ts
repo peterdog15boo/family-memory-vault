@@ -57,6 +57,56 @@ describe("scene analysis eligibility", () => {
   });
 });
 
+describe("hasSearchableVisualLabels", () => {
+  it("requires visualAnalyzedAt plus at least one label channel", async () => {
+    const { hasSearchableVisualLabels } = await import(
+      "@/lib/media/scene/analyze"
+    );
+    expect(
+      hasSearchableVisualLabels({
+        visualAnalyzedAt: null,
+        aiTags: ["cake"],
+        aiObjects: [],
+        aiScenes: [],
+        sceneTags: [],
+        aiCaption: null,
+        sceneCaption: null,
+      }),
+    ).toBe(false);
+    expect(
+      hasSearchableVisualLabels({
+        visualAnalyzedAt: new Date(),
+        aiTags: [],
+        aiObjects: [],
+        aiScenes: [],
+        sceneTags: [],
+        aiCaption: null,
+        sceneCaption: null,
+      }),
+    ).toBe(false);
+    expect(
+      hasSearchableVisualLabels({
+        visualAnalyzedAt: new Date(),
+        aiTags: ["cake"],
+        aiObjects: [],
+        aiScenes: [],
+        sceneTags: [],
+        aiCaption: null,
+        sceneCaption: null,
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("visualTagSearchSql", () => {
+  it("builds a filter for short tag queries and ignores empty", async () => {
+    const { visualTagSearchSql } = await import("@/lib/media/queries");
+    expect(visualTagSearchSql("")).toBeNull();
+    expect(visualTagSearchSql("a")).toBeNull();
+    expect(visualTagSearchSql("cake")).toBeTruthy();
+  });
+});
+
 describe("planVideoSampleOffsets", () => {
   it("samples start / quarters / near end for a normal clip", () => {
     const plan = planVideoSampleOffsets(100, {

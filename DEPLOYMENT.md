@@ -20,6 +20,7 @@ Production checklist and platform notes for Family Memory Vault.
 - [ ] Stripe webhook endpoint: `https://your-domain.com/api/stripe/webhook` (events: subscription + checkout)
 - [ ] Optional: `RESEND_API_KEY` + verified `EMAIL_FROM` (`Family Memory Vault <support@mail.familymemoryvault.ai>`); optional `EMAIL_REPLY_TO`
 - [ ] Optional (beta): `NEXT_PUBLIC_BETA_SURVEY_URL` for Feedback header + Dashboard survey banner
+- [ ] Optional (beta): `NEXT_PUBLIC_BETA_DISCORD_URL` for Feedback dialog + welcome email Discord CTA
 - [ ] Promote at least one admin: `npm run admin:promote -- --email=…` (or `ADMIN_USER_IDS`)
 
 ### Database

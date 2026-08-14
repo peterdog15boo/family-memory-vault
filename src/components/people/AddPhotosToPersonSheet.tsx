@@ -56,19 +56,31 @@ export function AddPhotosToPersonSheet({
     setLoadingLibrary(true);
     setLoadError(null);
     try {
-      const res = await fetch("/api/media/library?scope=own&limit=96");
-      const data = (await res.json().catch(() => ({}))) as {
+      const [ownRes, sharedRes] = await Promise.all([
+        fetch("/api/media/library?scope=own&limit=48"),
+        fetch("/api/media/library?scope=shared&limit=48"),
+      ]);
+      const ownData = (await ownRes.json().catch(() => ({}))) as {
         error?: string;
         items?: SerializedSafeMedia[];
-        own?: SerializedSafeMedia[];
       };
-      if (!res.ok) {
-        throw new Error(data.error || t("people.errorLoadLibrary"));
+      const sharedData = (await sharedRes.json().catch(() => ({}))) as {
+        error?: string;
+        items?: SerializedSafeMedia[];
+      };
+      if (!ownRes.ok) {
+        throw new Error(ownData.error || t("people.errorLoadLibrary"));
       }
-      const rows = data.items ?? data.own ?? [];
-      setLibrary(
-        rows.filter((item) => item.type === "photo" || item.type === "video"),
-      );
+      // Shared scope can 400 when malformed; treat failures as empty shared set.
+      const ownRows = ownData.items ?? [];
+      const sharedRows = sharedRes.ok ? (sharedData.items ?? []) : [];
+      const byId = new Map<string, SerializedSafeMedia>();
+      for (const item of [...ownRows, ...sharedRows]) {
+        if (item.type === "photo" || item.type === "video") {
+          byId.set(item.id, item);
+        }
+      }
+      setLibrary([...byId.values()]);
     } catch (err) {
       setLoadError(
         err instanceof Error ? err.message : t("people.errorLoadLibrary"),

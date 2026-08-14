@@ -22,6 +22,7 @@ import {
 import { CreateMoviePanel } from "@/components/memories/CreateMoviePanel";
 import { MediaThumb } from "@/components/memories/MediaThumb";
 import { MediaViewerMedia } from "@/components/media/MediaViewerMedia";
+import { MediaTagsControl } from "@/components/media/MediaTagsControl";
 import { MemoryFamilyShareControls } from "@/components/memories/MemoryFamilyShareControls";
 import { SlideshowPlayer } from "@/components/memories/SlideshowPlayer";
 import { MovieLibrary } from "@/components/movies/MovieLibrary";
@@ -939,7 +940,7 @@ export function MemoryDetailView({
                 </>
               ) : null}
               <div
-                className="max-h-[85vh] max-w-5xl overflow-hidden rounded-xl bg-canvas shadow-2xl"
+                className="relative flex max-h-[85vh] max-w-5xl flex-col overflow-hidden rounded-xl bg-canvas shadow-2xl"
                 onClick={(event) => event.stopPropagation()}
               >
                 <p id="memory-lightbox-title" className="sr-only">
@@ -967,6 +968,11 @@ export function MemoryDetailView({
                     Preview unavailable
                   </div>
                 )}
+                {lightbox.type === "photo" || lightbox.type === "video" ? (
+                  <div className="flex items-center justify-end gap-2 border-t border-ink/8 px-4 py-3">
+                    <MediaTagsControl mediaId={lightbox.id} compact />
+                  </div>
+                ) : null}
               </div>
             </div>,
             document.body,

@@ -26,6 +26,7 @@ import { FaceLabelEditor } from "@/components/people/FaceLabelEditor";
 import { AddPhotosToPersonSheet } from "@/components/people/AddPhotosToPersonSheet";
 import { MediaThumb } from "@/components/memories/MediaThumb";
 import { MediaViewerMedia } from "@/components/media/MediaViewerMedia";
+import { MediaTagsControl } from "@/components/media/MediaTagsControl";
 import { useFormat, useTranslations } from "@/components/i18n/LocaleProvider";
 import { useLightboxKeyboardNav } from "@/hooks/useLightboxKeyboardNav";
 import { useOverlayA11y } from "@/hooks/useOverlayA11y";
@@ -848,13 +849,14 @@ export function PersonDetailView({
                     {t("people.previewUnavailable")}
                   </div>
                 )}
-                <div className="flex items-center justify-between gap-3 border-t border-ink/8 px-4 py-3">
+                <div className="flex flex-col gap-3 border-t border-ink/8 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-ink-muted">
                     {person.cover?.faceId === lightbox.faceId
                       ? t("memories.currentCover")
                       : t("people.useFaceAsCover")}
                   </p>
                   <div className="flex flex-wrap items-center gap-2">
+                    <MediaTagsControl mediaId={lightbox.id} compact />
                     <button
                       type="button"
                       onClick={() =>
