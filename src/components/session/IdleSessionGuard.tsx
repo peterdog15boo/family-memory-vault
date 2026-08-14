@@ -31,8 +31,6 @@ import {
   IDLE_CRITICAL_FORCE_MS,
   IDLE_LOGOUT_GRACE_MS,
   IDLE_MEDIA_INTERACTION_EVENTS,
-  IDLE_TOTAL_MS,
-  IDLE_WARNING_MS,
   msUntilNextIdleCheck,
 } from "@/lib/session/idle-timeout";
 import type { IdleTimeoutPolicy } from "@/lib/session/idle-timeout-policy";

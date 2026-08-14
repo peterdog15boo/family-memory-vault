@@ -1933,7 +1933,7 @@ function finalizeIntent(
     intent.visual_query?.trim() ||
     extractVisualQuery(intent.raw_prompt) ||
     (mergedQualities.length ? mergedQualities.join(" ") : undefined);
-  let objects = uniqueStrings([
+  const objects = uniqueStrings([
     ...(intent.objects ?? []),
     ...scrubbed.qualities,
     ...demotedUnresolved.filter((q) => q.length > 1),
