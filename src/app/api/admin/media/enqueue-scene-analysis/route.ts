@@ -23,13 +23,14 @@ export async function POST(request: Request) {
     );
   }
 
-  let body: {
+  type Body = {
     userId?: string;
     limit?: number;
     force?: boolean;
-  } | null = null;
+  };
+  let body: Body | null = null;
   try {
-    body = (await request.json()) as typeof body;
+    body = (await request.json()) as Body;
   } catch {
     body = null;
   }

@@ -219,9 +219,7 @@ export type IdleSessionGuardProps = {
  * Uses lastActivityAt timestamps + resume checks so backgrounded / locked
  * tabs still enforce 15m warning and 17m logout when they wake up.
  */
-export function IdleSessionGuard({
-  initialPolicy,
-}: IdleSessionGuardProps = {}) {
+export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
   const t = useTranslations();
   const { signOut } = useClerk();
   const titleId = useId();

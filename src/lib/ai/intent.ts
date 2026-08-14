@@ -1517,11 +1517,7 @@ export type AskIntentKind =
  */
 export function classifyAskIntent(intent: AssistantIntent): AskIntentKind {
   if (intent.action === "answer_help") return "help";
-  if (
-    intent.action === "create_memory" ||
-    intent.action === "create_movie" ||
-    intent.action === "create_legacy_instruction"
-  ) {
+  if (intent.action === "create_memory" || intent.action === "create_movie") {
     return "memory_or_movie";
   }
   if (intent.action === "clarify") return "clarify";
