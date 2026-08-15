@@ -3,20 +3,26 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Minus, Plus, X } from "lucide-react";
-import { Ava } from "@/components/ava/Ava";
+import { AskAiAvatar } from "@/components/assistant/AskAiAvatar";
 import { AssistantChat } from "@/components/assistant/AssistantChat";
 import { useAskAi } from "@/components/assistant/AskAiContext";
 import { useTranslations } from "@/components/i18n/LocaleProvider";
+import { useAskAiOpenGreeting } from "@/hooks/useAskAiOpenGreeting";
 import { useOverlayA11y } from "@/hooks/useOverlayA11y";
 import { cn } from "@/lib/utils";
 
 const MOBILE_MQ = "(max-width: 639px)";
 
+type AskAiPanelProps = {
+  /** Display / screen name for personalized greetings. */
+  greetingName?: string | null;
+};
+
 /**
  * Floating Ask AI — desktop bottom-right dock, mobile near-full sheet.
  * Chat stays mounted after first open; closed state uses `hidden` (no orphan overlay).
  */
-export function AskAiPanel() {
+export function AskAiPanel({ greetingName = null }: AskAiPanelProps) {
   const {
     open,
     closeAskAi,
@@ -32,6 +38,8 @@ export function AskAiPanel() {
   const titleId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+
+  useAskAiOpenGreeting(open, greetingName);
 
   useEffect(() => {
     setMounted(true);
@@ -131,7 +139,7 @@ export function AskAiPanel() {
       >
         <header className="ask-ai-panel-header">
           <div className="ask-ai-panel-brand min-w-0">
-            <Ava size="sm" className="ask-ai-panel-ava !size-9" decorative />
+            <AskAiAvatar size="sm" className="ask-ai-panel-ava !size-9" decorative />
             <div className="min-w-0">
               <h2 id={titleId} className="ask-ai-panel-title">
                 {t("assistant.title")}

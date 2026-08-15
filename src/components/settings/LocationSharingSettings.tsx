@@ -7,6 +7,8 @@ import { FamilyMapPrivacyNotice } from "@/components/family/FamilyMapPrivacyNoti
 import type { LocationSharingLevel } from "@/lib/db/schema";
 import { readDeviceLocation, isGeolocationSupported } from "@/lib/location/browser";
 import { notifyFamilyLocationUpdated } from "@/lib/location/events";
+import { announce } from "@/lib/a11y/announce";
+import { useAnnounceStatus } from "@/hooks/useAnnounceStatus";
 import { cn } from "@/lib/utils";
 
 type LocationSettings = {
@@ -37,6 +39,12 @@ export function LocationSharingSettings() {
   const [settings, setSettings] = useState<LocationSettings | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [confirmPreciseOpen, setConfirmPreciseOpen] = useState(false);
+  useAnnounceStatus(error, { priority: "assertive" });
+
+  useEffect(() => {
+    if (state !== "saved") return;
+    announce(t("a11y.settingsSaved"), { priority: "polite" });
+  }, [state, t]);
 
   const load = useCallback(async () => {
     setLoading(true);

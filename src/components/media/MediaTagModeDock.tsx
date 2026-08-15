@@ -16,6 +16,7 @@ import {
 import { MediaThumb } from "@/components/memories/MediaThumb";
 import { MediaTagsEditor } from "@/components/media/MediaTagsEditor";
 import { useTranslations } from "@/components/i18n/LocaleProvider";
+import { resolveTagPhotoNavigation } from "@/lib/media/tag-keyboard";
 import type { SerializedSafeMedia } from "@/lib/memories/types";
 import { cn } from "@/lib/utils";
 
@@ -49,12 +50,22 @@ export function MediaTagModeDock({
     (active.type === "video" ? t("mediaUi.familyMedia") : t("mediaUi.familyMedia"));
 
   useEffect(() => {
-    const id = window.setTimeout(() => inputRef.current?.focus(), 50);
+    const id = window.setTimeout(() => {
+      const input = inputRef.current;
+      if (!input) return;
+      input.focus({ preventScroll: true });
+      try {
+        const len = input.value.length;
+        input.setSelectionRange(len, len);
+      } catch {
+        /* ignore */
+      }
+    }, 50);
     return () => window.clearTimeout(id);
   }, [active.id]);
 
   function handleEditorKeyDown(event: KeyboardEvent<HTMLElement>): boolean {
-    // Empty Enter → next photo (rapid batch flow). Tab/Esc handled on window.
+    // Empty Enter → next photo (rapid batch flow). Esc / arrows on window.
     if (
       event.key === "Enter" &&
       event.target instanceof HTMLInputElement &&
@@ -68,7 +79,8 @@ export function MediaTagModeDock({
 
   useEffect(() => {
     function onWindowKeyDown(event: globalThis.KeyboardEvent) {
-      if (event.altKey || event.metaKey || event.ctrlKey) return;
+      if (event.defaultPrevented) return;
+      if (event.metaKey || event.ctrlKey) return;
 
       if (event.key === "Escape") {
         event.preventDefault();
@@ -76,15 +88,19 @@ export function MediaTagModeDock({
         return;
       }
 
-      if (event.key === "Tab") {
-        event.preventDefault();
-        if (event.shiftKey) onPrev();
-        else onNext();
-      }
+      // Let Tab move focus normally (into/out of the tag input).
+      if (event.key === "Tab") return;
+
+      const direction = resolveTagPhotoNavigation(event, "grid");
+      if (!direction || !canNav) return;
+
+      event.preventDefault();
+      if (direction === "prev") onPrev();
+      else onNext();
     }
     window.addEventListener("keydown", onWindowKeyDown);
     return () => window.removeEventListener("keydown", onWindowKeyDown);
-  }, [onExit, onPrev, onNext]);
+  }, [onExit, onPrev, onNext, canNav]);
 
   return createPortal(
     <div
@@ -100,7 +116,12 @@ export function MediaTagModeDock({
       <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:px-6">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="relative size-12 shrink-0 overflow-hidden rounded-md border border-ink/10 bg-canvas-deep sm:size-14">
+            <div
+              className={cn(
+                "relative size-12 shrink-0 overflow-hidden rounded-md border bg-canvas-deep sm:size-14",
+                "border-accent ring-2 ring-accent/40 ring-offset-2 ring-offset-canvas",
+              )}
+            >
               {active.previewUrl &&
               (active.type === "photo" || active.hasThumbnail) ? (
                 <MediaThumb item={active} alt={label} />

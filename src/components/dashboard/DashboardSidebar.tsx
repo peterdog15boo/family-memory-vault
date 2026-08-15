@@ -14,7 +14,7 @@ import {
   Package,
   Settings,
   Shield,
-  Sparkles,
+  Bot,
   Upload,
   Users,
 } from "lucide-react";
@@ -63,7 +63,7 @@ export function DashboardSidebar({ isAdmin = false }: DashboardSidebarProps) {
   const isModern = effective === "modern";
 
   const originalItems: NavItem[] = [
-    { href: "/assistant", label: t("nav.askAi"), icon: Sparkles, openAskAi: true },
+    { href: "/assistant", label: t("nav.askAi"), icon: Bot, openAskAi: true },
     { href: "/memories", label: t("nav.memories"), icon: Images },
     { href: "/movies", label: t("nav.movies"), icon: Film },
     { href: "/media", label: t("nav.photos"), icon: ImageIcon },
@@ -89,7 +89,7 @@ export function DashboardSidebar({ isAdmin = false }: DashboardSidebarProps) {
         { href: "/media", label: t("nav.photos"), icon: ImageIcon },
         { href: "/upload", label: t("nav.upload"), icon: Upload },
         { href: "/people", label: t("nav.people"), icon: Users },
-        { href: "/assistant", label: t("nav.askAi"), icon: Sparkles, openAskAi: true },
+        { href: "/assistant", label: t("nav.askAi"), icon: Bot, openAskAi: true },
       ],
     },
     {

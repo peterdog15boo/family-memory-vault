@@ -30,6 +30,7 @@ import { MediaTagsControl } from "@/components/media/MediaTagsControl";
 import { useFormat, useTranslations } from "@/components/i18n/LocaleProvider";
 import { useLightboxKeyboardNav } from "@/hooks/useLightboxKeyboardNav";
 import { useOverlayA11y } from "@/hooks/useOverlayA11y";
+import { useAnnounceStatus } from "@/hooks/useAnnounceStatus";
 import type { Formatters, TranslateFn } from "@/lib/i18n";
 import type {
   SerializedPersonDetail,
@@ -104,9 +105,12 @@ export function PersonDetailView({
   const [targetPersonId, setTargetPersonId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  useAnnounceStatus(notice, { priority: "polite" });
+  useAnnounceStatus(error, { priority: "assertive" });
   const [pending, startTransition] = useTransition();
   const [busyFaceId, setBusyFaceId] = useState<string | null>(null);
   const [lightboxId, setLightboxId] = useState<string | null>(null);
+  const [tagsOpen, setTagsOpen] = useState(false);
   const [viewerMounted, setViewerMounted] = useState(false);
   const [addPhotosOpen, setAddPhotosOpen] = useState(false);
 
@@ -142,6 +146,7 @@ export function PersonDetailView({
     itemIds: personPhotoIds,
     activeId: lightboxId,
     onActiveIdChange: setLightboxId,
+    enabled: !tagsOpen,
   });
 
   const dateRange = formatDateRange(
@@ -856,7 +861,14 @@ export function PersonDetailView({
                       : t("people.useFaceAsCover")}
                   </p>
                   <div className="flex flex-wrap items-center gap-2">
-                    <MediaTagsControl mediaId={lightbox.id} compact />
+                    <MediaTagsControl
+                      mediaId={lightbox.id}
+                      compact
+                      canNavigate={lightboxCanNav}
+                      onPrev={lightboxPrev}
+                      onNext={lightboxNext}
+                      onOpenChange={setTagsOpen}
+                    />
                     <button
                       type="button"
                       onClick={() =>

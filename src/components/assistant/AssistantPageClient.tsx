@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles } from "lucide-react";
+import { Bot } from "lucide-react";
 import { AssistantChat } from "@/components/assistant/AssistantChat";
 import { useAskAiOptional } from "@/components/assistant/AskAiContext";
 import { useTranslations } from "@/components/i18n/LocaleProvider";
@@ -41,7 +41,7 @@ export function AssistantPageClient({
   if (!conversationId) {
     return (
       <div className="app-page mx-auto max-w-lg py-16 text-center">
-        <Sparkles className="mx-auto size-8 text-accent" aria-hidden />
+        <Bot className="mx-auto size-8 text-accent" aria-hidden />
         <p className="mt-3 font-display text-xl text-ink">{t("assistant.opening")}</p>
         <p className="mt-2 text-sm text-ink-muted">
           {t("assistant.openingHint")}
@@ -56,7 +56,7 @@ export function AssistantPageClient({
         slot="assistant"
         eyebrow={
           <>
-            <Sparkles className="size-3.5" aria-hidden />
+            <Bot className="size-3.5" aria-hidden />
             {t("assistant.eyebrow")}
           </>
         }

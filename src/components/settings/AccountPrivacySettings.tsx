@@ -20,6 +20,7 @@ import type {
   AccountPreferenceToggleKey,
   PublicAccountPreferences,
 } from "@/lib/account-preferences";
+import { announce } from "@/lib/a11y/announce";
 import { cn } from "@/lib/utils";
 
 type Preferences = Omit<PublicAccountPreferences, "locale">;
@@ -141,6 +142,7 @@ export function AccountPrivacySettings({
       }
       await user.reload();
       setProfileState("saved");
+      announce(t("a11y.settingsSaved"), { priority: "polite" });
       window.setTimeout(() => setProfileState("idle"), 2500);
     } catch (err) {
       setProfileError(
@@ -195,7 +197,15 @@ export function AccountPrivacySettings({
           }),
         );
       }
+      if (key === "askAiRobotGreetingsEnabled") {
+        window.dispatchEvent(
+          new CustomEvent("fmv:ask-ai-greeting-pref", {
+            detail: { enabled: value },
+          }),
+        );
+      }
       setPrefsState("saved");
+      announce(t("a11y.settingsSaved"), { priority: "polite" });
       window.setTimeout(() => setPrefsState("idle"), 2000);
     } catch (err) {
       setPrefs(previous);
@@ -455,6 +465,15 @@ export function AccountPrivacySettings({
               checked={prefs.celebrationSoundEnabled}
               disabled={prefsState === "saving"}
               onChange={(v) => void savePreference("celebrationSoundEnabled", v)}
+            />
+            <ToggleRow
+              label={t("settings.askAiRobotGreetings")}
+              description={t("settings.askAiRobotGreetingsHelp")}
+              checked={prefs.askAiRobotGreetingsEnabled}
+              disabled={prefsState === "saving"}
+              onChange={(v) =>
+                void savePreference("askAiRobotGreetingsEnabled", v)
+              }
             />
           </PreferenceGroup>
 

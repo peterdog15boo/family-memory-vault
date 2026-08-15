@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { Loader2, Send } from "lucide-react";
-import { Ava } from "@/components/ava/Ava";
+import { AskAiAvatar } from "@/components/assistant/AskAiAvatar";
 import { AssistantTurnCard } from "@/components/assistant/AssistantTurnCard";
 import { useAskAiOptional } from "@/components/assistant/AskAiContext";
 import {
@@ -13,7 +13,9 @@ import {
 import { cn } from "@/lib/utils";
 import { useTranslations } from "@/components/i18n/LocaleProvider";
 import type { TranslateFn } from "@/lib/i18n";
+import { announce } from "@/lib/a11y/announce";
 import { notifyUserActivity } from "@/lib/session/idle-session-sync";
+import { useAnnounceStatus } from "@/hooks/useAnnounceStatus";
 
 type AssistantChatProps = {
   /** Resume an existing conversation when provided. */
@@ -97,6 +99,8 @@ export function AssistantChat({
   const composerHintId = useId();
   const loadedIdRef = useRef<string | null>(null);
   const resumeAttemptedRef = useRef(false);
+
+  useAnnounceStatus(error, { priority: "assertive" });
 
   function updateConversationId(id: string | null) {
     setConversationId(id);
@@ -265,6 +269,7 @@ export function AssistantChat({
     setError(null);
     setBusy(true);
     setDraft("");
+    announce(t("a11y.askAiSearching"), { priority: "polite" });
 
     const optimisticId = `local-user-${Date.now()}`;
     setMessages((prev) => [
@@ -313,6 +318,7 @@ export function AssistantChat({
           },
         ];
       });
+      announceAskAiResult(turn, t);
     } catch (err) {
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       setDraft(content);
@@ -486,7 +492,7 @@ export function AssistantChat({
       {!isPanel ? (
         <div className="border-b border-ink/8 px-4 py-3 sm:px-5">
           <p className="flex items-center gap-2 text-sm font-medium text-ink">
-            <Ava size="sm" className="!size-8" decorative />
+            <AskAiAvatar size="sm" className="!size-8" decorative />
             {t("assistant.title")}
           </p>
           <p className="mt-0.5 text-xs text-ink-muted">
@@ -519,10 +525,17 @@ export function AssistantChat({
           <div
             key={message.id}
             className={cn(
-              "flex",
+              "flex items-end gap-2",
               message.role === "user" ? "justify-end" : "justify-start",
             )}
           >
+            {message.role === "assistant" ? (
+              <AskAiAvatar
+                size="sm"
+                className={cn("shrink-0", isPanel ? "!size-6" : "!size-7")}
+                decorative
+              />
+            ) : null}
             <div
               className={cn(
                 "assistant-bubble rounded-2xl px-3.5 py-2.5",
@@ -566,7 +579,7 @@ export function AssistantChat({
             className="assistant-typing flex items-center gap-2 rounded-2xl border border-ink/8 bg-canvas-deep/40 px-3 py-2 text-sm text-ink-muted"
             aria-live="polite"
           >
-            <Ava size="sm" className="!size-7" decorative />
+            <AskAiAvatar size="sm" className="!size-7" decorative />
             <span className="inline-flex items-center gap-1.5">
               <span className="ask-ai-typing-dot" />
               <span className="ask-ai-typing-dot" />
@@ -684,7 +697,7 @@ function AssistantEmptyState({
       )}
     >
       <span className="ui-empty-icon mx-auto inline-flex">
-        <Ava
+        <AskAiAvatar
           size="sm"
           className={cn(compact ? "!size-12" : "!size-16")}
           decorative
@@ -885,4 +898,32 @@ function apiMessageToChat(message: ApiMessage): AssistantChatMessage {
     content: message.content,
     createdAt: message.createdAt,
   };
+}
+
+function announceAskAiResult(turn: AssistantTurnView, t: TranslateFn) {
+  const previewCount = turn.mediaPreview?.totalCount;
+  const result = turn.result as { type?: string; count?: number } | null;
+  const resultCount =
+    result && typeof result.count === "number" ? result.count : undefined;
+  const count =
+    typeof previewCount === "number"
+      ? previewCount
+      : typeof resultCount === "number"
+        ? resultCount
+        : null;
+
+  const isSearch =
+    turn.understanding?.action === "search_media" ||
+    result?.type === "search_media" ||
+    Boolean(turn.mediaPreview);
+
+  if (isSearch && count === 0) {
+    announce(t("a11y.askAiNoResults"), { priority: "polite" });
+    return;
+  }
+  if (isSearch && typeof count === "number" && count > 0) {
+    announce(t("a11y.askAiResults", { count }), { priority: "polite" });
+    return;
+  }
+  announce(t("a11y.askAiReplied"), { priority: "polite" });
 }

@@ -12,6 +12,7 @@ import { MediaGallery } from "@/components/dashboard/MediaGallery";
 import { LibrarySection } from "@/components/library/LibrarySection";
 import { MediaTagModeDock } from "@/components/media/MediaTagModeDock";
 import { useCopy, useTranslations } from "@/components/i18n/LocaleProvider";
+import { announce } from "@/lib/a11y/announce";
 import type { SerializedSafeMedia } from "@/lib/memories/types";
 import { cn } from "@/lib/utils";
 
@@ -183,15 +184,29 @@ export function PaginatedMediaLibrary({
   const tagActive =
     tagIndex >= 0 ? (allItems[tagIndex] ?? null) : null;
 
-  const selectTagMedia = useCallback((id: string) => {
-    setTagActiveId(id);
-    requestAnimationFrame(() => scrollMediaTileIntoView(id));
-  }, []);
+  const selectTagMedia = useCallback(
+    (id: string) => {
+      setTagActiveId(id);
+      requestAnimationFrame(() => scrollMediaTileIntoView(id));
+      const index = allIds.indexOf(id);
+      if (index >= 0) {
+        announce(
+          t("a11y.tagModePhoto", {
+            index: index + 1,
+            count: allIds.length,
+          }),
+          { priority: "polite" },
+        );
+      }
+    },
+    [allIds, t],
+  );
 
   const exitTagMode = useCallback(() => {
     setTagMode(false);
     setTagActiveId(null);
-  }, []);
+    announce(t("a11y.tagModeExited"), { priority: "polite" });
+  }, [t]);
 
   const enterTagMode = useCallback(() => {
     if (allIds.length === 0) return;
@@ -199,7 +214,15 @@ export function PaginatedMediaLibrary({
     const startId = pickFirstVisibleMediaId(allIds) ?? allIds[0]!;
     setTagActiveId(startId);
     requestAnimationFrame(() => scrollMediaTileIntoView(startId));
-  }, [allIds]);
+    const index = allIds.indexOf(startId);
+    announce(
+      t("a11y.tagModeEntered", {
+        index: (index >= 0 ? index : 0) + 1,
+        count: allIds.length,
+      }),
+      { priority: "polite" },
+    );
+  }, [allIds, t]);
 
   const goTagRelative = useCallback(
     (delta: number) => {

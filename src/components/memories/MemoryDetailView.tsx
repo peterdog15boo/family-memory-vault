@@ -29,6 +29,8 @@ import { MovieLibrary } from "@/components/movies/MovieLibrary";
 import { useCopy, useFormat, useTranslations } from "@/components/i18n/LocaleProvider";
 import { useLightboxKeyboardNav } from "@/hooks/useLightboxKeyboardNav";
 import { useOverlayA11y } from "@/hooks/useOverlayA11y";
+import { useAnnounceStatus } from "@/hooks/useAnnounceStatus";
+import { announce } from "@/lib/a11y/announce";
 import type {
   SerializedMemoryWithMedia,
   SerializedSafeMedia,
@@ -88,8 +90,11 @@ export function MemoryDetailView({
   const [moviesRefreshKey, setMoviesRefreshKey] = useState(0);
   const [pickedIds, setPickedIds] = useState<string[]>([]);
   const [lightboxId, setLightboxId] = useState<string | null>(null);
+  const [tagsOpen, setTagsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  useAnnounceStatus(notice, { priority: "polite" });
+  useAnnounceStatus(error, { priority: "assertive" });
   const [pending, startTransition] = useTransition();
   const [busyMediaId, setBusyMediaId] = useState<string | null>(null);
 
@@ -165,6 +170,7 @@ export function MemoryDetailView({
     itemIds: memoryMediaIds,
     activeId: lightboxId,
     onActiveIdChange: setLightboxId,
+    enabled: !tagsOpen,
   });
 
   const refreshFromPayload = useCallback(
@@ -210,6 +216,7 @@ export function MemoryDetailView({
           description: description.trim() || null,
         });
         setEditing(false);
+        announce(t("a11y.memorySaved"), { priority: "polite" });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Update failed.");
       }
@@ -299,6 +306,7 @@ export function MemoryDetailView({
         if (!response.ok || !data.ok) {
           throw new Error(data.error || "Could not delete album.");
         }
+        announce(t("a11y.memoryDeleted"), { priority: "polite" });
         router.push("/memories?deleted=1");
         router.refresh();
       } catch (err) {
@@ -970,7 +978,14 @@ export function MemoryDetailView({
                 )}
                 {lightbox.type === "photo" || lightbox.type === "video" ? (
                   <div className="flex items-center justify-end gap-2 border-t border-ink/8 px-4 py-3">
-                    <MediaTagsControl mediaId={lightbox.id} compact />
+                    <MediaTagsControl
+                      mediaId={lightbox.id}
+                      compact
+                      canNavigate={lightboxCanNav}
+                      onPrev={lightboxPrev}
+                      onNext={lightboxNext}
+                      onOpenChange={setTagsOpen}
+                    />
                   </div>
                 ) : null}
               </div>

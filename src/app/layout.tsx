@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Figtree, Fraunces } from "next/font/google";
 import { FeedbackHost } from "@/components/feedback/FeedbackHost";
+import { LiveAnnouncer } from "@/components/a11y/LiveAnnouncer";
+import { RouteAnnouncer } from "@/components/a11y/RouteAnnouncer";
 import { LocaleProvider } from "@/components/i18n/LocaleProvider";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import {
@@ -118,6 +120,8 @@ export default async function RootLayout({
         <ClerkProvider>
           <ThemeProvider>
             <LocaleProvider initialLocale={locale}>
+              <LiveAnnouncer />
+              <RouteAnnouncer />
               {children}
               <FeedbackHost />
             </LocaleProvider>

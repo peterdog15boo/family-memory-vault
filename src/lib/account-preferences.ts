@@ -37,6 +37,7 @@ export const ACCOUNT_PREFERENCE_TOGGLE_KEYS = [
   "inAppEmergencyAccess",
   "notificationSoundEnabled",
   "celebrationSoundEnabled",
+  "askAiRobotGreetingsEnabled",
   "emailMilestoneCelebrations",
   "productUpdatesEmail",
   "idleTimeoutEnabled",

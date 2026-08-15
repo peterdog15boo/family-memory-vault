@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { Check, ImagePlus, Loader2, Star } from "lucide-react";
 import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { MediaThumb } from "@/components/memories/MediaThumb";
+import { useAnnounceStatus } from "@/hooks/useAnnounceStatus";
+import { announce } from "@/lib/a11y/announce";
 import { userFacingApiError } from "@/lib/http/user-messages";
 import type { SafeMediaItem } from "@/lib/media/queries";
 import { cn } from "@/lib/utils";
@@ -49,6 +51,7 @@ export function CreateMemoryForm({
   });
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  useAnnounceStatus(error, { priority: "assertive" });
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
@@ -111,6 +114,7 @@ export function CreateMemoryForm({
           return;
         }
 
+        announce(t("a11y.memorySaved"), { priority: "polite" });
         router.push(`/memories/${data.memory.id}`);
         router.refresh();
       } catch {

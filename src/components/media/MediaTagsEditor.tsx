@@ -12,6 +12,7 @@ import {
 import { Loader2, Plus, X } from "lucide-react";
 import { useTranslations } from "@/components/i18n/LocaleProvider";
 import type { MediaTagEntry } from "@/lib/media/tags";
+import { announce } from "@/lib/a11y/announce";
 import { cn } from "@/lib/utils";
 
 export type MediaTagsPayload = {
@@ -31,7 +32,7 @@ type MediaTagsEditorProps = {
   /** Optional external ref for the add-tag input (keyboard flows). */
   inputRef?: RefObject<HTMLInputElement | null>;
   /**
-   * Called on keydown inside the editor (e.g. Tab / Esc from parent tag mode).
+   * Called on keydown inside the editor (e.g. Esc / arrows from parent).
    * Return true if the event was handled.
    */
   onEditorKeyDown?: (event: KeyboardEvent<HTMLElement>) => boolean;
@@ -40,6 +41,17 @@ type MediaTagsEditorProps = {
   /** Compact chip/input layout for docks. */
   compact?: boolean;
 };
+
+function focusTagInput(input: HTMLInputElement | null | undefined) {
+  if (!input) return;
+  input.focus({ preventScroll: true });
+  const len = input.value.length;
+  try {
+    input.setSelectionRange(len, len);
+  } catch {
+    // Some input types reject setSelectionRange; focus alone is enough.
+  }
+}
 
 /**
  * Inline AI + user tags editor (load / add / remove). Used by the viewer modal
@@ -62,6 +74,7 @@ export function MediaTagsEditor({
   const [pending, startTransition] = useTransition();
   const internalInputRef = useRef<HTMLInputElement>(null);
   const inputRef = externalInputRef ?? internalInputRef;
+  const keepFocusRef = useRef(false);
 
   const applyPayload = useCallback(
     (data: MediaTagsPayload) => {
@@ -108,15 +121,32 @@ export function MediaTagsEditor({
 
   useEffect(() => {
     if (!autoFocus || loading || !payload?.canEdit) return;
-    const id = window.setTimeout(() => inputRef.current?.focus(), 40);
+    const id = window.setTimeout(() => focusTagInput(inputRef.current), 40);
     return () => window.clearTimeout(id);
   }, [autoFocus, loading, payload?.canEdit, mediaId, inputRef]);
+
+  // After add/remove, pending flips and React may steal focus — restore it.
+  useEffect(() => {
+    if (pending || !keepFocusRef.current) return;
+    keepFocusRef.current = false;
+    const id = window.requestAnimationFrame(() => {
+      focusTagInput(inputRef.current);
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [pending, inputRef]);
+
+  function scheduleFocusReturn() {
+    keepFocusRef.current = true;
+    queueMicrotask(() => focusTagInput(inputRef.current));
+  }
 
   function addTag() {
     if (!payload?.canEdit || pending) return;
     const value = draft.trim();
     if (!value) return;
     setError(null);
+    setDraft("");
+    scheduleFocusReturn();
     startTransition(async () => {
       try {
         const res = await fetch(`/api/media/${mediaId}/tags`, {
@@ -131,11 +161,17 @@ export function MediaTagsEditor({
           throw new Error(data.error || t("mediaUi.tagsSaveError"));
         }
         applyPayload(data);
-        setDraft("");
-        inputRef.current?.focus();
+        scheduleFocusReturn();
+        announce(t("a11y.tagAdded", { tag: value }), { priority: "polite" });
       } catch (err) {
+        setDraft(value);
         setError(
           err instanceof Error ? err.message : t("mediaUi.tagsSaveError"),
+        );
+        scheduleFocusReturn();
+        announce(
+          err instanceof Error ? err.message : t("mediaUi.tagsSaveError"),
+          { priority: "assertive" },
         );
       }
     });
@@ -144,6 +180,7 @@ export function MediaTagsEditor({
   function removeTag(tag: string) {
     if (!payload?.canEdit || pending) return;
     setError(null);
+    scheduleFocusReturn();
     startTransition(async () => {
       try {
         const res = await fetch(`/api/media/${mediaId}/tags`, {
@@ -158,9 +195,16 @@ export function MediaTagsEditor({
           throw new Error(data.error || t("mediaUi.tagsSaveError"));
         }
         applyPayload(data);
+        scheduleFocusReturn();
+        announce(t("a11y.tagRemoved", { tag }), { priority: "polite" });
       } catch (err) {
         setError(
           err instanceof Error ? err.message : t("mediaUi.tagsSaveError"),
+        );
+        scheduleFocusReturn();
+        announce(
+          err instanceof Error ? err.message : t("mediaUi.tagsSaveError"),
+          { priority: "assertive" },
         );
       }
     });
@@ -295,7 +339,6 @@ export function MediaTagsEditor({
                   }
                 }}
                 maxLength={48}
-                disabled={pending}
                 placeholder={t("mediaUi.tagsInputPlaceholder")}
                 className="ui-input min-w-0 flex-1 text-sm"
                 autoComplete="off"

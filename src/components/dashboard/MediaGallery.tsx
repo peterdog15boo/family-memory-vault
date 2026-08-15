@@ -11,6 +11,7 @@ import { MediaTagsControl } from "@/components/media/MediaTagsControl";
 import { useCopy, useTranslations } from "@/components/i18n/LocaleProvider";
 import { useLightboxKeyboardNav } from "@/hooks/useLightboxKeyboardNav";
 import { useOverlayA11y } from "@/hooks/useOverlayA11y";
+import { announce } from "@/lib/a11y/announce";
 import { cn } from "@/lib/utils";
 import type { SerializedSafeMedia } from "@/lib/memories/types";
 
@@ -134,7 +135,7 @@ const GalleryTile = memo(function GalleryTile({
           "media-tile group relative aspect-square w-full overflow-hidden rounded-lg",
           "border bg-canvas-deep text-left transition",
           tagModeActive
-            ? "border-accent ring-2 ring-accent/50 ring-offset-2 ring-offset-canvas"
+            ? "border-accent ring-2 ring-accent ring-offset-2 ring-offset-canvas"
             : "border-ink/8 hover:border-accent/40 hover:shadow-sm",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
         )}
@@ -205,6 +206,7 @@ export function MediaGallery({
       : emptySecondaryAction;
   const [activeId, setActiveId] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [tagsOpen, setTagsOpen] = useState(false);
   const viewerRef = useRef<HTMLDivElement>(null);
   const tagModeEnabled = Boolean(tagMode);
   const active = items.find((item) => item.id === activeId) ?? null;
@@ -220,7 +222,10 @@ export function MediaGallery({
     },
     [tagMode],
   );
-  const close = useCallback(() => setActiveId(null), []);
+  const close = useCallback(() => {
+    setActiveId(null);
+    announce(t("a11y.viewerClosed"), { priority: "polite" });
+  }, [t]);
 
   useEffect(() => {
     setMounted(true);
@@ -230,6 +235,40 @@ export function MediaGallery({
   useEffect(() => {
     if (tagModeEnabled) setActiveId(null);
   }, [tagModeEnabled]);
+
+  const itemIds = useMemo(() => items.map((item) => item.id), [items]);
+
+  // Announce viewer open / photo change (skip close — handled in close()).
+  const viewerAnnounceRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (tagModeEnabled) return;
+    if (!activeId) {
+      viewerAnnounceRef.current = null;
+      return;
+    }
+    if (viewerAnnounceRef.current === activeId) return;
+    const isOpen = viewerAnnounceRef.current === null;
+    viewerAnnounceRef.current = activeId;
+    const idx = itemIds.indexOf(activeId);
+    if (isOpen) {
+      if (idx >= 0 && itemIds.length > 1) {
+        announce(
+          `${t("a11y.viewerOpened")}. ${t("a11y.viewerPhoto", {
+            index: idx + 1,
+            count: itemIds.length,
+          })}`,
+          { priority: "polite" },
+        );
+      } else {
+        announce(t("a11y.viewerOpened"), { priority: "polite" });
+      }
+    } else if (idx >= 0 && itemIds.length > 1) {
+      announce(
+        t("a11y.viewerPhoto", { index: idx + 1, count: itemIds.length }),
+        { priority: "polite" },
+      );
+    }
+  }, [activeId, itemIds, t, tagModeEnabled]);
 
   const handleDelete = useCallback(async () => {
     if (!active || !onDelete || deleting) return;
@@ -248,12 +287,12 @@ export function MediaGallery({
     lockScrollPadding: true,
   });
 
-  const itemIds = useMemo(() => items.map((item) => item.id), [items]);
   const { canNavigate, index, count, goPrev, goNext } = useLightboxKeyboardNav({
     open: Boolean(active) && !tagModeEnabled,
     itemIds,
     activeId,
     onActiveIdChange: setActiveId,
+    enabled: !tagsOpen,
   });
 
   // Close the lightbox if the active item was removed from the list.
@@ -374,6 +413,10 @@ export function MediaGallery({
                           mediaId={active.id}
                           compact
                           className="w-full sm:w-auto"
+                          canNavigate={canNavigate}
+                          onPrev={goPrev}
+                          onNext={goNext}
+                          onOpenChange={setTagsOpen}
                         />
                       </div>
                       <AssignMediaToPersonControl

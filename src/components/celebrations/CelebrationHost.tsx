@@ -6,6 +6,7 @@ import { X } from "lucide-react";
 import { SquirrelMascot } from "@/components/brand/SquirrelMascot";
 import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { useOverlayA11y } from "@/hooks/useOverlayA11y";
+import { useAnnounceStatus } from "@/hooks/useAnnounceStatus";
 import { onCelebrate } from "@/lib/celebrations/bus";
 import { mapJourneyCelebration } from "@/lib/celebrations/map-journey";
 import { playCelebrationChime } from "@/lib/celebrations/sound";
@@ -46,6 +47,7 @@ export function CelebrationHost() {
   const [mounted, setMounted] = useState(false);
   const [active, setActive] = useState<CelebrationEvent | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  useAnnounceStatus(toast, { priority: "polite" });
   const [burst, setBurst] = useState(0);
   const [lpDisplay, setLpDisplay] = useState(0);
   const sheetRef = useRef<HTMLDivElement>(null);

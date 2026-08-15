@@ -27,6 +27,7 @@ const prefsPatchSchema = z
     inAppEmergencyAccess: z.boolean().optional(),
     notificationSoundEnabled: z.boolean().optional(),
     celebrationSoundEnabled: z.boolean().optional(),
+    askAiRobotGreetingsEnabled: z.boolean().optional(),
     emailMilestoneCelebrations: z.boolean().optional(),
     productUpdatesEmail: z.boolean().optional(),
     idleTimeoutEnabled: z.boolean().optional(),

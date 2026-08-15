@@ -263,6 +263,11 @@ export type UserAccountPreferences = {
   notificationSoundEnabled?: boolean;
   /** Celebration chime — muted by default. */
   celebrationSoundEnabled?: boolean;
+  /**
+   * Occasional short spoken greeting when Ask AI opens.
+   * Default ON. Distinct from celebration / notification sounds.
+   */
+  askAiRobotGreetingsEnabled?: boolean;
   /** Rare milestone emails (first photo, 50 photos, first family join, 50% legacy). */
   emailMilestoneCelebrations?: boolean;
   /** Occasional product updates — opt-in only. */
@@ -290,6 +295,7 @@ export const DEFAULT_USER_ACCOUNT_PREFERENCES = {
   inAppEmergencyAccess: true,
   notificationSoundEnabled: true,
   celebrationSoundEnabled: false,
+  askAiRobotGreetingsEnabled: true,
   emailMilestoneCelebrations: true,
   productUpdatesEmail: false,
   idleTimeoutEnabled: true,

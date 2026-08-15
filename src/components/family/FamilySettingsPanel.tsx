@@ -20,6 +20,7 @@ import { FamilyLocationMap } from "@/components/family/FamilyLocationMap";
 import type { JourneyCelebrationPayload } from "@/lib/gamification/types";
 import { useCopy, useFormat, useTranslations } from "@/components/i18n/LocaleProvider";
 import type { TranslateFn } from "@/lib/i18n";
+import { useAnnounceStatus } from "@/hooks/useAnnounceStatus";
 import type {
   SerializedFamily,
   SerializedFamilyMember,
@@ -61,6 +62,8 @@ export function FamilySettingsPanel({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [inviteLinks, setInviteLinks] = useState<Record<string, string>>({});
+  useAnnounceStatus(notice, { priority: "polite" });
+  useAnnounceStatus(error, { priority: "assertive" });
   const [pending, startTransition] = useTransition();
   const [busyKey, setBusyKey] = useState<string | null>(null);
 

@@ -16,6 +16,8 @@ import { UpgradePrompt } from "@/components/billing/UpgradePrompt";
 import { HintTooltip } from "@/components/ui/HintTooltip";
 import { USAGE_WARNING_PERCENT } from "@/lib/billing/usage-thresholds";
 import { useCopy, useTranslations } from "@/components/i18n/LocaleProvider";
+import { announce } from "@/lib/a11y/announce";
+import { useAnnounceStatus } from "@/hooks/useAnnounceStatus";
 import type { MovieStyle } from "@/lib/db/schema";
 import type { SerializedMovie } from "@/lib/movies/serialize";
 import {
@@ -238,6 +240,21 @@ export function CreateMoviePanel({
   const [submitting, setSubmitting] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [mounted, setMounted] = useState(false);
+  const announcedPhaseRef = useRef<PanelPhase>("compose");
+
+  useAnnounceStatus(error, { priority: "assertive" });
+
+  useEffect(() => {
+    if (phase === announcedPhaseRef.current) return;
+    announcedPhaseRef.current = phase;
+    if (phase === "crafting") {
+      announce(t("a11y.movieCreating"), { priority: "polite" });
+    } else if (phase === "ready") {
+      announce(t("a11y.movieReady"), { priority: "polite" });
+    } else if (phase === "failed") {
+      announce(t("a11y.movieFailed"), { priority: "assertive" });
+    }
+  }, [phase, t]);
 
   const canCreate = capabilities.movies.allowed;
   const advancedThemes = capabilities.advancedThemes;

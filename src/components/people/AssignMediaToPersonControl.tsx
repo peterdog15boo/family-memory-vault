@@ -7,6 +7,7 @@ import type {
   SerializedMediaFaceLabel,
   SerializedPersonListItem,
 } from "@/lib/people/queries";
+import { useAnnounceStatus } from "@/hooks/useAnnounceStatus";
 import { cn } from "@/lib/utils";
 
 type AssignMediaToPersonControlProps = {
@@ -43,6 +44,8 @@ export function AssignMediaToPersonControl({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  useAnnounceStatus(notice, { priority: "polite" });
+  useAnnounceStatus(error, { priority: "assertive" });
   const [pending, startTransition] = useTransition();
   const [busyPersonId, setBusyPersonId] = useState<string | null>(null);
 

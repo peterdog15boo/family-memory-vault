@@ -39,6 +39,17 @@ export function useLightboxKeyboardNav({
     if (!open || !enabled || itemIds.length < 2) return;
 
     function onKeyDown(event: KeyboardEvent) {
+      if (event.defaultPrevented) return;
+      // Defer to nested tag editors / text fields (caret or smart nav).
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
       if (event.key === "ArrowRight") {
         event.preventDefault();
         goRelative(1);

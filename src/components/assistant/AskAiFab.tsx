@@ -1,6 +1,6 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
+import { Bot } from "lucide-react";
 import { useAskAi } from "@/components/assistant/AskAiContext";
 import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { cn } from "@/lib/utils";
@@ -28,7 +28,7 @@ export function AskAiFab({ className }: { className?: string }) {
         aria-haspopup="dialog"
         aria-expanded={false}
       >
-        <Sparkles className="size-4" aria-hidden />
+        <Bot className="size-4" aria-hidden />
         {t("nav.askAi")}
         <span className="ask-ai-fab-badge">{t("assistant.openBadge")}</span>
       </button>
@@ -44,8 +44,8 @@ export function AskAiFab({ className }: { className?: string }) {
       aria-haspopup="dialog"
       aria-expanded={false}
     >
-      <Sparkles className="size-4" aria-hidden />
-      {t("nav.askAi")}
-    </button>
+        <Bot className="size-4" aria-hidden />
+        {t("nav.askAi")}
+      </button>
   );
 }

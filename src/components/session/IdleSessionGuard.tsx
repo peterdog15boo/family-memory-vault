@@ -34,6 +34,7 @@ import {
   msUntilNextIdleCheck,
 } from "@/lib/session/idle-timeout";
 import type { IdleTimeoutPolicy } from "@/lib/session/idle-timeout-policy";
+import { announce } from "@/lib/a11y/announce";
 import { cn } from "@/lib/utils";
 
 type Phase = "idle" | "warning" | "waiting_critical" | "signing_out";
@@ -254,6 +255,17 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
   const phaseRef = useRef<Phase>("idle");
   const signingOutRef = useRef(false);
   const policyEnabledRef = useRef(policy.enabled);
+  const announcedPhaseRef = useRef<Phase>("idle");
+
+  useEffect(() => {
+    if (phase === announcedPhaseRef.current) return;
+    announcedPhaseRef.current = phase;
+    if (phase === "warning" || phase === "waiting_critical") {
+      announce(t("a11y.idleWarning"), { priority: "assertive", dedupeMs: 2_000 });
+    } else if (phase === "signing_out") {
+      announce(t("a11y.idleSignedOut"), { priority: "assertive", dedupeMs: 2_000 });
+    }
+  }, [phase, t]);
 
   useEffect(() => {
     setMounted(true);

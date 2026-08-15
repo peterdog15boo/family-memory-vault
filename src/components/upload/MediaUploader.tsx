@@ -15,6 +15,7 @@ import { UpgradePrompt } from "@/components/billing/UpgradePrompt";
 import { useCopy, useTranslations } from "@/components/i18n/LocaleProvider";
 import { userFacingApiError } from "@/lib/http/user-messages";
 import { beginUploadActivity } from "@/lib/session/upload-activity";
+import { announce } from "@/lib/a11y/announce";
 import { cn } from "@/lib/utils";
 
 type UploadItemStatus =
@@ -159,6 +160,7 @@ export function MediaUploader({
     async (item: UploadItem) => {
       const endUpload = beginUploadActivity();
       try {
+        announce(t("a11y.uploadStarted"), { priority: "polite", dedupeMs: 400 });
         updateItem(item.id, {
           status: "requesting_url",
           progress: 0,
@@ -282,16 +284,19 @@ export function MediaUploader({
           progress: 100,
           mediaId: completeBody.mediaId,
         });
+        announce(t("a11y.uploadCompleted"), { priority: "polite" });
       } catch (error) {
+        const message = uploadFailureMessage(error);
         updateItem(item.id, {
           status: "error",
-          error: uploadFailureMessage(error),
+          error: message,
         });
+        announce(message || t("a11y.uploadFailed"), { priority: "assertive" });
       } finally {
         endUpload();
       }
     },
-    [planName, updateItem],
+    [planName, t, updateItem],
   );
 
   const enqueueFiles = useCallback(

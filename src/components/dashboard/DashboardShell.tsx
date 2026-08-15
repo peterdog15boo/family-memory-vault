@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Shield, Sparkles } from "lucide-react";
+import { Shield, Bot } from "lucide-react";
 import { AskAiFab } from "@/components/assistant/AskAiFab";
 import { AskAiPanel } from "@/components/assistant/AskAiPanel";
 import { AskAiProvider, useAskAi } from "@/components/assistant/AskAiContext";
@@ -100,7 +100,7 @@ function DashboardShellInner({
             aria-expanded={open}
             aria-haspopup="dialog"
           >
-            <Sparkles className="size-4" aria-hidden />
+            <Bot className="size-4" aria-hidden />
             <span className="hidden text-xs font-medium sm:inline">
               {t("nav.askAi")}
             </span>
@@ -125,7 +125,11 @@ function DashboardShellInner({
       <PushSubscriptionSync />
       <IdleSessionGuard initialPolicy={idleTimeoutPolicy} />
       <AskAiFab />
-      <AskAiPanel />
+      <AskAiPanel
+        greetingName={
+          initialAvaProgress?.screenName?.trim() || displayName || null
+        }
+      />
     </div>
   );
 }

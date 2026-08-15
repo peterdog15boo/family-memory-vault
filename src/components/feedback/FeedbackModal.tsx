@@ -28,6 +28,8 @@ import { FeedbackScreenshotField } from "@/components/feedback/FeedbackScreensho
 import { DiscordIcon } from "@/components/icons/DiscordIcon";
 import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { useOverlayA11y } from "@/hooks/useOverlayA11y";
+import { announce } from "@/lib/a11y/announce";
+import { useAnnounceStatus } from "@/hooks/useAnnounceStatus";
 import { getBetaDiscordUrl } from "@/lib/beta-discord";
 import { getBetaSurveyUrl } from "@/lib/beta-survey";
 import {
@@ -86,6 +88,8 @@ export function FeedbackModal({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [ticketId, setTicketId] = useState<string | null>(null);
+  useAnnounceStatus(error, { priority: "assertive" });
+
   const [screenshot, setScreenshot] = useState<FeedbackScreenshot | null>(null);
   const [hideForCapture, setHideForCapture] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -251,6 +255,7 @@ export function FeedbackModal({
       setTicketId(data?.ticketId ?? null);
       setDone(true);
       setSubmitting(false);
+      announce(t("a11y.feedbackSubmitted"), { priority: "polite" });
     } catch {
       setError(t("feedback.errorGeneric"));
       setSubmitting(false);

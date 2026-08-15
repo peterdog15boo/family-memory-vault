@@ -11,7 +11,7 @@ import {
   Loader2,
   Pencil,
   Settings,
-  Sparkles,
+  Bot,
   Users,
   X,
 } from "lucide-react";
@@ -281,7 +281,7 @@ function UnderstandingPanel({
   return (
     <div className="rounded-lg border border-accent/20 bg-accent/8 px-3 py-2.5">
       <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-accent-deep">
-        <Sparkles className="size-3" aria-hidden />
+        <Bot className="size-3" aria-hidden />
         {t("assistant.understanding")}
       </p>
       <p className="mt-1 text-sm text-ink">

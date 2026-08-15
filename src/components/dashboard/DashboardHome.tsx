@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Clapperboard, Plus, Sparkles, Upload } from "lucide-react";
+import { ArrowRight, Bot, Clapperboard, Plus, Upload } from "lucide-react";
 import { AskAiOpenButton } from "@/components/assistant/AskAiOpenButton";
 import { BetaSurveyBanner } from "@/components/beta/BetaSurveyBanner";
 import { CurrentPlanBadge } from "@/components/billing/CurrentPlanBadge";
@@ -81,7 +81,7 @@ export function DashboardHomeModern({
               {t("pages.createMemory")}
             </Link>
             <AskAiOpenButton className="ui-btn ui-btn-ghost ui-btn-lg">
-              <Sparkles className="size-4" aria-hidden />
+              <Bot className="size-4" aria-hidden />
               {t("nav.askAi")}
             </AskAiOpenButton>
           </>
