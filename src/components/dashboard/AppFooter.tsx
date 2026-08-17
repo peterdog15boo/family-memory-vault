@@ -19,6 +19,7 @@ export function AppFooter() {
     { href: "/family", label: t("nav.family") },
     { href: "/family-memory-box", label: t("nav.digitize") },
     { href: "/documents", label: t("nav.documents") },
+    { href: "/accounts", label: t("nav.accounts") },
     { href: "/memories", label: t("nav.memories") },
     { href: "/privacy", label: t("nav.privacy") },
     { href: "/terms", label: t("nav.terms") },

@@ -153,7 +153,7 @@ export const ASSISTANT_SAFETY_SUMMARY = [
   "Family co-member gallery media is not used for assistant creates (owner media only).",
   "Private document and Digital Legacy assistance is limited to the signed-in owner's own data.",
   "Assistant may help with document categories, document filing, contacts, instructions, and checklist gaps, but not secure-item secrets.",
-  "legacy_secure_items, emergency_access_designations, and sensitive_access_events stay out of assistant scope.",
+  "legacy_secure_items, emergency_access_designations, sensitive_access_events, and connected financial accounts stay out of assistant scope.",
 ] as const;
 
 /** Database tables the assistant must never read or search. */
@@ -162,4 +162,7 @@ export const ASSISTANT_EXCLUDED_DATA_DOMAINS = [
   "legacy_videos",
   "emergency_access_designations",
   "sensitive_access_events",
+  "plaid_items",
+  "linked_accounts",
+  "linked_account_holdings",
 ] as const;

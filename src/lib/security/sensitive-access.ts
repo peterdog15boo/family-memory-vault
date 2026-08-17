@@ -39,6 +39,11 @@ export const SENSITIVE_ACCESS_ACTIONS = [
   "legacy.granted.video.playback_url",
   "legacy.granted.video.thumbnail_url",
   "emergency_access.vault_view",
+  "connected_account.link_token_create",
+  "connected_account.connect",
+  "connected_account.sync",
+  "connected_account.disconnect",
+  "connected_account.notes_update",
 ] as const;
 
 export type SensitiveAccessAction = (typeof SENSITIVE_ACCESS_ACTIONS)[number];
@@ -48,7 +53,9 @@ export type SensitiveAccessTargetType =
   | "legacy_secure_item"
   | "legacy_video"
   | "legacy_vault"
-  | "emergency_access_designation";
+  | "emergency_access_designation"
+  | "plaid_item"
+  | "linked_account";
 
 export type LogSensitiveAccessInput = {
   userId: string;
@@ -68,7 +75,8 @@ export const PRIVATE_VAULT_SECURITY_RULES = [
   "Sensitive views and downloads are appended to sensitive_access_events (no content in metadata).",
   "Thumbnails are image derivatives only — never document text, legacy content, or passwords.",
   "Notifications and emails must not include document bodies, legacy text, or secure item content.",
-  "Assistant search indexes clean media only — never private_documents or legacy_* tables.",
+  "Assistant search indexes clean media only — never private_documents, legacy_*, or plaid/linked account tables.",
+  "Connected Accounts (Plaid) are owner-only; access tokens stay encrypted server-side and never enter Ask AI or galleries.",
 ] as const;
 
 export type SensitiveStepUpInput = {

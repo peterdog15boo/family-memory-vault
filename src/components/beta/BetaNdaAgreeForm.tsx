@@ -120,7 +120,11 @@ export function BetaNdaAgreeForm({
         <p className="beta-nda-p beta-nda-closing">{BETA_NDA_CLOSING}</p>
       </article>
 
-      <form className="beta-nda-form" onSubmit={onSubmit} noValidate>
+      <form
+        className="beta-nda-form beta-nda-form--sticky-actions"
+        onSubmit={onSubmit}
+        noValidate
+      >
         <label className="beta-nda-field">
           <span>{t("beta.fullName")}</span>
           <input

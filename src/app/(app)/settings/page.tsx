@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { Heart, KeyRound, Users } from "lucide-react";
+import { Heart, KeyRound, Landmark, Users } from "lucide-react";
 import { AccountUsageOverview } from "@/components/billing/AccountUsageOverview";
 import { CurrentPlanBadge } from "@/components/billing/CurrentPlanBadge";
 import { UsageLimitBanner } from "@/components/billing/UsageLimitBanner";
@@ -90,6 +90,24 @@ export default async function SettingsPage() {
         </div>
 
         <ul className="settings-link-list mt-6 space-y-3">
+          <li>
+            <Link
+              href="/accounts"
+              className="settings-link-card group flex items-start gap-4 rounded-2xl border border-ink/10 bg-canvas/80 px-5 py-4 transition hover:border-accent/35 hover:bg-accent/5"
+            >
+              <span className="settings-link-icon mt-0.5 rounded-md bg-accent/15 p-2 text-accent-deep">
+                <Landmark className="size-5" aria-hidden />
+              </span>
+              <span className="min-w-0">
+                <span className="block font-display text-lg tracking-tight text-ink group-hover:text-accent-deep">
+                  {t("settings.connectedAccounts")}
+                </span>
+                <span className="mt-1 block text-sm leading-relaxed text-ink-muted">
+                  {t("settings.connectedAccountsDescription")}
+                </span>
+              </span>
+            </Link>
+          </li>
           <li>
             <Link
               href="/legacy"

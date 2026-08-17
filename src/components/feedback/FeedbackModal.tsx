@@ -102,17 +102,20 @@ export function FeedbackModal({
     [pathname],
   );
 
+  const userIdForContext = user?.id ?? null;
+  const userEmailForContext =
+    user?.primaryEmailAddress?.emailAddress ??
+    user?.emailAddresses?.[0]?.emailAddress ??
+    null;
+
   const context = useMemo(() => {
     if (!open || typeof window === "undefined") return null;
     return collectFeedbackContext({
       pathname,
-      userId: user?.id ?? null,
-      email:
-        user?.primaryEmailAddress?.emailAddress ??
-        user?.emailAddresses?.[0]?.emailAddress ??
-        null,
+      userId: userIdForContext,
+      email: userEmailForContext,
     });
-  }, [open, pathname, user]);
+  }, [open, pathname, userIdForContext, userEmailForContext]);
 
   const [form, setForm] = useState<FormState>(() => ({
     mode: initialMode,
@@ -121,10 +124,21 @@ export function FeedbackModal({
     ...EMPTY,
   }));
 
+  /** Only reset when the dialog opens — not when Clerk `user` / pathname churn while typing. */
+  const wasOpenRef = useRef(false);
+
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      wasOpenRef.current = false;
+      return;
+    }
+    // Android/Clerk often refreshes the user object while the modal is open;
+    // remounting field state on those updates wiped typed values mid-entry.
+    if (wasOpenRef.current) return;
+    wasOpenRef.current = true;
+
     setDone(false);
     setError(null);
     setDetailsOpen(false);
@@ -136,11 +150,8 @@ export function FeedbackModal({
     setCategoryTouched(false);
     const next = collectFeedbackContext({
       pathname,
-      userId: user?.id ?? null,
-      email:
-        user?.primaryEmailAddress?.emailAddress ??
-        user?.emailAddresses?.[0]?.emailAddress ??
-        null,
+      userId: userIdForContext,
+      email: userEmailForContext,
     });
     setForm({
       mode: initialMode,
@@ -148,7 +159,7 @@ export function FeedbackModal({
       severity: "medium",
       ...EMPTY,
     });
-  }, [open, initialMode, pathname, user]);
+  }, [open, initialMode, pathname, userIdForContext, userEmailForContext]);
 
   useEffect(() => {
     if (!open) return;
@@ -287,7 +298,7 @@ export function FeedbackModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="ui-modal-panel flex max-h-[min(92vh,44rem)] flex-col overflow-hidden"
+        className="ui-modal-panel feedback-modal-panel flex max-h-[min(92dvh,44rem)] flex-col overflow-hidden"
         tabIndex={-1}
       >
         <div className="flex items-start justify-between gap-3 border-b border-ink/8 px-5 py-4 sm:px-6">
@@ -437,7 +448,6 @@ export function FeedbackModal({
                   onChange={(e) => setField("title", e.target.value)}
                   maxLength={160}
                   required
-                  autoFocus
                   placeholder={
                     form.mode === "bug"
                       ? t("feedback.titlePlaceholderBug")
@@ -754,7 +764,7 @@ export function FeedbackModal({
               ) : null}
             </div>
 
-            <div className="flex flex-col gap-3 border-t border-ink/8 px-5 py-4 sm:px-6">
+            <div className="feedback-modal-actions flex flex-col gap-3 border-t border-ink/8 px-5 py-4 sm:px-6">
               <div className="flex flex-col gap-2 rounded-xl border border-ink/10 bg-ink/[0.03] px-3.5 py-3">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-ink">

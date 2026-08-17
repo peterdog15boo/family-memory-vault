@@ -157,5 +157,10 @@ describe("assistant safety", () => {
       "emergency_access_designations",
     );
     expect(ASSISTANT_EXCLUDED_DATA_DOMAINS).toContain("sensitive_access_events");
+    expect(ASSISTANT_EXCLUDED_DATA_DOMAINS).toContain("plaid_items");
+    expect(ASSISTANT_EXCLUDED_DATA_DOMAINS).toContain("linked_accounts");
+    expect(ASSISTANT_EXCLUDED_DATA_DOMAINS).toContain(
+      "linked_account_holdings",
+    );
   });
 });

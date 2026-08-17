@@ -34,6 +34,7 @@ export const enUS = {
       documents: "Documents",
       documentDetail: "Document",
       legacy: "Legacy",
+      accounts: "Connected Accounts",
       settings: "Settings",
       notifications: "Notifications",
       assistant: "Ask AI",
@@ -78,6 +79,7 @@ export const enUS = {
     askAi: "Ask AI",
     documents: "Documents",
     legacy: "Legacy",
+    accounts: "Accounts",
     family: "Family",
     digitize: "Digitize",
     billing: "Billing",
@@ -117,6 +119,9 @@ export const enUS = {
     digitalLegacy: "Digital Legacy",
     digitalLegacyDescription:
       "Leave thoughtful guidance for loved ones — contacts, instructions, and secure notes. Private to your account.",
+    connectedAccounts: "Connected Accounts",
+    connectedAccountsDescription:
+      "Link bank and investment accounts with Plaid. Balances and notes stay private to your vault.",
     emergencyAccess: "Emergency Access (incoming)",
     emergencyAccessDescription:
       "If someone named you as a trusted contact, request or view Digital Legacy emergency access here.",
@@ -525,6 +530,8 @@ export const enUS = {
       "Private Documents are only for you. They never appear in Memories, Movies, or family sharing.",
     digitalLegacy:
       "Digital Legacy is a private gift of clarity — only you can see it until you choose otherwise. It never appears in family sharing.",
+    connectedAccounts:
+      "Connected Accounts keep bank and investment details in your private vault. They never appear in Photos, Memories, or Ask AI.",
   },
   legacy: {
     title: "Digital Legacy",
@@ -1466,6 +1473,41 @@ export const enUS = {
     selectAll: "Select all",
     clearSelection: "Clear",
     selectedCount: "{count} selected",
+  },
+  accounts: {
+    eyebrow: "Private vault",
+    title: "Connected Accounts",
+    description:
+      "One-click link bank and investment accounts with Plaid. Details stay private to your account — never in Photos, Memories, or family sharing.",
+    connectButton: "Connect bank or investment account",
+    privacyNote: "Access tokens are encrypted at rest. We never store your bank password.",
+    notConfigured:
+      "Plaid isn’t configured for this environment yet. Ask an admin to set PLAID_CLIENT_ID, PLAID_SECRET, and PLAID_TOKEN_ENCRYPTION_KEY.",
+    emptyTitle: "No accounts connected yet",
+    emptyBody:
+      "Connect a bank or investment account to keep balances, account details, and your own notes — like insurance agents or policy numbers — in one private place for your family.",
+    unknownInstitution: "Institution",
+    balanceUnavailable: "Balance unavailable",
+    available: "Available",
+    lastSynced: "Last synced",
+    neverSynced: "Never",
+    holdings: "Holdings",
+    moreHoldings: "+{count} more holdings",
+    notesLabel: "Private notes",
+    notesPlaceholder:
+      "Insurance agent, policy numbers, or other details Plaid doesn’t provide…",
+    saveNotes: "Save notes",
+    saving: "Saving…",
+    syncNow: "Sync now",
+    disconnect: "Disconnect",
+    disconnecting: "Disconnecting…",
+    disconnectConfirm:
+      "Disconnect this institution? Local balances, holdings, and notes for its accounts will be deleted.",
+    linkTokenError: "Could not start Plaid Link.",
+    exchangeError: "Could not finish connecting the account.",
+    syncError: "Could not sync accounts.",
+    disconnectError: "Could not disconnect.",
+    notesError: "Could not save notes.",
   },
   people: {
     facePrivacyNote:

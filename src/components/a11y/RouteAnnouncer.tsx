@@ -45,6 +45,7 @@ function pathLabel(pathname: string, t: TranslateFn): string {
     "/family": t("a11y.pages.family"),
     "/documents": t("a11y.pages.documents"),
     "/legacy": t("a11y.pages.legacy"),
+    "/accounts": t("a11y.pages.accounts"),
     "/settings": t("a11y.pages.settings"),
     "/notifications": t("a11y.pages.notifications"),
     "/assistant": t("a11y.pages.assistant"),
@@ -57,6 +58,7 @@ function pathLabel(pathname: string, t: TranslateFn): string {
   if (path.startsWith("/people/")) return t("a11y.pages.personDetail");
   if (path.startsWith("/documents/")) return t("a11y.pages.documentDetail");
   if (path.startsWith("/legacy/")) return t("a11y.pages.legacy");
+  if (path.startsWith("/accounts")) return t("a11y.pages.accounts");
   if (path.startsWith("/admin/")) return t("a11y.pages.admin");
   if (path.startsWith("/settings")) return t("a11y.pages.settings");
 

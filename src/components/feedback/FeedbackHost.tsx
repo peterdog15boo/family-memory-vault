@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { FeedbackButton } from "@/components/feedback/FeedbackButton";
 import { FeedbackModal } from "@/components/feedback/FeedbackModal";
 import type { FeedbackMode } from "@/lib/feedback/categories";
@@ -16,12 +17,23 @@ type FeedbackHostProps = {
   showFloating?: boolean;
 };
 
+function shouldHideFloatingFab(pathname: string, modalOpen: boolean): boolean {
+  if (modalOpen) return true;
+  const path = pathname.split("?")[0] || "/";
+  // Legal / beta gates: keep Continue/checkbox fully tappable on Android.
+  if (path.startsWith("/terms-agree") || path.startsWith("/beta-agree")) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Site-wide beta feedback host: modal + optional authenticated FAB.
  * Mount once near the root so marketing and app chrome share one modal.
  */
 export function FeedbackHost({ showFloating = true }: FeedbackHostProps) {
   const enabled = isBetaFeedbackEnabled();
+  const pathname = usePathname() || "/";
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<FeedbackMode>("bug");
 
@@ -41,9 +53,12 @@ export function FeedbackHost({ showFloating = true }: FeedbackHostProps) {
 
   if (!enabled) return null;
 
+  const showFab =
+    showFloating && !shouldHideFloatingFab(pathname, open);
+
   return (
     <>
-      {showFloating ? (
+      {showFab ? (
         <FeedbackButton placement="floating" showBetaBadge />
       ) : null}
       <FeedbackModal

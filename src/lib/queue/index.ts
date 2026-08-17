@@ -13,7 +13,8 @@ export type QueueJobType =
   | "media.scene"
   | "movie.render"
   | "media.transcode"
-  | "media.thumbnail";
+  | "media.thumbnail"
+  | "plaid.sync";
 
 export const MODERATION_JOB_TYPES = [
   "moderation",
@@ -30,6 +31,10 @@ export const SCENE_ANALYSIS_JOB_TYPES = [
 
 export const MOVIE_RENDER_JOB_TYPES = [
   "movie.render",
+] as const satisfies readonly QueueJobType[];
+
+export const PLAID_SYNC_JOB_TYPES = [
+  "plaid.sync",
 ] as const satisfies readonly QueueJobType[];
 
 export type EnqueueOptions = {
@@ -563,6 +568,16 @@ export async function reclaimStaleMovieRenderJobs(
   ),
 ): Promise<number> {
   return reclaimStaleProcessingJobs(staleAfterMs, MOVIE_RENDER_JOB_TYPES);
+}
+
+export async function claimNextPlaidSyncJob(): Promise<ProcessingJob | null> {
+  return claimNextJob({ types: PLAID_SYNC_JOB_TYPES });
+}
+
+export async function reclaimStalePlaidSyncJobs(
+  staleAfterMs?: number,
+): Promise<number> {
+  return reclaimStaleProcessingJobs(staleAfterMs, PLAID_SYNC_JOB_TYPES);
 }
 
 /** True when a movie.render job is already pending/processing for this movie. */

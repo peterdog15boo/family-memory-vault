@@ -75,6 +75,7 @@ Open [http://localhost:3000](http://localhost:3000).
 npm run worker:moderation
 npm run worker:faces      # if FACE_DETECTION_ENABLED=true
 npm run worker:movies     # for movie generation
+npm run worker:plaid      # if Plaid Connected Accounts is configured
 ```
 
 Or drain once with `Authorization: Bearer $WORKER_SECRET`:
@@ -82,6 +83,7 @@ Or drain once with `Authorization: Bearer $WORKER_SECRET`:
 - `POST /api/jobs/moderation`
 - `POST /api/jobs/faces`
 - `POST /api/jobs/movies`
+- `POST /api/jobs/plaid`
 
 ## Environment variables
 
@@ -92,6 +94,7 @@ Or drain once with `Authorization: Bearer $WORKER_SECRET`:
 | **Neon** | `DATABASE_URL`, `DATABASE_URL_UNPOOLED` | Pooled for app; unpooled for migrations |
 | **R2** | `R2_ACCOUNT_ID` / `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_REGION` | Required for uploads |
 | **Workers** | `WORKER_SECRET`, `QUEUE_*` | `WORKER_SECRET` required in production |
+| **Plaid** | `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV`, `PLAID_PRODUCTS`, `PLAID_TOKEN_ENCRYPTION_KEY` | Optional; enables Connected Accounts |
 | **Moderation** | `AI_MODERATION_*`, provider keys, `PHOTODNA_*`, `NCMEC_*`, `MODERATION_MOCK_SCENARIO` | Enable live vendors for production |
 | **Faces** | `FACE_DETECTION_*`, `FACE_GROUPING_*` | Optional |
 | **Stripe** | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_PRICE_*` | Optional; webhook secret required if Stripe is enabled |

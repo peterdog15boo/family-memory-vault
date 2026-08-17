@@ -1,17 +1,25 @@
 # Private Vault Security
 
-Security contract for **Private Documents**, **Digital Legacy**, and **Emergency Access**. These surfaces are intentionally isolated from family photo sharing.
+Security contract for **Private Documents**, **Digital Legacy**, **Connected Accounts (Plaid)**, and **Emergency Access**. These surfaces are intentionally isolated from family photo sharing.
 
 ## Core principles
 
 1. **Owner-only by default** — every query filters by the authenticated owner's `userId`.
-2. **Separate from family sharing** — family membership, shared memories, and gallery permissions never grant document or legacy access.
+2. **Separate from family sharing** — family membership, shared memories, and gallery permissions never grant document, legacy, or connected-account access.
 3. **Short-lived signed URLs only** — no public or permanent download links for private files.
 4. **Reveal, don't preload** — passwords and secure-item content are redacted until an explicit reveal step succeeds.
-5. **Step-up before sensitivity** — document downloads and secure-item reveals require Clerk reverification or explicit in-app confirmation.
-6. **Audit sensitive access** — downloads and reveals append to `sensitive_access_events` without storing content in metadata.
-7. **No leakage in side channels** — thumbnails, notifications, and emails never include document bodies, legacy text, or passwords.
-8. **No assistant indexing** — the AI assistant searches clean media only, never private vault tables.
+5. **Step-up before sensitivity** — document downloads, secure-item reveals, and Connected Account disconnect require Clerk reverification or explicit in-app confirmation.
+6. **Audit sensitive access** — downloads, reveals, Plaid connect/sync/disconnect append to `sensitive_access_events` without storing secrets in metadata.
+7. **No leakage in side channels** — thumbnails, notifications, and emails never include document bodies, legacy text, passwords, or financial account payloads.
+8. **No assistant indexing** — the AI assistant searches clean media only, never private vault tables (including `plaid_items`, `linked_accounts`, `linked_account_holdings`).
+9. **Plaid tokens encrypted at rest** — access tokens are AES-256-GCM ciphertext; secrets never reach the browser.
+
+## Connected Accounts (Plaid)
+
+- Route: `/accounts` (Keep safe nav group)
+- APIs: `/api/plaid/*`, `/api/accounts/*` — owner `userId` only
+- Disconnect deletes local item + accounts + holdings (and attempts Plaid `item/remove`)
+- Optional worker: `npm run worker:plaid` / `POST /api/jobs/plaid`
 
 ## Signed URL lifetimes
 

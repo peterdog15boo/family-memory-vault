@@ -22,6 +22,7 @@ export const LogEvents = {
   movieJobFailed: "movie.job_failed",
   facesJobFailed: "faces.job_failed",
   sceneJobFailed: "scene.job_failed",
+  plaidJobFailed: "plaid.job_failed",
   billingWebhook: "billing.webhook",
   billingWebhookFailed: "billing.webhook_failed",
   workerDrain: "worker.drain",
@@ -108,7 +109,8 @@ export function logJobFailure(
     | typeof LogEvents.moderationJobFailed
     | typeof LogEvents.movieJobFailed
     | typeof LogEvents.facesJobFailed
-    | typeof LogEvents.sceneJobFailed,
+    | typeof LogEvents.sceneJobFailed
+    | typeof LogEvents.plaidJobFailed,
   fields: LogFields,
   error?: unknown,
 ): void {

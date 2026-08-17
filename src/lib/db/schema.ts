@@ -1774,6 +1774,140 @@ export const sensitiveAccessEvents = pgTable(
 );
 
 /* -------------------------------------------------------------------------- */
+/* Connected Accounts (Plaid) — owner-only private vault                        */
+/* -------------------------------------------------------------------------- */
+
+export const PLAID_ITEM_STATUSES = [
+  "active",
+  "error",
+  "disconnected",
+] as const;
+export type PlaidItemStatus = (typeof PLAID_ITEM_STATUSES)[number];
+
+export const plaidItemStatusEnum = pgEnum(
+  "plaid_item_status",
+  PLAID_ITEM_STATUSES,
+);
+
+/**
+ * Plaid Item = one institution login. Access tokens encrypted at rest.
+ * Owner-only — never family-shared.
+ */
+export const plaidItems = pgTable(
+  "plaid_items",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Plaid item_id from Link / exchange. */
+    plaidItemId: text("plaid_item_id").notNull(),
+    institutionId: text("institution_id"),
+    institutionName: text("institution_name"),
+    /** AES-GCM ciphertext (`v1:…`) — never expose to clients. */
+    accessTokenEncrypted: text("access_token_encrypted").notNull(),
+    status: plaidItemStatusEnum("status").notNull().default("active"),
+    products: jsonb("products").$type<string[]>().notNull().default([]),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("plaid_items_plaid_item_id_uidx").on(table.plaidItemId),
+    index("plaid_items_user_id_idx").on(table.userId),
+    index("plaid_items_user_status_idx").on(table.userId, table.status),
+  ],
+);
+
+/**
+ * Bank / investment accounts under a Plaid item. Balances are snapshots.
+ */
+export const linkedAccounts = pgTable(
+  "linked_accounts",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    plaidItemId: text("plaid_item_id")
+      .notNull()
+      .references(() => plaidItems.id, { onDelete: "cascade" }),
+    plaidAccountId: text("plaid_account_id").notNull(),
+    name: text("name").notNull(),
+    officialName: text("official_name"),
+    type: text("type").notNull(),
+    subtype: text("subtype"),
+    /** Masked account number / last4 from Plaid. */
+    mask: text("mask"),
+    currentBalance: doublePrecision("current_balance"),
+    availableBalance: doublePrecision("available_balance"),
+    isoCurrencyCode: text("iso_currency_code"),
+    /** Owner notes (insurance agent, policy #, etc.) — not from Plaid. */
+    notes: text("notes"),
+    metadata: jsonb("metadata")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("linked_accounts_plaid_account_uidx").on(table.plaidAccountId),
+    index("linked_accounts_user_id_idx").on(table.userId),
+    index("linked_accounts_item_idx").on(table.plaidItemId),
+  ],
+);
+
+/**
+ * Investment holdings snapshot for a linked investment account.
+ * Replaced on each successful sync for that account.
+ */
+export const linkedAccountHoldings = pgTable(
+  "linked_account_holdings",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    linkedAccountId: text("linked_account_id")
+      .notNull()
+      .references(() => linkedAccounts.id, { onDelete: "cascade" }),
+    plaidSecurityId: text("plaid_security_id"),
+    name: text("name").notNull(),
+    tickerSymbol: text("ticker_symbol"),
+    quantity: doublePrecision("quantity"),
+    institutionValue: doublePrecision("institution_value"),
+    institutionPrice: doublePrecision("institution_price"),
+    isoCurrencyCode: text("iso_currency_code"),
+    asOf: timestamp("as_of", { withTimezone: true }),
+    metadata: jsonb("metadata")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("linked_account_holdings_user_id_idx").on(table.userId),
+    index("linked_account_holdings_account_idx").on(table.linkedAccountId),
+  ],
+);
+
+/* -------------------------------------------------------------------------- */
 /* Family Memory Box orders (physical media digitizing)                         */
 /* -------------------------------------------------------------------------- */
 
@@ -2226,6 +2360,9 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     relationName: "emergencyAccessDesignatee",
   }),
   sensitiveAccessEvents: many(sensitiveAccessEvents),
+  plaidItems: many(plaidItems),
+  linkedAccounts: many(linkedAccounts),
+  linkedAccountHoldings: many(linkedAccountHoldings),
   userProgress: one(userProgress),
   userAchievements: many(userAchievements),
 }));
@@ -2575,6 +2712,43 @@ export const emergencyAccessDesignationsRelations = relations(
   }),
 );
 
+export const plaidItemsRelations = relations(plaidItems, ({ one, many }) => ({
+  user: one(users, {
+    fields: [plaidItems.userId],
+    references: [users.id],
+  }),
+  accounts: many(linkedAccounts),
+}));
+
+export const linkedAccountsRelations = relations(
+  linkedAccounts,
+  ({ one, many }) => ({
+    user: one(users, {
+      fields: [linkedAccounts.userId],
+      references: [users.id],
+    }),
+    item: one(plaidItems, {
+      fields: [linkedAccounts.plaidItemId],
+      references: [plaidItems.id],
+    }),
+    holdings: many(linkedAccountHoldings),
+  }),
+);
+
+export const linkedAccountHoldingsRelations = relations(
+  linkedAccountHoldings,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [linkedAccountHoldings.userId],
+      references: [users.id],
+    }),
+    account: one(linkedAccounts, {
+      fields: [linkedAccountHoldings.linkedAccountId],
+      references: [linkedAccounts.id],
+    }),
+  }),
+);
+
 export const achievementDefinitionsRelations = relations(
   achievementDefinitions,
   ({ many }) => ({
@@ -2696,6 +2870,12 @@ export type NewEmergencyAccessDesignation =
   typeof emergencyAccessDesignations.$inferInsert;
 export type SensitiveAccessEvent = typeof sensitiveAccessEvents.$inferSelect;
 export type NewSensitiveAccessEvent = typeof sensitiveAccessEvents.$inferInsert;
+export type PlaidItem = typeof plaidItems.$inferSelect;
+export type NewPlaidItem = typeof plaidItems.$inferInsert;
+export type LinkedAccount = typeof linkedAccounts.$inferSelect;
+export type NewLinkedAccount = typeof linkedAccounts.$inferInsert;
+export type LinkedAccountHolding = typeof linkedAccountHoldings.$inferSelect;
+export type NewLinkedAccountHolding = typeof linkedAccountHoldings.$inferInsert;
 export type MemoryBoxOrder = typeof memoryBoxOrders.$inferSelect;
 export type NewMemoryBoxOrder = typeof memoryBoxOrders.$inferInsert;
 export type BetaNdaAcceptance = typeof betaNdaAcceptances.$inferSelect;

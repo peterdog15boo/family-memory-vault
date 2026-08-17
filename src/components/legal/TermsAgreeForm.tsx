@@ -16,6 +16,7 @@ type Props = {
 /**
  * Clickwrap gate for Terms of Service acceptance.
  * Identity comes from the signed-in account (shown read-only).
+ * Mobile: checkbox + Continue stay in a sticky safe-area footer.
  */
 export function TermsAgreeForm({ displayName, email, redirectTo }: Props) {
   const t = useTranslations();
@@ -86,7 +87,11 @@ export function TermsAgreeForm({ displayName, email, redirectTo }: Props) {
         showClosing
       />
 
-      <form className="beta-nda-form" onSubmit={onSubmit} noValidate>
+      <form
+        className="beta-nda-form beta-nda-form--sticky-actions"
+        onSubmit={onSubmit}
+        noValidate
+      >
         <label
           className={cn("beta-nda-check", !agreed && error ? "is-error" : null)}
         >
