@@ -15,7 +15,13 @@ import {
 } from "@/lib/db/schema";
 import { getPlaidClient } from "@/lib/plaid/client";
 import {
+  categorizePlaidAccount,
+  isLinkedAccountCategory,
+  type LinkedAccountCategory,
+} from "@/lib/plaid/categories";
+import {
   getPlaidCountryCodes,
+  getPlaidEnv,
   getPlaidProducts,
   isPlaidConfigured,
 } from "@/lib/plaid/config";
@@ -60,6 +66,10 @@ function serializeAccount(
     type: account.type,
     subtype: account.subtype,
     mask: account.mask,
+    category: isLinkedAccountCategory(account.category)
+      ? account.category
+      : "other",
+    categoryManual: account.categoryManual,
     currentBalance: account.currentBalance,
     availableBalance: account.availableBalance,
     currency: account.isoCurrencyCode,
@@ -223,6 +233,10 @@ export async function syncPlaidItemForUser(
       const plaidAccountId = acct.account_id;
       if (!plaidAccountId) continue;
       const prev = byPlaidId.get(plaidAccountId);
+      const suggestedCategory = categorizePlaidAccount(
+        acct.type,
+        acct.subtype,
+      );
       const values = {
         name: acct.name || acct.official_name || "Account",
         officialName: acct.official_name ?? null,
@@ -241,6 +255,10 @@ export async function syncPlaidItemForUser(
           verificationStatus: acct.verification_status ?? null,
           persistentAccountId: acct.persistent_account_id ?? null,
         },
+        // Preserve manual category choices across sync.
+        ...(prev?.categoryManual
+          ? {}
+          : { category: suggestedCategory }),
       };
 
       if (prev) {
@@ -259,6 +277,8 @@ export async function syncPlaidItemForUser(
             plaidItemId: item.id,
             plaidAccountId,
             notes: null,
+            category: suggestedCategory,
+            categoryManual: false,
             createdAt: now,
             ...values,
           })
@@ -477,6 +497,58 @@ export async function updateLinkedAccountNotes(
   return serializeAccount(updated, item, holdings);
 }
 
+export async function updateLinkedAccountCategory(
+  userId: string,
+  accountId: string,
+  category: LinkedAccountCategory,
+): Promise<LinkedAccountView | null> {
+  if (!isLinkedAccountCategory(category)) return null;
+
+  const db = getDb();
+  const [account] = await db
+    .select()
+    .from(linkedAccounts)
+    .where(
+      and(eq(linkedAccounts.id, accountId), eq(linkedAccounts.userId, userId)),
+    )
+    .limit(1);
+  if (!account) return null;
+
+  const [updated] = await db
+    .update(linkedAccounts)
+    .set({
+      category,
+      categoryManual: true,
+      updatedAt: new Date(),
+    })
+    .where(eq(linkedAccounts.id, accountId))
+    .returning();
+
+  if (!updated) return null;
+
+  const [item] = await db
+    .select()
+    .from(plaidItems)
+    .where(eq(plaidItems.id, updated.plaidItemId))
+    .limit(1);
+  if (!item) return null;
+
+  const holdings = await db
+    .select()
+    .from(linkedAccountHoldings)
+    .where(eq(linkedAccountHoldings.linkedAccountId, updated.id));
+
+  await logSensitiveAccess({
+    userId,
+    action: "connected_account.category_update",
+    targetType: "linked_account",
+    targetId: accountId,
+    metadata: { category },
+  });
+
+  return serializeAccount(updated, item, holdings);
+}
+
 export async function listConnectedAccountsForUser(
   userId: string,
 ): Promise<ConnectedAccountsPageData> {
@@ -519,6 +591,7 @@ export async function listConnectedAccountsForUser(
 
   return {
     configured,
+    env: configured ? getPlaidEnv() : "unknown",
     items: items.map((i) => serializeItem(i, counts.get(i.id) ?? 0)),
     accounts: accounts
       .map((a) => {

@@ -31,16 +31,21 @@ export const LEGACY_NAV: LegacyNavItem[] = [
       label: "Business Continuity",
       description: "Walkthrough videos and notes for running or transitioning your work",
     },
-  {
-    href: "/documents/legacy/practical",
-    label: "Practical Instructions",
-    description: "Home, finances, insurance, and everyday details",
-  },
-  {
-    href: "/documents/legacy/secure",
-    label: "Secure Items",
-    description: "Sensitive access notes — handle with extra care",
-  },
+    {
+      href: "/documents/legacy/practical",
+      label: "Practical Instructions",
+      description: "Home, finances, insurance, and everyday details",
+    },
+    {
+      href: "/documents/legacy/accounts",
+      label: "Financial Accounts",
+      description: "Banking, investments, loans, and cards linked with Plaid",
+    },
+    {
+      href: "/documents/legacy/secure",
+      label: "Secure Items",
+      description: "Sensitive access notes — handle with extra care",
+    },
   {
     href: "/documents/legacy/emergency",
     label: "Emergency Access",

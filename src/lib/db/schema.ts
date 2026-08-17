@@ -1789,6 +1789,23 @@ export const plaidItemStatusEnum = pgEnum(
   PLAID_ITEM_STATUSES,
 );
 
+/** Digital Legacy / Accounts grouping for linked financial accounts. */
+export const LINKED_ACCOUNT_CATEGORIES = [
+  "banking",
+  "investments",
+  "loans_debt",
+  "credit_cards",
+  "insurance_benefits",
+  "other",
+] as const;
+export type LinkedAccountCategoryDb =
+  (typeof LINKED_ACCOUNT_CATEGORIES)[number];
+
+export const linkedAccountCategoryEnum = pgEnum(
+  "linked_account_category",
+  LINKED_ACCOUNT_CATEGORIES,
+);
+
 /**
  * Plaid Item = one institution login. Access tokens encrypted at rest.
  * Owner-only — never family-shared.
@@ -1844,6 +1861,12 @@ export const linkedAccounts = pgTable(
     subtype: text("subtype"),
     /** Masked account number / last4 from Plaid. */
     mask: text("mask"),
+    /** Legacy / Accounts grouping — auto from Plaid, overridable by owner. */
+    category: linkedAccountCategoryEnum("category")
+      .notNull()
+      .default("other"),
+    /** When true, sync will not overwrite a manual category choice. */
+    categoryManual: boolean("category_manual").notNull().default(false),
     currentBalance: doublePrecision("current_balance"),
     availableBalance: doublePrecision("available_balance"),
     isoCurrencyCode: text("iso_currency_code"),
@@ -1865,6 +1888,7 @@ export const linkedAccounts = pgTable(
     uniqueIndex("linked_accounts_plaid_account_uidx").on(table.plaidAccountId),
     index("linked_accounts_user_id_idx").on(table.userId),
     index("linked_accounts_item_idx").on(table.plaidItemId),
+    index("linked_accounts_user_category_idx").on(table.userId, table.category),
   ],
 );
 

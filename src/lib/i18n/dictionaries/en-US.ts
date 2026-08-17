@@ -555,8 +555,16 @@ export const enUS = {
     navContacts: "Key Contacts",
     navBusiness: "Business Continuity",
     navPractical: "Practical Instructions",
+    navFinancialAccounts: "Financial Accounts",
     navSecure: "Secure Items",
     navEmergency: "Emergency Access",
+    financialAccountsTitle: "Financial Accounts",
+    financialAccountsLead:
+      "Banking, investments, loans, credit cards, and benefits linked through Connected Accounts — grouped for Digital Legacy. Notes and categories stay private to you.",
+    financialAccountsManage: "Manage connections",
+    financialAccountsEmptyTitle: "No financial accounts linked yet",
+    financialAccountsEmptyBody:
+      "Connect bank or investment accounts from Connected Accounts. They’ll appear here under Banking, Investments, Loans & Debt, and more.",
     progressMessage: "A message for loved ones",
     progressContacts: "Key contacts who can help",
     progressPrimary: "A primary contact identified",
@@ -1508,6 +1516,13 @@ export const enUS = {
     syncError: "Could not sync accounts.",
     disconnectError: "Could not disconnect.",
     notesError: "Could not save notes.",
+    categoryLabel: "Category",
+    categoryManualHint: "Moved by you — sync won’t change this category.",
+    categoryError: "Could not move this account.",
+    categoryCount: "{count}",
+    sandboxTipTitle: "Sandbox tip — use Plaid’s test phone number",
+    sandboxTipBody:
+      "Real phone numbers always fail in Plaid Sandbox. Enter 415-555-0010, then OTP 123456. Or choose Skip / Continue without phone if Link offers it. After that, use First Platypus Bank with user_good / pass_good.",
   },
   people: {
     facePrivacyNote:

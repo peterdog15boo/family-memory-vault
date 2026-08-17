@@ -22,6 +22,7 @@ export function LegacyShell({ children }: LegacyShellProps) {
     { href: "/documents/legacy/contacts", label: t("legacy.navContacts") },
     { href: "/documents/legacy/business", label: t("legacy.navBusiness") },
     { href: "/documents/legacy/practical", label: t("legacy.navPractical") },
+    { href: "/documents/legacy/accounts", label: t("legacy.navFinancialAccounts") },
     { href: "/documents/legacy/secure", label: t("legacy.navSecure") },
     { href: "/documents/legacy/emergency", label: t("legacy.navEmergency") },
   ] as const;

@@ -302,6 +302,13 @@
       "when": 1786150000000,
       "tag": "0053_plaid_connected_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1786160000000,
+      "tag": "0054_linked_account_categories",
+      "breakpoints": true
     }
   ]
 }

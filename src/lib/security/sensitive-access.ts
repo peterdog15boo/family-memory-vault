@@ -44,6 +44,7 @@ export const SENSITIVE_ACCESS_ACTIONS = [
   "connected_account.sync",
   "connected_account.disconnect",
   "connected_account.notes_update",
+  "connected_account.category_update",
 ] as const;
 
 export type SensitiveAccessAction = (typeof SENSITIVE_ACCESS_ACTIONS)[number];
