@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { StorageUsageCard } from "@/components/billing/StorageUsageCard";
 import { UpgradePrompt } from "@/components/billing/UpgradePrompt";
 import { UsageLimitBanner } from "@/components/billing/UsageLimitBanner";
-import { MediaUploader } from "@/components/upload/MediaUploader";
+import { UploadPageIntake } from "@/components/upload/UploadPageIntake";
 import { AppPageIntro } from "@/components/ui/AppPageIntro";
 import { getAccountUsageSummary } from "@/lib/billing/account-usage";
 import { getTranslations } from "@/lib/i18n/server";
@@ -48,7 +48,7 @@ export default async function UploadPage() {
         ) : null}
 
         <div className="mt-8">
-          <MediaUploader
+          <UploadPageIntake
             storageBlocked={storageBlocked}
             planName={usage.planName}
           />

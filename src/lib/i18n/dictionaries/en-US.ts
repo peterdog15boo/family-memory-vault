@@ -301,7 +301,7 @@ export const enUS = {
     mediaEyebrow: "Your photos",
     mediaTitle: "Your photos",
     mediaDescription:
-      "Browse the photos and videos you’ve saved — ready for albums and movies.",
+      "Browse ready photos and videos, or import from your device, Drive, Dropbox, and other sources.",
     mediaAdd: "Add photos",
     mediaReadiness: "About photo readiness",
     moviesEyebrow: "Short films",
@@ -359,6 +359,68 @@ export const enUS = {
     statusDone:
       "Got it — we’ll take a quick look, then it’ll appear in your photos.",
     statusError: "Something went wrong with this upload. Try again.",
+    compactHint:
+      "Tap to choose from your camera roll. Multi-select works on phones and computers.",
+  },
+  mediaImport: {
+    importPhotos: "Import photos",
+    uploadPhotos: "Upload photos",
+    centerTitle: "Import center",
+    centerLead:
+      "Start with what works today — device photos, export zips, then cloud folders.",
+    centerSafety:
+      "Every import uses the same private safety pipeline (storage → moderation → clean/ready). Nothing bypasses family sharing rules.",
+    sectionDevice: "1. Device",
+    sectionExport: "2. Export packages (recommended for social)",
+    sectionCloud: "3. Cloud folders",
+    sectionDirect: "4. Direct social connect",
+    availableAfterAuth: "Available after authorization",
+    needsConfig: "Not configured",
+    loadError: "Could not load import options.",
+    connectError: "Could not start account connection.",
+    connectAccount: "Connect account",
+    uploadExported: "Upload exported photos",
+    uploadExportZip: "Upload export zip",
+    zipReading: "Reading export package…",
+    zipError: "Could not import that export package.",
+    zipQueued:
+      "Found {count} media file(s) from {source}. Queued for the safety pipeline.",
+    zipQueuedWithSkipped:
+      "Found {count} media file(s) from {source}. Queued for safety checks ({skipped} skipped).",
+    connected: "Connected",
+    limited: "Limited",
+    browseError: "Could not list files from this account.",
+    importError: "Could not import the selected files.",
+    importQueued: "{count} file(s) queued for safety checks.",
+    importPartial:
+      "{ok} imported; {fail} could not be imported. Check file types and try again.",
+    pickDrive: "Choose from Google Drive",
+    pickDropbox: "Choose from Dropbox",
+    attachHint:
+      "Selected photos join this memory after they pass the safety check.",
+    libraryHint:
+      "Selected photos go to your library after they pass the safety check.",
+    emptyRemote: "No supported photos or videos found here.",
+    importSelected: "Import selected ({count})",
+    attachToThisMemory: "Add imported photos to this memory",
+    connectedBanner: "Account connected. Pick photos to import.",
+    deniedBanner: "Connection was cancelled.",
+    unavailableBanner: "That import source isn’t available yet.",
+    errorBanner: "Could not connect that account. Try again.",
+    safetyInProgress: "Safety check in progress ({count})",
+    safetyMemoryHint:
+      "You can keep editing this memory. Clean photos appear here automatically when ready.",
+    safetyLibraryHint:
+      "Clean photos appear in your library when ready. Pending items stay private.",
+    ready: "Ready",
+    readyAnnounce: "A photo finished its safety check and is ready.",
+    allReady: "{count} photo(s) ready in your library.",
+    disconnect: "Disconnect",
+    connectionsTitle: "Photo import sources",
+    connectionsBody:
+      "Connected cloud accounts used to import photos. Disconnect anytime — your vault photos stay.",
+    noConnections: "No cloud accounts connected yet.",
+    disconnected: "Disconnected.",
   },
   review: {
     pendingOne:
@@ -845,7 +907,7 @@ export const enUS = {
       "Gather photos into albums you can revisit and share with family.",
     deletedNotice: "Album deleted. Your photos are still saved.",
     safetyNote:
-      "Only clean, approved media can appear in a memory. Upload new photos from the Upload page when you’re ready.",
+      "Only clean, approved media can appear in a memory. Upload or import photos here — they’ll join the album after the safety check.",
     yourAlbums: "Your albums",
     sharedAlbums: "Shared with family",
     sharedAlbumsLead: "Albums from people in your family.",
@@ -869,8 +931,10 @@ export const enUS = {
     noneSelected: "None selected",
     selectedCount: "{count} selected",
     noPhotosReadyBody:
-      "No photos ready yet. Upload a few, then come back to build your album.",
+      "No photos ready yet. Upload from your device or import from a connected source, then select them for this album.",
     uploadPhotos: "Upload photos",
+    intakeWhileCreating:
+      "New uploads appear in the picker below once they pass the safety check. You can keep writing the title while that finishes.",
     errorTitleRequired: "Please enter a title.",
     errorSelectMedia: "Select at least one photo or video.",
     errorCreate: "Could not create memory. Try again.",
@@ -914,7 +978,7 @@ export const enUS = {
     eyebrow: "Add to your vault",
     title: "Upload",
     description:
-      "Add photos and videos from your phone or computer. We’ll keep them private until they’re ready.",
+      "Add photos and videos from your device, or import from Drive, Dropbox, and other sources. We’ll keep them private until they’re ready.",
     storageFull:
       "Your {plan} plan storage is full. Remove older photos from Photos, or upgrade for more space.",
     storageFullHint:

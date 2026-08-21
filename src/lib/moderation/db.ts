@@ -123,6 +123,44 @@ export async function updateMediaModerationStatus(
     }
   }
 
+  // Auto-attach to a memory after first clean+ready (owner-only; never bypasses gate).
+  if (
+    status === "clean" &&
+    nextLifecycle === "ready" &&
+    existing.pendingMemoryId
+  ) {
+    const memoryId = existing.pendingMemoryId;
+    try {
+      const { addMediaToMemory } = await import("@/lib/memories");
+      await addMediaToMemory(memoryId, [mediaId], {
+        userId: existing.userId,
+      });
+      await db
+        .update(media)
+        .set({ pendingMemoryId: null, updatedAt: new Date() })
+        .where(eq(media.id, mediaId));
+      console.info("[moderation.db] Auto-attached media to memory", {
+        mediaId,
+        memoryId,
+      });
+    } catch (error) {
+      console.error("[moderation.db] Failed to auto-attach to memory", {
+        mediaId,
+        memoryId,
+        error,
+      });
+      // Clear pending so we do not retry forever on permanent failures.
+      try {
+        await db
+          .update(media)
+          .set({ pendingMemoryId: null, updatedAt: new Date() })
+          .where(eq(media.id, mediaId));
+      } catch {
+        // ignore
+      }
+    }
+  }
+
   return updated;
 }
 

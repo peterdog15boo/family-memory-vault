@@ -309,6 +309,13 @@
       "when": 1786160000000,
       "tag": "0054_linked_account_categories",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1786240000000,
+      "tag": "0055_media_import_connections",
+      "breakpoints": true
     }
   ]
 }

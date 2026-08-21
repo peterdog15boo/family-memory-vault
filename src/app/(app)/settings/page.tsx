@@ -7,6 +7,7 @@ import { CurrentPlanBadge } from "@/components/billing/CurrentPlanBadge";
 import { UsageLimitBanner } from "@/components/billing/UsageLimitBanner";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { AccountPrivacySettings } from "@/components/settings/AccountPrivacySettings";
+import { MediaConnectionsSettings } from "@/components/settings/MediaConnectionsSettings";
 import { AvaSettingsCard } from "@/components/ava/AvaSettingsCard";
 import { ThemeSettingsSection } from "@/components/theme/ThemeSettingsSection";
 import { AppPageIntro } from "@/components/ui/AppPageIntro";
@@ -87,6 +88,8 @@ export default async function SettingsPage() {
             canDisableIdleTimeout={idleTimeout.canDisable}
             idleTimeoutEnabled={idleTimeout.enabled}
           />
+
+          <MediaConnectionsSettings />
         </div>
 
         <ul className="settings-link-list mt-6 space-y-3">

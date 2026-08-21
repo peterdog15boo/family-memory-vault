@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { ArrowLeft, Upload } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { PhotosJourneyTrack } from "@/components/gamification/PhotosJourneyTrack";
+import { MediaLibraryHeaderActions } from "@/components/media/MediaLibraryHeaderActions";
 import { PaginatedMediaLibrary } from "@/components/media/PaginatedMediaLibrary";
 import { AppPageIntro } from "@/components/ui/AppPageIntro";
 import { HintTooltip } from "@/components/ui/HintTooltip";
@@ -68,12 +69,6 @@ export default async function MediaLibraryPage() {
           </>
         }
         description={t("pages.mediaDescription")}
-        actions={
-          <Link href="/upload" className="ui-btn ui-btn-primary ui-btn-lg">
-            <Upload className="size-4" aria-hidden />
-            {t("pages.mediaAdd")}
-          </Link>
-        }
       />
 
       <div className="app-page app-page--media app-stack mx-auto max-w-6xl">
@@ -84,6 +79,8 @@ export default async function MediaLibraryPage() {
           <ArrowLeft className="size-3.5" aria-hidden />
           {t("pages.backToVault")}
         </Link>
+
+        <MediaLibraryHeaderActions />
 
         <PhotosJourneyTrack initial={photosJourney} />
 

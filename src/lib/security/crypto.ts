@@ -49,6 +49,18 @@ export function getPlaidTokenEncryptionKey(): Buffer {
 }
 
 /**
+ * Encryption key for Drive/Dropbox/etc. OAuth tokens.
+ * Prefers MEDIA_OAUTH_TOKEN_ENCRYPTION_KEY; falls back to Plaid key when shared.
+ */
+export function getMediaOAuthTokenEncryptionKey(): Buffer {
+  const dedicated = process.env.MEDIA_OAUTH_TOKEN_ENCRYPTION_KEY?.trim();
+  if (dedicated) {
+    return resolveKeyBytes(dedicated, "MEDIA_OAUTH_TOKEN_ENCRYPTION_KEY");
+  }
+  return getPlaidTokenEncryptionKey();
+}
+
+/**
  * Encrypt UTF-8 plaintext. Output format: `v1:<base64(iv|tag|ciphertext)>`.
  */
 export function encryptSecret(

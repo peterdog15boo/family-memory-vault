@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, ImagePlus, Loader2, Star } from "lucide-react";
 import { useTranslations } from "@/components/i18n/LocaleProvider";
+import { MediaIntakePanel } from "@/components/media/MediaIntakePanel";
 import { MediaThumb } from "@/components/memories/MediaThumb";
 import { useAnnounceStatus } from "@/hooks/useAnnounceStatus";
 import { announce } from "@/lib/a11y/announce";
@@ -54,6 +55,19 @@ export function CreateMemoryForm({
   useAnnounceStatus(error, { priority: "assertive" });
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+
+  const onMediaReady = useCallback(
+    (mediaId: string) => {
+      setSelectedIds((prev) => {
+        if (prev.includes(mediaId)) return prev;
+        const next = [...prev, mediaId];
+        setCoverMediaId((cover) => cover ?? mediaId);
+        return next;
+      });
+      router.refresh();
+    },
+    [router],
+  );
 
   function toggleMedia(id: string) {
     setError(null);
@@ -176,18 +190,23 @@ export function CreateMemoryForm({
           </p>
         </div>
 
+        <div className="mt-4 rounded-lg border border-ink/10 bg-canvas-deep/30 p-4">
+          <MediaIntakePanel
+            onMediaReady={onMediaReady}
+            showAttachToggle={false}
+            defaultAttachToMemory={false}
+          />
+          <p className="mt-3 text-xs text-ink-muted">
+            {t("memories.intakeWhileCreating")}
+          </p>
+        </div>
+
         {library.length === 0 ? (
           <div className="mt-4 rounded-lg border border-dashed border-ink/15 bg-canvas-deep/50 px-5 py-12 text-center">
             <ImagePlus className="mx-auto size-8 text-ink/30" aria-hidden />
             <p className="mt-3 text-sm text-ink-muted">
               {t("memories.noPhotosReadyBody")}
             </p>
-            <Link
-              href="/upload"
-              className="ui-btn ui-btn-primary mt-4 inline-flex"
-            >
-              {t("memories.uploadPhotos")}
-            </Link>
           </div>
         ) : (
           <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
@@ -268,7 +287,7 @@ export function CreateMemoryForm({
       <div className="flex flex-wrap items-center gap-3 border-t border-ink/8 pt-6">
         <button
           type="submit"
-          disabled={pending || library.length === 0}
+          disabled={pending || selectedIds.length === 0}
           className="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-60"
         >
           {pending ? (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -33,6 +33,7 @@ type UploadItem = {
   progress: number;
   error?: string;
   mediaId?: string;
+  importExternalId?: string;
 };
 
 function formatBytes(bytes: number) {
@@ -118,11 +119,47 @@ function isLikelyCorsOrNetworkUploadError(error: unknown): boolean {
 type MediaUploaderProps = {
   storageBlocked?: boolean;
   planName?: string;
+  /** Compact dropzone for Memories / inline intake. */
+  compact?: boolean;
+  /** Optional memory to auto-attach after clean/ready. */
+  attachMemoryId?: string | null;
+  /** Import provenance for complete API (device / export / cloud). */
+  importProvider?:
+    | "device"
+    | "export_package"
+    | "google_takeout"
+    | "google_drive"
+    | "dropbox"
+    | "facebook"
+    | "instagram"
+    | "tiktok"
+    | null;
+  /** Optional external ids aligned with seedFiles (zip entry paths). */
+  importExternalIds?: Array<string | null> | null;
+  /** Programmatically enqueue files (e.g. unzipped export package). */
+  seedFiles?: File[] | null;
+  seedKey?: string | number | null;
+  /** Called when each file finishes /api/media/complete successfully. */
+  onUploaded?: (info: {
+    mediaId: string;
+    filename: string;
+    status: string;
+    moderationStatus: string;
+  }) => void;
+  className?: string;
 };
 
 export function MediaUploader({
   storageBlocked = false,
   planName = "your",
+  compact = false,
+  attachMemoryId = null,
+  importProvider = "device",
+  importExternalIds = null,
+  seedFiles = null,
+  seedKey = null,
+  onUploaded,
+  className,
 }: MediaUploaderProps) {
   const copy = useCopy();
   const t = useTranslations();
@@ -256,6 +293,11 @@ export function MediaUploader({
             contentType,
             size: file.size,
             ...(convertedFromHeic ? { clientConvertedFromHeic: true } : {}),
+            ...(attachMemoryId ? { attachMemoryId } : {}),
+            importProvider: importProvider ?? "device",
+            ...(item.importExternalId
+              ? { importExternalId: item.importExternalId }
+              : {}),
           }),
         });
         const completeBody = await completeRes.json().catch(() => ({}));
@@ -284,6 +326,16 @@ export function MediaUploader({
           progress: 100,
           mediaId: completeBody.mediaId,
         });
+        if (typeof completeBody.mediaId === "string") {
+          onUploaded?.({
+            mediaId: completeBody.mediaId,
+            filename: file.name,
+            status: String(completeBody.status ?? "pending_moderation"),
+            moderationStatus: String(
+              completeBody.moderationStatus ?? "pending",
+            ),
+          });
+        }
         announce(t("a11y.uploadCompleted"), { priority: "polite" });
       } catch (error) {
         const message = uploadFailureMessage(error);
@@ -296,11 +348,14 @@ export function MediaUploader({
         endUpload();
       }
     },
-    [planName, t, updateItem],
+    [attachMemoryId, importProvider, onUploaded, planName, t, updateItem],
   );
 
   const enqueueFiles = useCallback(
-    (fileList: FileList | File[]) => {
+    (
+      fileList: FileList | File[],
+      options?: { externalIds?: Array<string | null | undefined> },
+    ) => {
       if (storageBlocked) {
         setQuotaBlocked(
           `Your ${planName} plan storage is full. Free up space or upgrade to upload more.`,
@@ -308,11 +363,19 @@ export function MediaUploader({
         return;
       }
       const next: UploadItem[] = [];
-      for (const file of Array.from(fileList)) {
+      Array.from(fileList).forEach((file, index) => {
         const id = `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2)}`;
-        // Full MIME/HEIC prep runs in processFile so we can await conversion.
-        next.push({ id, file, status: "queued", progress: 0 });
-      }
+        const externalId = options?.externalIds?.[index];
+        next.push({
+          id,
+          file,
+          status: "queued",
+          progress: 0,
+          ...(typeof externalId === "string" && externalId
+            ? { importExternalId: externalId }
+            : {}),
+        });
+      });
 
       setItems((prev) => [...next, ...prev]);
       for (const item of next) {
@@ -322,8 +385,18 @@ export function MediaUploader({
     [processFile, planName, storageBlocked],
   );
 
+  const lastSeedKey = useRef<string | number | null>(null);
+  useEffect(() => {
+    if (!seedFiles?.length) return;
+    if (seedKey != null && seedKey === lastSeedKey.current) return;
+    lastSeedKey.current = seedKey ?? Date.now();
+    enqueueFiles(seedFiles, {
+      externalIds: importExternalIds ?? undefined,
+    });
+  }, [seedFiles, seedKey, enqueueFiles, importExternalIds]);
+
   return (
-    <div className="space-y-6">
+    <div className={cn("space-y-6", className)}>
       <div
         onDragEnter={(e) => {
           e.preventDefault();
@@ -345,8 +418,9 @@ export function MediaUploader({
           }
         }}
         className={cn(
-          "upload-dropzone relative flex min-h-[220px] cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed px-6 py-10 text-center transition",
+          "upload-dropzone relative flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed text-center transition",
           "focus-within:border-accent/50 focus-within:ring-2 focus-within:ring-accent/40",
+          compact ? "min-h-[140px] px-4 py-6" : "min-h-[220px] px-6 py-10",
           dragging
             ? "border-accent bg-accent/10"
             : "border-ink/15 bg-[color:var(--surface-elevated)]/80 hover:border-accent/40",
@@ -371,8 +445,9 @@ export function MediaUploader({
         <div>
           <p className="font-medium text-ink">{t("upload.dropTitle")}</p>
           <p className="mt-1 text-sm text-ink-muted">
-            Or tap to choose from your camera roll. JPEG, PNG, WebP, HEIC, MP4,
-            MOV, WebM — up to {formatBytes(25 * 1024 * 1024)} for photos.
+            {compact
+              ? t("upload.compactHint")
+              : `Or tap to choose from your camera roll. JPEG, PNG, WebP, HEIC, MP4, MOV, WebM — up to ${formatBytes(25 * 1024 * 1024)} for photos.`}
           </p>
         </div>
       </div>

@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { CreateMoviePanel } from "@/components/memories/CreateMoviePanel";
 import { MediaThumb } from "@/components/memories/MediaThumb";
+import { MediaIntakePanel } from "@/components/media/MediaIntakePanel";
 import { MediaViewerMedia } from "@/components/media/MediaViewerMedia";
 import { MediaTagsControl } from "@/components/media/MediaTagsControl";
 import { MemoryFamilyShareControls } from "@/components/memories/MemoryFamilyShareControls";
@@ -831,13 +832,24 @@ export function MemoryDetailView({
               </button>
             </div>
 
-            <div className="max-h-[55vh] overflow-y-auto p-4">
+            <div className="max-h-[55vh] overflow-y-auto p-4 space-y-4">
+              <MediaIntakePanel
+                memoryId={memory.id}
+                defaultAttachToMemory
+                showAttachToggle
+                onMediaReady={() => {
+                  router.refresh();
+                }}
+              />
+
+              <div className="border-t border-ink/8 pt-4">
+                <p className="mb-3 text-xs font-medium uppercase tracking-wide text-ink-muted">
+                  Or choose from your library
+                </p>
               {addableLibrary.length === 0 ? (
-                <p className="py-10 text-center text-sm text-ink-muted">
-                  No more photos to add right now.{" "}
-                  <Link href="/upload" className="text-accent-deep underline">
-                    Upload more
-                  </Link>
+                <p className="py-6 text-center text-sm text-ink-muted">
+                  No more ready photos to add right now. Upload above and they
+                  will appear here after the safety check.
                 </p>
               ) : (
                 <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
@@ -879,6 +891,7 @@ export function MemoryDetailView({
                   })}
                 </ul>
               )}
+              </div>
             </div>
 
             <div className="flex items-center justify-between gap-3 border-t border-ink/8 px-4 py-3">

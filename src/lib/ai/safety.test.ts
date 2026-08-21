@@ -162,5 +162,6 @@ describe("assistant safety", () => {
     expect(ASSISTANT_EXCLUDED_DATA_DOMAINS).toContain(
       "linked_account_holdings",
     );
+    expect(ASSISTANT_EXCLUDED_DATA_DOMAINS).toContain("media_connections");
   });
 });

@@ -165,4 +165,5 @@ export const ASSISTANT_EXCLUDED_DATA_DOMAINS = [
   "plaid_items",
   "linked_accounts",
   "linked_account_holdings",
+  "media_connections",
 ] as const;

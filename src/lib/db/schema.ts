@@ -457,6 +457,19 @@ export const media = pgTable(
     } | null>(),
     framingUpdatedAt: timestamp("framing_updated_at", { withTimezone: true }),
 
+    /**
+     * Optional import provenance (device upload omits these).
+     * Used for dedupe + disconnect audits — never bypasses moderation.
+     */
+    importProvider: text("import_provider"),
+    importExternalId: text("import_external_id"),
+    importedAt: timestamp("imported_at", { withTimezone: true }),
+    /**
+     * When set, auto-link to this owned memory after clean+ready.
+     * Cleared after attach attempt (success or permanent skip).
+     */
+    pendingMemoryId: text("pending_memory_id"),
+
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -484,6 +497,13 @@ export const media = pgTable(
       table.sceneAnalysisStatus,
     ),
     index("media_visual_analyzed_at_idx").on(table.visualAnalyzedAt),
+    uniqueIndex("media_import_dedupe_uidx")
+      .on(table.userId, table.importProvider, table.importExternalId)
+      .where(
+        sql`${table.importProvider} is not null and ${table.importExternalId} is not null`,
+      ),
+    index("media_pending_memory_id_idx").on(table.pendingMemoryId),
+    index("media_import_provider_idx").on(table.userId, table.importProvider),
   ],
 );
 
@@ -1806,6 +1826,61 @@ export const linkedAccountCategoryEnum = pgEnum(
   LINKED_ACCOUNT_CATEGORIES,
 );
 
+export const MEDIA_CONNECTION_STATUSES = [
+  "active",
+  "error",
+  "disconnected",
+] as const;
+export type MediaConnectionStatus = (typeof MEDIA_CONNECTION_STATUSES)[number];
+
+export const mediaConnectionStatusEnum = pgEnum(
+  "media_connection_status",
+  MEDIA_CONNECTION_STATUSES,
+);
+
+/**
+ * OAuth connections for cloud photo import (Drive, Dropbox, etc.).
+ * Owner-only — tokens encrypted; never family-shared or assistant-readable.
+ */
+export const mediaConnections = pgTable(
+  "media_connections",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** google_drive | dropbox | facebook | instagram | tiktok */
+    provider: text("provider").notNull(),
+    accountLabel: text("account_label"),
+    externalAccountId: text("external_account_id"),
+    accessTokenEncrypted: text("access_token_encrypted").notNull(),
+    refreshTokenEncrypted: text("refresh_token_encrypted"),
+    scopes: jsonb("scopes").$type<string[]>().notNull().default([]),
+    status: mediaConnectionStatusEnum("status").notNull().default("active"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    metadata: jsonb("metadata")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("media_connections_user_provider_account_uidx").on(
+      table.userId,
+      table.provider,
+      table.externalAccountId,
+    ),
+    index("media_connections_user_id_idx").on(table.userId),
+    index("media_connections_user_status_idx").on(table.userId, table.status),
+  ],
+);
+
 /**
  * Plaid Item = one institution login. Access tokens encrypted at rest.
  * Owner-only — never family-shared.
@@ -2387,9 +2462,20 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   plaidItems: many(plaidItems),
   linkedAccounts: many(linkedAccounts),
   linkedAccountHoldings: many(linkedAccountHoldings),
+  mediaConnections: many(mediaConnections),
   userProgress: one(userProgress),
   userAchievements: many(userAchievements),
 }));
+
+export const mediaConnectionsRelations = relations(
+  mediaConnections,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [mediaConnections.userId],
+      references: [users.id],
+    }),
+  }),
+);
 
 export const adminAuditLogsRelations = relations(adminAuditLogs, ({ one }) => ({
   actor: one(users, {
@@ -2824,6 +2910,8 @@ export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Media = typeof media.$inferSelect;
 export type NewMedia = typeof media.$inferInsert;
+export type MediaConnection = typeof mediaConnections.$inferSelect;
+export type NewMediaConnection = typeof mediaConnections.$inferInsert;
 export type Memory = typeof memories.$inferSelect;
 export type NewMemory = typeof memories.$inferInsert;
 export type MemoryMedia = typeof memoryMedia.$inferSelect;
