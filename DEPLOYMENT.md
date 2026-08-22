@@ -40,7 +40,8 @@ Uploads stay `pending_moderation` until workers run. In production you need **on
    - `POST /api/jobs/moderation`
    - `POST /api/jobs/faces`
    - `POST /api/jobs/scene`
-   - `POST /api/jobs/movies`  
+   - `POST /api/jobs/movies`
+   - `POST /api/jobs/digest` (weekly vault highlights; run daily or Sundays — skips empty weeks and enforces ~6-day dedupe)
    Header: `Authorization: Bearer $WORKER_SECRET`
 
 Movie encoding needs `ffmpeg` available to the movies worker (`ffmpeg-static` or `FFMPEG_PATH`).

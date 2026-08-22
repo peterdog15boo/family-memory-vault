@@ -26,6 +26,7 @@ import {
   mergePeople,
   unassignFaceFromPerson,
 } from "@/lib/people";
+import { listVisibleFacesLinkedToPerson } from "@/lib/people/person-media";
 
 const LOG = "[faces.identity-grouping]";
 
@@ -74,10 +75,10 @@ export async function groupFacesWithRekognitionIdentity(
     return mediaIdsByPerson.get(personId)?.has(mediaId) ?? false;
   }
 
-  // Seed with already-assigned faces in the collection path.
+  // Seed with already-assigned faces on clean/ready accessible media only.
   const existingPeople = await listPeopleForUser(userId);
   for (const person of existingPeople) {
-    const personFaces = await listFacesForPerson(person.id, userId);
+    const personFaces = await listVisibleFacesLinkedToPerson(userId, person.id);
     for (const f of personFaces) {
       personByFaceId.set(f.id, person.id);
       notePersonOnMedia(person.id, f.mediaId);

@@ -29,6 +29,8 @@ export type SerializedMovie = {
   /** Same signed URL for download UI. Short-lived. */
   downloadUrl: string | null;
   thumbnailUrl: string | null;
+  /** Durable app share page URL when an active share link exists. */
+  shareUrl?: string | null;
   /** ISO expiry for play/download URLs when present. */
   urlsExpireAt: string | null;
 };

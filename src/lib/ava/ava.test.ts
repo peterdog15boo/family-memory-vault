@@ -180,6 +180,55 @@ describe("live profile identity", () => {
     expect(steps.find((s) => s.id === "create_movie")?.status).toBe("done");
   });
 
+  it("deep-links create_movie into the memory movie panel", () => {
+    const state = normalizeOnboardingState({
+      eligible: true,
+      helperProgress: { welcomeSeen: true },
+      welcomeSeenAt: new Date().toISOString(),
+    });
+    const steps = avaBuildSteps(
+      state,
+      emptySignals({
+        displayName: "Jeff",
+        imageUrl: "https://img.clerk.com/avatar.png",
+        mediaCount: 5,
+        cleanPhotoCount: 5,
+        cleanUsableMediaCount: 5,
+        memoryCount: 1,
+        latestMemoryId: "mem_abc",
+      }),
+    );
+    expect(steps.find((s) => s.id === "create_movie")?.href).toBe(
+      "/memories/mem_abc?createMovie=1",
+    );
+  });
+
+  it("uses invite-after-movie copy when the first movie is ready", () => {
+    const state = normalizeOnboardingState({
+      eligible: true,
+      helperProgress: {
+        welcomeSeen: true,
+        inviteAfterFirstMovieReady: true,
+      },
+      welcomeSeenAt: new Date().toISOString(),
+    });
+    const steps = avaBuildSteps(
+      state,
+      emptySignals({
+        displayName: "Jeff",
+        imageUrl: "https://img.clerk.com/avatar.png",
+        mediaCount: 5,
+        cleanPhotoCount: 5,
+        cleanUsableMediaCount: 5,
+        memoryCount: 1,
+        movieCount: 1,
+      }),
+    );
+    const invite = steps.find((s) => s.id === "invite");
+    expect(invite?.status).toBe("available");
+    expect(invite?.description).toMatch(/first movie/i);
+  });
+
   it("keeps identity incomplete when avatar is missing", () => {
     const state = normalizeOnboardingState({
       eligible: true,

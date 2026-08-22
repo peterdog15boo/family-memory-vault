@@ -84,6 +84,7 @@ Or drain once with `Authorization: Bearer $WORKER_SECRET`:
 - `POST /api/jobs/faces`
 - `POST /api/jobs/movies`
 - `POST /api/jobs/plaid`
+- `POST /api/jobs/digest` (weekly highlights; prefer Sunday cron)
 
 ## Environment variables
 

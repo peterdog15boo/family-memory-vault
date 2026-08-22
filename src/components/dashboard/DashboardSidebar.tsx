@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useLayoutEffect, useMemo, useState } from "react";
 import {
+  CalendarDays,
   CreditCard,
   FileText,
   Film,
@@ -79,6 +80,7 @@ export function DashboardSidebar({
       { href: "/memories", label: t("nav.memories"), icon: Images },
       { href: "/movies", label: t("nav.movies"), icon: Film },
       { href: "/media", label: t("nav.photos"), icon: ImageIcon },
+      { href: "/on-this-day", label: t("nav.onThisDay"), icon: CalendarDays },
       { href: "/upload", label: t("nav.upload"), icon: Upload },
       {
         href: "/documents",
@@ -123,6 +125,11 @@ export function DashboardSidebar({
           { href: "/memories", label: t("nav.memories"), icon: Images },
           { href: "/movies", label: t("nav.movies"), icon: Film },
           { href: "/media", label: t("nav.photos"), icon: ImageIcon },
+          {
+            href: "/on-this-day",
+            label: t("nav.onThisDay"),
+            icon: CalendarDays,
+          },
           { href: "/upload", label: t("nav.upload"), icon: Upload },
           { href: "/people", label: t("nav.people"), icon: Users },
           {

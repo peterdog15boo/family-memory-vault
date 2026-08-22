@@ -57,6 +57,22 @@ export function formatMoviesLabel(max: number): string {
   return `${max} movies per month`;
 }
 
+/** Short job-to-be-done line for billing / pricing cards. */
+export function planJobToBeDone(plan: PlanSeed): string {
+  switch (plan.slug) {
+    case "free":
+      return "Start a private vault and try your first movies.";
+    case "family":
+      return "Share one household vault so everyone can add photos and watch together.";
+    case "family_plus":
+      return "Keep a larger family library with more seats and priority movie rendering.";
+    case "legacy":
+      return "Keep Private Documents, Digital Legacy, and connected accounts beside your memories.";
+    default:
+      return plan.description;
+  }
+}
+
 /** Marketing feature bullets for each public plan. */
 export function planFeatureBullets(plan: PlanSeed): string[] {
   const bullets: string[] = [

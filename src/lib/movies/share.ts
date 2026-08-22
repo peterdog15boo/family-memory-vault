@@ -32,11 +32,11 @@ export function movieDownloadFilename(title: string | null | undefined): string 
 }
 
 export function movieShareText(movie: SerializedMovie): string {
-  return `Watch “${movie.title}”`;
+  return `Watch “${movie.title}” — made with Family Memory Vault`;
 }
 
 export function movieShareUrl(movie: SerializedMovie): string | null {
-  return movie.downloadUrl || movie.playUrl || null;
+  return movie.shareUrl || movie.downloadUrl || movie.playUrl || null;
 }
 
 export type MovieSocialNetwork =

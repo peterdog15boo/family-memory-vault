@@ -23,6 +23,8 @@ type CreateMemoryFormProps = {
   initialCoverMediaId?: string | null;
   /** Optional note shown above the picker. */
   sourceHint?: string | null;
+  /** After save, open the movie creator on the new memory. */
+  intentMovie?: boolean;
 };
 
 export function CreateMemoryForm({
@@ -31,6 +33,7 @@ export function CreateMemoryForm({
   initialMediaIds = [],
   initialCoverMediaId = null,
   sourceHint = null,
+  intentMovie = false,
 }: CreateMemoryFormProps) {
   const t = useTranslations();
   const router = useRouter();
@@ -129,7 +132,11 @@ export function CreateMemoryForm({
         }
 
         announce(t("a11y.memorySaved"), { priority: "polite" });
-        router.push(`/memories/${data.memory.id}`);
+        const next =
+          intentMovie
+            ? `/memories/${data.memory.id}?createMovie=1`
+            : `/memories/${data.memory.id}`;
+        router.push(next);
         router.refresh();
       } catch {
         setError(t("memories.errorCreateNetwork"));
@@ -180,7 +187,10 @@ export function CreateMemoryForm({
               {t("memories.choosePhotos")}
             </h2>
             <p className="mt-1 text-sm text-ink-muted">
-              {sourceHint ?? t("memories.choosePhotosHint")}
+              {sourceHint ??
+                (intentMovie
+                  ? t("pages.movieIntentHint")
+                  : t("memories.choosePhotosHint"))}
             </p>
           </div>
           <p className="text-xs text-ink-muted">

@@ -150,7 +150,9 @@ function toBoardTrack(track: JourneyTrack): JourneyBoardTrack {
 
 export function journeyBoardFromJourney(
   journey: UserJourney,
+  options?: { legacyHref?: string },
 ): JourneyBoardSnapshot {
+  const legacyHref = options?.legacyHref ?? JOURNEY_TRACK_HREFS.legacy;
   const { level, lpInLevel, lpToNext } = lpIntoCurrentLevel(journey.totalLp);
   const unlocked: UnlockedAchievement[] = journey.tracks.flatMap(
     (track) => track.unlocked,
@@ -168,6 +170,18 @@ export function journeyBoardFromJourney(
       unlockedAt: badge.unlockedAt,
     }));
 
+  const tracks = journey.tracks.map((track) => {
+    const board = toBoardTrack(track);
+    if (board.category === "legacy") {
+      return { ...board, href: legacyHref };
+    }
+    return board;
+  });
+  const nextAction = recommendNextAction(journey.tracks);
+  if (nextAction?.category === "legacy") {
+    nextAction.href = legacyHref;
+  }
+
   return {
     level,
     levelTitle: memoryKeeperTitle(level),
@@ -175,13 +189,16 @@ export function journeyBoardFromJourney(
     lpInLevel,
     lpToNext,
     lpPerLevel: LP_PER_LEVEL,
-    tracks: journey.tracks.map(toBoardTrack),
+    tracks,
     recentBadges,
-    nextAction: recommendNextAction(journey.tracks),
+    nextAction,
   };
 }
 
-export function emptyJourneyBoard(): JourneyBoardSnapshot {
+export function emptyJourneyBoard(options?: {
+  legacyHref?: string;
+}): JourneyBoardSnapshot {
+  const legacyHref = options?.legacyHref ?? JOURNEY_TRACK_HREFS.legacy;
   return {
     level: 1,
     levelTitle: memoryKeeperTitle(1),
@@ -227,7 +244,7 @@ export function emptyJourneyBoard(): JourneyBoardSnapshot {
         unit: "percent",
         nextThreshold: 25,
         nextTitle: "Bronze Legacy Guardian",
-        href: "/legacy",
+        href: legacyHref,
         ratio: 0,
       },
     ],

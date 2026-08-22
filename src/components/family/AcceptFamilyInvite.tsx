@@ -8,12 +8,17 @@ import { useTranslations } from "@/components/i18n/LocaleProvider";
 
 type AcceptFamilyInviteProps = {
   token: string | null;
+  /** Optional in-app path after a successful accept (e.g. /upload?request=…). */
+  nextPath?: string | null;
 };
 
 /**
  * Accept a family invite from /family/accept?token=…
  */
-export function AcceptFamilyInvite({ token }: AcceptFamilyInviteProps) {
+export function AcceptFamilyInvite({
+  token,
+  nextPath = null,
+}: AcceptFamilyInviteProps) {
   const t = useTranslations();
   const router = useRouter();
   const [error, setError] = useState<string | null>(
@@ -81,16 +86,18 @@ export function AcceptFamilyInvite({ token }: AcceptFamilyInviteProps) {
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <Link
-            href="/family"
+            href={nextPath || "/upload"}
             className="ui-btn ui-btn-primary inline-flex"
           >
-            {t("family.viewFamily")}
+            {nextPath?.includes("/upload")
+              ? t("family.uploadPhotosCta")
+              : t("family.viewFamily")}
           </Link>
           <Link
-            href="/dashboard"
+            href={nextPath ? "/family" : "/dashboard"}
             className="ui-btn ui-btn-secondary inline-flex"
           >
-            {t("nav.openVault")}
+            {nextPath ? t("family.viewFamily") : t("nav.openVault")}
           </Link>
         </div>
       </div>

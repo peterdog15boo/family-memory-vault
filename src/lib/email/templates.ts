@@ -621,4 +621,84 @@ export function milestoneEmail(data: {
   };
 }
 
+export function weeklyDigestEmail(data: {
+  firstName?: string | null;
+  highlights: Array<{ kind: string; title: string; href: string }>;
+  photosHref: string;
+  memoriesHref: string;
+  moviesHref: string;
+  onThisDayHref: string;
+  photoCount: number;
+  memoryCount: number;
+  movieCount: number;
+}): EmailContent {
+  const name = data.firstName?.trim() || "there";
+  const subject = "Your week in the vault — Family Memory Vault";
+  const lines = data.highlights.slice(0, 6).map((h) => {
+    const label =
+      h.kind === "memory" ? "Memory" : h.kind === "movie" ? "Movie" : "Photo";
+    return `• ${label}: ${h.title} — ${h.href}`;
+  });
+
+  const summaryBits: string[] = [];
+  if (data.photoCount > 0) summaryBits.push(`${data.photoCount} photo${data.photoCount === 1 ? "" : "s"}`);
+  if (data.memoryCount > 0) summaryBits.push(`${data.memoryCount} memor${data.memoryCount === 1 ? "y" : "ies"}`);
+  if (data.movieCount > 0) summaryBits.push(`${data.movieCount} movie${data.movieCount === 1 ? "" : "s"}`);
+  const summary =
+    summaryBits.length > 0
+      ? `This week: ${summaryBits.join(", ")}.`
+      : "A few quiet highlights from your vault.";
+
+  const text = [
+    `Hi ${name},`,
+    ``,
+    summary,
+    ``,
+    ...lines,
+    ``,
+    `Photos: ${data.photosHref}`,
+    `Memories: ${data.memoriesHref}`,
+    `Movies: ${data.moviesHref}`,
+    `On This Day: ${data.onThisDayHref}`,
+    ``,
+    `You can turn weekly emails off anytime in Settings.`,
+  ].join("\n");
+
+  const listHtml = data.highlights
+    .slice(0, 6)
+    .map((h) => {
+      const label =
+        h.kind === "memory" ? "Memory" : h.kind === "movie" ? "Movie" : "Photo";
+      return `<li style="margin:0 0 10px;"><strong>${escapeHtml(label)}:</strong> <a href="${escapeHtml(h.href)}" style="color:#4a7c6f;text-decoration:underline;">${escapeHtml(h.title)}</a></li>`;
+    })
+    .join("");
+
+  return {
+    subject,
+    text,
+    html: layout({
+      preview: summary,
+      heading: "Your week in the vault",
+      bodyHtml: [
+        paragraphs([`Hi ${name},`, summary]),
+        `<ul style="margin:16px 0 8px;padding-left:18px;color:#2c241c;font-size:15px;line-height:1.5;">${listHtml}</ul>`,
+        `<p style="margin:16px 0 14px;font-size:14px;color:#5c534c;">
+          <a href="${escapeHtml(data.photosHref)}" style="color:#4a7c6f;">Photos</a>
+          &nbsp;·&nbsp;
+          <a href="${escapeHtml(data.memoriesHref)}" style="color:#4a7c6f;">Memories</a>
+          &nbsp;·&nbsp;
+          <a href="${escapeHtml(data.moviesHref)}" style="color:#4a7c6f;">Movies</a>
+          &nbsp;·&nbsp;
+          <a href="${escapeHtml(data.onThisDayHref)}" style="color:#4a7c6f;">On This Day</a>
+        </p>`,
+        paragraphs([
+          "One calm note a week — never a flood. Change this anytime in Settings.",
+        ]),
+      ].join(""),
+      ctaLabel: "Open your vault",
+      ctaHref: data.photosHref,
+    }),
+  };
+}
+
 export { appUrl as emailAppUrl };

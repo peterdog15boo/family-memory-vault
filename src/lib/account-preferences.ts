@@ -39,6 +39,8 @@ export const ACCOUNT_PREFERENCE_TOGGLE_KEYS = [
   "celebrationSoundEnabled",
   "askAiRobotGreetingsEnabled",
   "emailMilestoneCelebrations",
+  "emailWeeklyDigest",
+  "inAppWeeklyDigest",
   "productUpdatesEmail",
   "idleTimeoutEnabled",
 ] as const satisfies readonly (keyof UserAccountPreferences)[];
@@ -71,6 +73,11 @@ export function resolveAccountPreferences(
     out.lastStorageWarningAt = raw.lastStorageWarningAt;
   } else if (raw.lastStorageWarningAt === null) {
     out.lastStorageWarningAt = null;
+  }
+  if (typeof raw.lastWeeklyDigestAt === "string") {
+    out.lastWeeklyDigestAt = raw.lastWeeklyDigestAt;
+  } else if (raw.lastWeeklyDigestAt === null) {
+    out.lastWeeklyDigestAt = null;
   }
   if (isAppLocale(raw.locale)) {
     out.locale = raw.locale;
@@ -157,6 +164,9 @@ export async function updateAccountPreferences(
   if (patch.lastStorageWarningAt !== undefined) {
     next.lastStorageWarningAt = patch.lastStorageWarningAt;
   }
+  if (patch.lastWeeklyDigestAt !== undefined) {
+    next.lastWeeklyDigestAt = patch.lastWeeklyDigestAt;
+  }
   if (patch.locale !== undefined) {
     next.locale = isAppLocale(patch.locale) ? patch.locale : DEFAULT_LOCALE;
   }
@@ -175,7 +185,12 @@ export async function updateAccountPreferences(
 
 export async function userAllowsEmail(
   userId: string,
-  kind: "movie_ready" | "family_invite" | "storage_warning" | "milestone",
+  kind:
+    | "movie_ready"
+    | "family_invite"
+    | "storage_warning"
+    | "milestone"
+    | "weekly_digest",
 ): Promise<boolean> {
   const prefs = await getAccountPreferences(userId);
   switch (kind) {
@@ -187,6 +202,8 @@ export async function userAllowsEmail(
       return prefs.emailStorageWarnings;
     case "milestone":
       return prefs.emailMilestoneCelebrations;
+    case "weekly_digest":
+      return prefs.emailWeeklyDigest;
     default:
       return true;
   }
@@ -216,6 +233,10 @@ export async function userAllowsInApp(
       return true;
     case "family_chat":
       return true;
+    case "photo_request":
+      return prefs.inAppFamilyInvite;
+    case "weekly_digest":
+      return prefs.inAppWeeklyDigest;
     default:
       return true;
   }

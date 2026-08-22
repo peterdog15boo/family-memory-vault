@@ -20,7 +20,7 @@ import {
 import sharp from "sharp";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { faces, media, type Face } from "@/lib/db/schema";
+import { faces, type Face } from "@/lib/db/schema";
 import { FaceDetectionError } from "@/lib/faces/providers/types";
 import {
   extractVideoFrameAt,
@@ -161,12 +161,10 @@ export async function cropFaceFromImage(
  * Videos: the stored sample frame (sourceFrameMs), else representative frames.
  */
 async function loadCropCandidateImages(face: Face): Promise<Buffer[]> {
-  const db = getDb();
-  const [row] = await db
-    .select()
-    .from(media)
-    .where(and(eq(media.id, face.mediaId), eq(media.userId, face.userId)))
-    .limit(1);
+  // Face rows are scoped to the viewer (actor); media may be family-shared
+  // and owned by a co-member. Never require media.userId === face.userId.
+  const { loadCleanAccessibleMediaByIds } = await import("@/lib/media/queries");
+  const [row] = await loadCleanAccessibleMediaByIds(face.userId, [face.mediaId]);
   if (!row) {
     throw new FaceDetectionError("input", `Media not found: ${face.mediaId}`);
   }

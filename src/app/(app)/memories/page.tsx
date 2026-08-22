@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, Shield } from "lucide-react";
+import { Clapperboard, Plus, Shield } from "lucide-react";
 import { PaginatedMemoryLibrary } from "@/components/memories/PaginatedMemoryLibrary";
 import { AppPageIntro } from "@/components/ui/AppPageIntro";
 import { auth } from "@clerk/nextjs/server";
@@ -43,6 +43,10 @@ export default async function MemoriesPage({ searchParams }: MemoriesPageProps) 
   const library = await listMemoryLibrary(userId);
   const own = library.own.map(serializeMemoryListItem);
   const shared = library.shared.map(serializeMemoryListItem);
+  const makeMovieHref =
+    own.length > 0
+      ? `/memories/${own[0]!.id}?createMovie=1`
+      : "/memories/new?intent=movie";
 
   return (
     <>
@@ -52,10 +56,16 @@ export default async function MemoriesPage({ searchParams }: MemoriesPageProps) 
         title={t("memories.title")}
         description={t("memories.description")}
         actions={
-          <Link href="/memories/new" className="ui-btn ui-btn-primary ui-btn-lg">
-            <Plus className="size-4" aria-hidden />
-            {t("pages.createMemory")}
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href={makeMovieHref} className="ui-btn ui-btn-secondary ui-btn-lg">
+              <Clapperboard className="size-4" aria-hidden />
+              {t("pages.moviesMake")}
+            </Link>
+            <Link href="/memories/new" className="ui-btn ui-btn-primary ui-btn-lg">
+              <Plus className="size-4" aria-hidden />
+              {t("pages.createMemory")}
+            </Link>
+          </div>
         }
       />
 

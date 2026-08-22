@@ -10,7 +10,11 @@ import {
   getStorageQuotaForUser,
   type StorageQuotaSnapshot,
 } from "@/lib/billing/quotas";
+import { getDb } from "@/lib/db";
+import { families } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import { countMoviesCreatedThisMonth, getUserPlan } from "@/lib/plans";
+import { countFamilyMemberSeats } from "@/lib/plans/gates";
 import { resolveUserLocale } from "@/lib/i18n/user-locale";
 
 export type UsageMeter = {
@@ -24,7 +28,7 @@ export type UsageMeter = {
 };
 
 export type UsageWarning = {
-  kind: "storage" | "movies";
+  kind: "storage" | "movies" | "seats";
   level: UsageLevel;
   title: string;
   message: string;
@@ -42,6 +46,7 @@ export type AccountUsageSummary = {
   storage: StorageQuotaSnapshot;
   storageMeter: UsageMeter;
   movies: UsageMeter;
+  seats: UsageMeter;
   moviesPeriodResetLabel: string;
   warnings: UsageWarning[];
 };
@@ -101,9 +106,31 @@ function buildMoviesMeter(
   };
 }
 
+function buildSeatsMeter(used: number, limit: number): UsageMeter {
+  const cappedLimit = Math.max(1, limit);
+  const remaining = Math.max(0, cappedLimit - used);
+  const percentUsed = computePercentUsed(used, cappedLimit);
+  const level = getUsageLevel(percentUsed);
+  return {
+    used,
+    limit: cappedLimit,
+    remaining,
+    percentUsed,
+    level,
+    label: `${used} of ${cappedLimit} family seats`,
+    detail:
+      cappedLimit <= 1
+        ? "Personal vault — invite seats unlock on Family and above."
+        : level === "critical"
+          ? "All member seats are in use. Upgrade for more family seats."
+          : `${remaining} seat${remaining === 1 ? "" : "s"} left for invites.`,
+  };
+}
+
 function buildWarnings(
   storageMeter: UsageMeter,
   movies: UsageMeter,
+  seats: UsageMeter,
   planName: string,
 ): UsageWarning[] {
   const warnings: UsageWarning[] = [];
@@ -141,11 +168,20 @@ function buildWarnings(
     });
   }
 
+  if (seats.limit != null && seats.limit > 1 && seats.level === "critical") {
+    warnings.push({
+      kind: "seats",
+      level: "critical",
+      title: "Family seats are full",
+      message: `You've used every member seat on ${planName}. Upgrade when you need room for another invite.`,
+    });
+  }
+
   return warnings;
 }
 
 /**
- * Aggregates plan, storage, movies, and billing dates for account UI.
+ * Aggregates plan, storage, movies, seats, and billing dates for account UI.
  */
 export async function getAccountUsageSummary(
   userId: string,
@@ -157,12 +193,23 @@ export async function getAccountUsageSummary(
     resolveUserLocale(userId),
   ]);
 
+  const db = getDb();
+  const [ownedFamily] = await db
+    .select({ id: families.id })
+    .from(families)
+    .where(eq(families.createdByUserId, userId))
+    .limit(1);
+  const seatsUsed = ownedFamily
+    ? await countFamilyMemberSeats(ownedFamily.id)
+    : 0;
+
   const storageMeter = buildStorageMeter(storage);
   const movies = buildMoviesMeter(
     moviesUsed,
     planCtx.limits.maxMoviesPerMonth,
     planCtx.plan.name,
   );
+  const seats = buildSeatsMeter(seatsUsed, planCtx.limits.maxFamilyMembers);
 
   const nextBillingDate = planCtx.subscription?.currentPeriodEnd ?? null;
   const isPaid =
@@ -185,7 +232,8 @@ export async function getAccountUsageSummary(
     storage,
     storageMeter,
     movies,
+    seats,
     moviesPeriodResetLabel: formatUsagePeriodReset(undefined, locale),
-    warnings: buildWarnings(storageMeter, movies, planCtx.plan.name),
+    warnings: buildWarnings(storageMeter, movies, seats, planCtx.plan.name),
   };
 }

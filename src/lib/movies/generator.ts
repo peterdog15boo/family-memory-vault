@@ -186,6 +186,8 @@ export type MovieRenderPlan = {
   output: MovieOutputSpec;
   /** Resolved filter/theme grade baked into every frame. */
   colorGrade: ThemeColorGrade;
+  /** Soft free-plan brand watermark on the final MP4. */
+  brandWatermark: boolean;
 };
 
 export type RenderedFrame = {
@@ -315,6 +317,18 @@ export async function generateMovie(
       celebration,
     });
 
+    void import("@/lib/ava")
+      .then(({ markInviteAfterFirstMovieReady }) =>
+        markInviteAfterFirstMovieReady(userId),
+      )
+      .catch((error) => {
+        console.error("[ava] invite-after-first-movie mark failed", {
+          userId,
+          movieId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+
     return {
       movie,
       outputKey,
@@ -383,6 +397,8 @@ type GenerationContext = {
   fast: boolean;
   /** Plan allows Ultra 4K exports. */
   allowUltra: boolean;
+  /** Soft free-plan brand watermark on the final MP4. */
+  brandWatermark: boolean;
 };
 
 async function loadGenerationContext(
@@ -462,6 +478,7 @@ async function loadGenerationContext(
     theme,
     fast,
     allowUltra: caps.priorityRender,
+    brandWatermark: caps.movieWatermark,
   };
 }
 
@@ -822,6 +839,7 @@ export function buildRenderPlan(
     fast: ctx.fast,
     output,
     colorGrade,
+    brandWatermark: ctx.brandWatermark,
   };
 }
 
@@ -1933,6 +1951,16 @@ async function finalizeEncodedMovie(input: {
     });
   }
 
+  if (plan.brandWatermark) {
+    finalVideoPath = await applyBrandWatermark({
+      ffmpegPath,
+      videoPath: finalVideoPath,
+      workDir,
+      width: plan.width,
+      height: plan.height,
+    });
+  }
+
   if (wantsMusic) {
     const probe = await probeAudioStream(ffmpegPath, finalVideoPath);
     console.info("[movies] Audio path — output probe", {
@@ -2106,6 +2134,71 @@ function buildFfConcatFile(frames: RenderedFrame[]): string {
 function escapeConcatPath(filePath: string): string {
   // ffmpeg concat demuxer on Windows wants forward slashes; escape quotes.
   return filePath.replace(/\\/g, "/").replace(/'/g, "'\\''");
+}
+
+/**
+ * Soft free-plan corner brand — SVG → PNG overlay, never blocks playback.
+ */
+async function applyBrandWatermark(input: {
+  ffmpegPath: string;
+  videoPath: string;
+  workDir: string;
+  width: number;
+  height: number;
+}): Promise<string> {
+  const { ffmpegPath, videoPath, workDir, width, height } = input;
+  const fontSize = Math.max(13, Math.round(height * 0.026));
+  const padX = Math.max(14, Math.round(width * 0.028));
+  const padY = Math.max(12, Math.round(height * 0.03));
+  const label = "Made with Family Memory Vault";
+  // Approximate text width for a compact pill.
+  const textWidth = Math.ceil(label.length * fontSize * 0.52);
+  const boxW = textWidth + padX * 2;
+  const boxH = fontSize + padY;
+  const svg = `<svg width="${boxW}" height="${boxH}" xmlns="http://www.w3.org/2000/svg">
+  <rect width="100%" height="100%" rx="${Math.round(boxH / 2)}" fill="rgba(20,16,12,0.42)"/>
+  <text x="50%" y="54%" text-anchor="middle" dominant-baseline="middle"
+        font-family="Georgia, 'Times New Roman', serif" font-size="${fontSize}"
+        fill="rgba(255,250,245,0.88)">${escapeXml(label)}</text>
+</svg>`;
+
+  const watermarkPath = join(workDir, "brand-watermark.png");
+  const brandedPath = join(workDir, "output_branded.mp4");
+  await sharp(Buffer.from(svg)).png().toFile(watermarkPath);
+
+  const margin = Math.max(10, Math.round(height * 0.02));
+  try {
+    await runFfmpeg(ffmpegPath, [
+      "-y",
+      "-i",
+      videoPath,
+      "-i",
+      watermarkPath,
+      "-filter_complex",
+      `[0:v][1:v]overlay=W-w-${margin}:H-h-${margin}:format=auto`,
+      "-c:v",
+      "libx264",
+      "-preset",
+      "veryfast",
+      "-crf",
+      "20",
+      "-c:a",
+      "copy",
+      "-movflags",
+      "+faststart",
+      brandedPath,
+    ]);
+    console.info("[movies] Applied free-plan brand watermark", {
+      watermarkPath,
+      brandedPath,
+    });
+    return brandedPath;
+  } catch (error) {
+    console.error("[movies] Brand watermark failed — continuing without it", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return videoPath;
+  }
 }
 
 function runFfmpeg(bin: string, args: string[]): Promise<void> {

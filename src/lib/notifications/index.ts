@@ -98,6 +98,20 @@ export type NotificationData = {
     preview?: string;
     link?: string;
   };
+  photo_request: {
+    requestId: string;
+    familyId: string;
+    familyName?: string;
+    requesterName?: string;
+    message?: string;
+    link?: string;
+  };
+  weekly_digest: {
+    photoCount?: number;
+    memoryCount?: number;
+    movieCount?: number;
+    link?: string;
+  };
 };
 
 type CreateNotificationInput<T extends NotificationType> = {
@@ -311,6 +325,49 @@ export async function notifyFamilyChat(
         })
       : t("notifications.familyChat.messageFallback", { name: sender }),
     data: { ...data, link },
+  });
+}
+
+export async function notifyPhotoRequest(
+  userId: string,
+  data: NotificationData["photo_request"],
+): Promise<Notification | null> {
+  const { t } = await translatorForUserId(userId);
+  const requester = data.requesterName?.trim();
+  return createNotification({
+    userId,
+    type: "photo_request",
+    title: t("notifications.photoRequest.title"),
+    message: requester
+      ? t("notifications.photoRequest.messageWithName", {
+          name: requester,
+          message: data.message ?? "",
+        })
+      : t("notifications.photoRequest.message", {
+          message: data.message ?? "",
+        }),
+    data: {
+      ...data,
+      link: data.link ?? "/upload",
+    },
+  });
+}
+
+export async function notifyWeeklyDigest(
+  userId: string,
+  data: NotificationData["weekly_digest"],
+): Promise<Notification | null> {
+  const { t } = await translatorForUserId(userId);
+  return createNotification({
+    userId,
+    type: "weekly_digest",
+    title: t("notifications.weeklyDigest.title"),
+    message: t("notifications.weeklyDigest.message", {
+      photos: data.photoCount ?? 0,
+      memories: data.memoryCount ?? 0,
+      movies: data.movieCount ?? 0,
+    }),
+    data: { ...data, link: data.link ?? "/on-this-day" },
   });
 }
 

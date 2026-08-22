@@ -10,9 +10,12 @@ import {
   assertUploadWithinStorageQuota,
 } from "@/lib/billing/quotas";
 import { getDb } from "@/lib/db";
-import { media, moderationEvents, memories } from "@/lib/db/schema";
+import { media, moderationEvents, memories, type Media } from "@/lib/db/schema";
+import { normalizeContentHash } from "@/lib/media/import/content-hash";
+import type { MediaImportProvider } from "@/lib/media/import/types";
 import { enqueueModerationJob } from "@/lib/queue";
 import {
+  deleteObject,
   headObjectMeta,
   isTempKey,
   promoteTempToOriginals,
@@ -23,7 +26,6 @@ import {
   mediaTypeFromContentType,
 } from "@/lib/upload/constants";
 import { ensureAppUser } from "@/lib/users";
-import type { MediaImportProvider } from "@/lib/media/import/types";
 
 export type FinalizeUploadedMediaInput = {
   userId: string;
@@ -35,6 +37,8 @@ export type FinalizeUploadedMediaInput = {
   attachMemoryId?: string | null;
   importProvider?: MediaImportProvider | null;
   importExternalId?: string | null;
+  /** SHA-256 hex of file bytes when known. */
+  contentHash?: string | null;
   source?: string;
 };
 
@@ -62,9 +66,60 @@ async function assertOwnedMemory(
   }
 }
 
+async function bestEffortDeleteTemp(key: string): Promise<void> {
+  try {
+    if (isTempKey(key)) await deleteObject(key);
+  } catch {
+    // orphan cleanup is best-effort
+  }
+}
+
+async function resolveDedupeHit(input: {
+  existing: Media;
+  userId: string;
+  attachMemoryId: string | null;
+  tempKey: string;
+}): Promise<FinalizeUploadedMediaResult> {
+  const { existing, userId, attachMemoryId, tempKey } = input;
+  const db = getDb();
+
+  if (
+    attachMemoryId &&
+    !existing.pendingMemoryId &&
+    existing.moderationStatus === "clean" &&
+    existing.status === "ready"
+  ) {
+    const { addMediaToMemory } = await import("@/lib/memories");
+    await addMediaToMemory(attachMemoryId, [existing.id], { userId });
+  } else if (
+    attachMemoryId &&
+    existing.pendingMemoryId !== attachMemoryId &&
+    !(existing.moderationStatus === "clean" && existing.status === "ready")
+  ) {
+    await db
+      .update(media)
+      .set({
+        pendingMemoryId: attachMemoryId,
+        updatedAt: new Date(),
+      })
+      .where(eq(media.id, existing.id));
+  }
+
+  await bestEffortDeleteTemp(tempKey);
+
+  return {
+    mediaId: existing.id,
+    jobId: null,
+    status: existing.status,
+    moderationStatus: existing.moderationStatus,
+    deduped: true,
+    pendingMemoryId: attachMemoryId ?? existing.pendingMemoryId,
+  };
+}
+
 /**
  * Promote a temp/ object into media + enqueue moderation.
- * Dedupes by (userId, importProvider, importExternalId) when provided.
+ * Dedupes by (userId, importProvider, importExternalId) and/or contentHash.
  */
 export async function finalizeUploadedMedia(
   input: FinalizeUploadedMediaInput,
@@ -80,6 +135,7 @@ export async function finalizeUploadedMedia(
     importExternalId = null,
     source = "media.ingest",
   } = input;
+  const contentHash = normalizeContentHash(input.contentHash);
 
   if (!isTempKey(key)) {
     throw new Error("Upload key must use the temp/ prefix.");
@@ -110,38 +166,31 @@ export async function finalizeUploadedMedia(
       .limit(1);
 
     if (existing) {
-      if (
-        attachMemoryId &&
-        !existing.pendingMemoryId &&
-        existing.moderationStatus === "clean" &&
-        existing.status === "ready"
-      ) {
-        const { addMediaToMemory } = await import("@/lib/memories");
-        await addMediaToMemory(attachMemoryId, [existing.id], { userId });
-      } else if (
-        attachMemoryId &&
-        existing.pendingMemoryId !== attachMemoryId &&
-        !(
-          existing.moderationStatus === "clean" && existing.status === "ready"
-        )
-      ) {
-        await db
-          .update(media)
-          .set({
-            pendingMemoryId: attachMemoryId,
-            updatedAt: new Date(),
-          })
-          .where(eq(media.id, existing.id));
-      }
+      return resolveDedupeHit({
+        existing,
+        userId,
+        attachMemoryId,
+        tempKey: key,
+      });
+    }
+  }
 
-      return {
-        mediaId: existing.id,
-        jobId: null,
-        status: existing.status,
-        moderationStatus: existing.moderationStatus,
-        deduped: true,
-        pendingMemoryId: attachMemoryId ?? existing.pendingMemoryId,
-      };
+  if (contentHash) {
+    const [existingByHash] = await db
+      .select()
+      .from(media)
+      .where(
+        and(eq(media.userId, userId), eq(media.contentHash, contentHash)),
+      )
+      .limit(1);
+
+    if (existingByHash) {
+      return resolveDedupeHit({
+        existing: existingByHash,
+        userId,
+        attachMemoryId,
+        tempKey: key,
+      });
     }
   }
 
@@ -172,8 +221,8 @@ export async function finalizeUploadedMedia(
   const mediaId = nanoid();
   const originalsKey = tempKeyToOriginalsKey(key);
   const moved = await promoteTempToOriginals(key, originalsKey);
-  const now = new Date();
   const mediaKind = mediaTypeFromContentType(contentType);
+  const now = new Date();
 
   const [row] = await db
     .insert(media)
@@ -190,6 +239,7 @@ export async function finalizeUploadedMedia(
       photodnaMatch: false,
       importProvider: importProvider ?? null,
       importExternalId: importExternalId ?? null,
+      contentHash,
       importedAt: importProvider ? now : null,
       pendingMemoryId: attachMemoryId ?? null,
       createdAt: now,
@@ -222,6 +272,7 @@ export async function finalizeUploadedMedia(
       originalFilename: filename,
       importProvider: importProvider ?? null,
       importExternalId: importExternalId ?? null,
+      contentHash,
       pendingMemoryId: attachMemoryId ?? null,
       r2ContentType: head.contentType ?? null,
     },

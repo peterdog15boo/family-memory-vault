@@ -157,12 +157,13 @@ async function countPeople(userId: string): Promise<number> {
   return Number(row?.value ?? 0);
 }
 
+/** Ready movies only — queued/failed jobs must not silence the movie tip. */
 async function countMovies(userId: string): Promise<number> {
   const db = getDb();
   const [row] = await db
     .select({ value: count() })
     .from(movies)
-    .where(eq(movies.userId, userId));
+    .where(and(eq(movies.userId, userId), eq(movies.status, "ready")));
   return Number(row?.value ?? 0);
 }
 
@@ -357,6 +358,9 @@ function reconcileHelperProgress(
   if (signals.peopleCount > 0) {
     mark("peopleExplained", true);
   }
+  if (signals.inviteCount > 0) {
+    mark("inviteAfterFirstMoviePrompted", true);
+  }
 
   // Advance helperStep off completed early steps.
   let helperStep = (state.helperStep as AvaStepId | null) ?? null;
@@ -441,6 +445,8 @@ function buildSteps(
   const askAiDone =
     signals.assistantConversationCount > 0 || Boolean(hp.askAiSkipped);
   const inviteDone = signals.inviteCount > 0 || Boolean(hp.inviteSkipped);
+  const inviteAfterMovie =
+    Boolean(hp.inviteAfterFirstMovieReady) && !inviteDone;
   const docsDone =
     Boolean(hp.documentsIntroSeen) || Boolean(hp.documentsSkipped);
   /** Light intro only after a few post-Memory steps are handled. */
@@ -449,8 +455,8 @@ function buildSteps(
     (peopleDone || movieDone || askAiDone || inviteDone || memoryDone);
 
   const movieHref = signals.latestMemoryId
-    ? `/memories/${signals.latestMemoryId}`
-    : "/movies";
+    ? `/memories/${signals.latestMemoryId}?createMovie=1`
+    : "/memories/new?intent=movie";
 
   const coreDone =
     welcomeDone &&
@@ -611,7 +617,9 @@ function buildSteps(
     step({
       id: "invite",
       title: t("ava.steps.inviteTitle"),
-      description: t("ava.steps.inviteDescription"),
+      description: inviteAfterMovie
+        ? t("ava.steps.inviteAfterMovieDescription")
+        : t("ava.steps.inviteDescription"),
       href: "/family",
       ctaLabel: t("ava.steps.inviteCta"),
       optional: true,
@@ -786,6 +794,13 @@ export async function getAvaProgress(userId: string): Promise<AvaProgress> {
     encourageMemoryEligible &&
     !rawHp.encourageMemoryPrompted &&
     !rawHp.encourageMemorySkipped;
+  const inviteAfterMoviePrompt =
+    identityReady &&
+    Boolean(rawHp.inviteAfterFirstMovieReady) &&
+    !rawHp.inviteAfterFirstMoviePrompted &&
+    signals.movieCount >= 1 &&
+    signals.inviteCount === 0 &&
+    !rawHp.inviteSkipped;
 
   const reconciled = reconcileHelperProgress(state, signals);
   const liveState = reconciled.state;
@@ -851,9 +866,11 @@ export async function getAvaProgress(userId: string): Promise<AvaProgress> {
             ? "photos_ready"
             : encourageMemoryPrompt
               ? "encourage_memory"
-              : waitingModeration
-                ? "moderation"
-                : liveState.helperStep;
+              : inviteAfterMoviePrompt
+                ? "invite"
+                : waitingModeration
+                  ? "moderation"
+                  : liveState.helperStep;
 
   // Align helperStep with live signals — do NOT clear soft-dismiss here.
   if (photosReadyTip && liveState.helperStep !== "photos_ready") {
@@ -867,6 +884,11 @@ export async function getAvaProgress(userId: string): Promise<AvaProgress> {
     void patchAvaState(userId, {
       helperStep: "encourage_memory",
       helperProgress: { encourageMemoryPrompted: true },
+    }).catch(() => undefined);
+  } else if (inviteAfterMoviePrompt) {
+    void patchAvaState(userId, {
+      helperStep: "invite",
+      helperProgress: { inviteAfterFirstMoviePrompted: true },
     }).catch(() => undefined);
   } else if (
     waitingModeration &&
@@ -911,6 +933,8 @@ export async function getAvaProgress(userId: string): Promise<AvaProgress> {
       autoOpenReason = "photos_ready";
     } else if (eligible && encourageMemoryPrompt) {
       autoOpenReason = "encourage_memory";
+    } else if (eligible && inviteAfterMoviePrompt) {
+      autoOpenReason = "invite_after_movie";
     }
   }
 
@@ -937,6 +961,10 @@ export async function getAvaProgress(userId: string): Promise<AvaProgress> {
   if (autoOpenReason === "photos_ready") {
     activeStepId = "photos_ready";
     const tip = steps.find((s) => s.id === "photos_ready");
+    if (tip) tip.status = "active";
+  } else if (autoOpenReason === "invite_after_movie") {
+    activeStepId = "invite";
+    const tip = steps.find((s) => s.id === "invite");
     if (tip) tip.status = "active";
   } else if (autoOpenReason === "identity_setup") {
     // Keep preferred identity step active for the forced setup flow.
@@ -988,7 +1016,8 @@ export async function getAvaProgress(userId: string): Promise<AvaProgress> {
     !identityIncomplete &&
     ((signals.mediaCount > 0 && signals.cleanPhotoCount === 0) ||
       photosReadyTip ||
-      encourageMemoryPrompt);
+      encourageMemoryPrompt ||
+      inviteAfterMoviePrompt);
 
   const avatarPreviewUrl = await resolveAvatarPreview(
     userId,
@@ -1053,13 +1082,59 @@ export async function patchAvaState(
   return next;
 }
 
+/**
+ * After the user's first ready movie, arm Ava to encourage inviting one person.
+ * Idempotent — only fires when exactly one ready movie exists and no invite yet.
+ */
+export async function markInviteAfterFirstMovieReady(
+  userId: string,
+): Promise<void> {
+  if (!userId?.trim()) return;
+
+  const [readyCount, inviteCount] = await Promise.all([
+    countMovies(userId),
+    countInvitesSent(userId),
+  ]);
+  if (readyCount !== 1 || inviteCount > 0) return;
+
+  const db = getDb();
+  const [current] = await db
+    .select({ onboarding: users.onboarding })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  const state = normalizeOnboardingState(current?.onboarding);
+  if (
+    state.helperProgress?.inviteAfterFirstMovieReady ||
+    state.helperProgress?.inviteAfterFirstMoviePrompted ||
+    state.helperProgress?.inviteSkipped
+  ) {
+    return;
+  }
+
+  await patchAvaState(userId, {
+    helperStep: "invite",
+    helperProgress: { inviteAfterFirstMovieReady: true },
+  });
+}
+
 export async function dismissAva(userId: string): Promise<void> {
+  const db = getDb();
+  const [current] = await db
+    .select({ onboarding: users.onboarding })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  const state = normalizeOnboardingState(current?.onboarding);
   const cleanPhotoCount = await countCleanPhotos(userId).catch(() => 0);
   await patchAvaState(userId, {
     helperDismissedAt: new Date().toISOString(),
-    ...(cleanPhotoCount >= 1
-      ? { helperProgress: { photosReadyCelebrated: true } }
-      : {}),
+    helperProgress: {
+      ...(cleanPhotoCount >= 1 ? { photosReadyCelebrated: true } : {}),
+      ...(state.helperProgress?.inviteAfterFirstMovieReady
+        ? { inviteAfterFirstMoviePrompted: true }
+        : {}),
+    },
   });
 }
 
@@ -1211,6 +1286,7 @@ export async function skipAvaStep(
       break;
     case "invite":
       progress.inviteSkipped = true;
+      progress.inviteAfterFirstMoviePrompted = true;
       break;
     case "documents_legacy":
       progress.documentsIntroSeen = true;

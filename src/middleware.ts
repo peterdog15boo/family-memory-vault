@@ -20,6 +20,7 @@ const isProtectedRoute = createRouteMatcher([
   "/legacy(.*)",
   "/settings(.*)",
   "/media(.*)",
+  "/on-this-day(.*)",
   "/billing(.*)",
   "/notifications(.*)",
   "/assistant(.*)",

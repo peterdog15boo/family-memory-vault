@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Check,
@@ -32,7 +32,6 @@ type SocialOption = {
   id: MovieSocialNetwork;
   labelKey: string;
   hintKey: string;
-  /** Simple brand mark drawn with CSS (no icon pack dependency). */
   mark: string;
   tone: string;
 };
@@ -76,17 +75,17 @@ const SOCIAL_OPTIONS: SocialOption[] = [
 ];
 
 /**
- * In-app movie share sheet — portaled above shell chrome so it never
- * stacks under Modern page cards / FABs. Social networks that accept
- * links open in a popup; Instagram / TikTok guide a download-first flow.
+ * In-app movie share sheet — durable app share page + download MP4.
  */
 export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
   const t = useTranslations();
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [shareMovie, setShareMovie] = useState(movie);
+  const [resolving, setResolving] = useState(!movie.shareUrl);
   const dialogRef = useRef<HTMLDivElement>(null);
-  const shareUrl = movieShareUrl(movie);
+  const shareUrl = useMemo(() => movieShareUrl(shareMovie), [shareMovie]);
   const canSystemShare =
     typeof navigator !== "undefined" && typeof navigator.share === "function";
 
@@ -96,10 +95,50 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
     containerRef: dialogRef,
   });
 
+  useEffect(() => {
+    let cancelled = false;
+    async function ensureShare() {
+      if (movie.shareUrl) {
+        setShareMovie(movie);
+        setResolving(false);
+        return;
+      }
+      setResolving(true);
+      try {
+        const res = await fetch(`/api/movies/${movie.id}/share`, {
+          method: "POST",
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          shareUrl?: string;
+          error?: string;
+        };
+        if (!cancelled && res.ok && data.shareUrl) {
+          setShareMovie({ ...movie, shareUrl: data.shareUrl });
+        } else if (!cancelled) {
+          setShareMovie(movie);
+          if (!res.ok) {
+            setNote(data.error || t("movie.noteShareLinkFailed"));
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setShareMovie(movie);
+          setNote(t("movie.noteShareLinkFailed"));
+        }
+      } finally {
+        if (!cancelled) setResolving(false);
+      }
+    }
+    void ensureShare();
+    return () => {
+      cancelled = true;
+    };
+  }, [movie, t]);
+
   async function handleCopy() {
     setBusy("copy");
     setNote(null);
-    const ok = await copyMovieShareLink(movie);
+    const ok = await copyMovieShareLink(shareMovie);
     setBusy(null);
     if (ok) {
       setCopied(true);
@@ -114,7 +153,24 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
     setBusy("system");
     setNote(null);
     try {
-      await shareMovieFile(movie);
+      // Prefer sharing the durable page URL on mobile; file share still available via download.
+      if (
+        shareMovie.shareUrl &&
+        typeof navigator !== "undefined" &&
+        typeof navigator.share === "function"
+      ) {
+        try {
+          await navigator.share({
+            title: shareMovie.title,
+            text: `Watch “${shareMovie.title}”`,
+            url: shareMovie.shareUrl,
+          });
+          return;
+        } catch {
+          // Fall through to file share / download.
+        }
+      }
+      await shareMovieFile(shareMovie);
     } finally {
       setBusy(null);
     }
@@ -123,7 +179,7 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
   function handleDownload(forNetwork?: MovieSocialNetwork) {
     setBusy(forNetwork ?? "download");
     setNote(null);
-    const ok = downloadMovieFile(movie);
+    const ok = downloadMovieFile(shareMovie);
     setBusy(null);
     if (!ok) {
       setNote(t("movie.noteDownloadUnavailable"));
@@ -144,10 +200,35 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
       handleDownload(network);
       return;
     }
-    const ok = openMovieSocialShare(network, movie);
+    const ok = openMovieSocialShare(network, shareMovie);
     if (!ok) {
       setNote(t("movie.noteSocialFailed"));
     }
+  }
+
+  if (resolving) {
+    return createPortal(
+      <div
+        ref={dialogRef}
+        className="movie-share-dialog fixed inset-0 z-[100] flex items-end justify-center bg-ink/50 p-4 backdrop-blur-sm sm:items-center"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="movie-share-loading-title"
+        tabIndex={-1}
+        onClick={onClose}
+      >
+        <div
+          className="flex w-full max-w-md items-center gap-3 rounded-2xl bg-canvas p-6 shadow-2xl"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <Loader2 className="size-5 animate-spin text-accent" aria-hidden />
+          <p id="movie-share-loading-title" className="text-sm text-ink">
+            {t("movie.preparingShare")}
+          </p>
+        </div>
+      </div>,
+      document.body,
+    );
   }
 
   if (!shareUrl) {
@@ -210,7 +291,7 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
               id="movie-share-title"
               className="mt-1 truncate font-display text-xl tracking-tight text-ink"
             >
-              {movie.title}
+              {shareMovie.title}
             </h2>
             <p className="mt-1 text-sm text-ink-muted">
               {t("movie.shareLead")}
@@ -279,7 +360,23 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
               {copied ? t("movie.linkCopied") : t("movie.copyLink")}
             </button>
 
-            {movie.downloadUrl || movie.playUrl ? (
+            {canSystemShare ? (
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => void handleSystemShare()}
+                className="ui-btn ui-btn-primary w-full justify-center"
+              >
+                {busy === "system" ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                ) : (
+                  <Share2 className="size-4" aria-hidden />
+                )}
+                {t("movie.share")}
+              </button>
+            ) : null}
+
+            {shareMovie.downloadUrl || shareMovie.playUrl ? (
               <button
                 type="button"
                 disabled={busy !== null}
@@ -294,36 +391,17 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
                 {t("movie.downloadMp4")}
               </button>
             ) : null}
-
-            {canSystemShare ? (
-              <button
-                type="button"
-                disabled={busy !== null}
-                onClick={() => void handleSystemShare()}
-                className="ui-btn ui-btn-ghost w-full justify-center"
-              >
-                {busy === "system" ? (
-                  <Loader2 className="size-4 animate-spin" aria-hidden />
-                ) : (
-                  <Share2 className="size-4" aria-hidden />
-                )}
-                {t("movie.moreSharing")}
-              </button>
-            ) : null}
           </div>
 
           {note ? (
-            <p
-              className="mt-4 rounded-lg bg-accent/10 px-3 py-2 text-sm leading-relaxed text-ink"
-              role="status"
-            >
+            <p className="mt-3 text-center text-xs leading-relaxed text-ink-muted">
               {note}
             </p>
-          ) : (
-            <p className="mt-4 text-xs leading-relaxed text-ink-muted">
-              {t("movie.shareFootnote")}
-            </p>
-          )}
+          ) : null}
+
+          <p className="mt-4 text-center text-[11px] leading-relaxed text-ink-muted">
+            {t("movie.shareFootnote")}
+          </p>
         </div>
       </div>
     </div>,

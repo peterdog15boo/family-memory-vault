@@ -80,7 +80,10 @@ export default async function MediaLibraryPage() {
           {t("pages.backToVault")}
         </Link>
 
-        <MediaLibraryHeaderActions />
+        <MediaLibraryHeaderActions
+          showMakeMovie={own.length >= 5}
+          makeMovieHref="/memories/new?intent=movie"
+        />
 
         <PhotosJourneyTrack initial={photosJourney} />
 

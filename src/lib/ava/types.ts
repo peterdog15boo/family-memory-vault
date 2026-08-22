@@ -62,7 +62,8 @@ export type AvaAutoOpenReason =
   | "identity_idle"
   | "photos_ready"
   | "encourage_memory"
-  | "memory_celebrate";
+  | "memory_celebrate"
+  | "invite_after_movie";
 
 export type AvaProgress = {
   /**

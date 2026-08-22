@@ -44,6 +44,9 @@ export function normalizeOnboardingState(
       movieSkipped: progress.movieSkipped === true,
       askAiSkipped: progress.askAiSkipped === true,
       inviteSkipped: progress.inviteSkipped === true,
+      inviteAfterFirstMovieReady: progress.inviteAfterFirstMovieReady === true,
+      inviteAfterFirstMoviePrompted:
+        progress.inviteAfterFirstMoviePrompted === true,
       documentsIntroSeen: progress.documentsIntroSeen === true,
       documentsSkipped: progress.documentsSkipped === true,
       completionCelebrated: progress.completionCelebrated === true,

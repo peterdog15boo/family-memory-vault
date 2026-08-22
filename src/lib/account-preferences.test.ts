@@ -13,6 +13,8 @@ describe("account preferences", () => {
     expect(prefs.celebrationSoundEnabled).toBe(false);
     expect(prefs.askAiRobotGreetingsEnabled).toBe(true);
     expect(prefs.emailMilestoneCelebrations).toBe(true);
+    expect(prefs.emailWeeklyDigest).toBe(true);
+    expect(prefs.inAppWeeklyDigest).toBe(true);
     expect(prefs.productUpdatesEmail).toBe(false);
     expect(prefs).toMatchObject(DEFAULT_USER_ACCOUNT_PREFERENCES);
   });

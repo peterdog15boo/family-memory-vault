@@ -101,7 +101,7 @@ export function listImportProviderInfo(): MediaImportProviderInfo[] {
       permissionNote:
         "Meta requires app review for photo library access. Until then, use an official Facebook export zip above.",
       limitationNote:
-        "Available after authorization. No scraping — only official Graph APIs when approved.",
+        "Coming soon — no fake connect. Use an official Facebook export zip above.",
       canConnect: false,
       canBrowse: false,
       guidedExport: true,
@@ -116,7 +116,7 @@ export function listImportProviderInfo(): MediaImportProviderInfo[] {
       permissionNote:
         "Instagram Graph access is limited and usually needs Meta review. Until then, upload your Instagram export zip.",
       limitationNote:
-        "Available after authorization. Prefer Instagram’s data download → zip upload.",
+        "Coming soon — no fake connect. Prefer Instagram’s data download → zip upload.",
       canConnect: false,
       canBrowse: false,
       guidedExport: true,
@@ -131,7 +131,7 @@ export function listImportProviderInfo(): MediaImportProviderInfo[] {
       permissionNote:
         "TikTok’s developer APIs focus on publishing, not full camera-roll import. Use TikTok’s official export, then upload the zip.",
       limitationNote:
-        "Available after authorization if TikTok grants library scopes. Until then, use export package upload.",
+        "Coming soon — no fake connect. Until then, use export package upload.",
       canConnect: false,
       canBrowse: false,
       guidedExport: true,

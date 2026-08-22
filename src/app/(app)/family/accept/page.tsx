@@ -4,19 +4,29 @@ import { AcceptFamilyInvite } from "@/components/family/AcceptFamilyInvite";
 import { ensureAppUser } from "@/lib/users";
 
 type PageProps = {
-  searchParams: Promise<{ token?: string }>;
+  searchParams: Promise<{ token?: string; next?: string }>;
 };
+
+function safeNextPath(raw: string | null | undefined): string | null {
+  const value = raw?.trim();
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return null;
+  return value;
+}
 
 /**
  * /family/accept?token=… — join a family from an invite link.
- * Unauthenticated visitors are sent to sign-in with redirect_url preserved.
+ * Optional `next` deep-links into upload after accept (photo requests).
  */
 export default async function FamilyAcceptPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const token = params.token?.trim() || null;
-  const returnPath = token
-    ? `/family/accept?token=${encodeURIComponent(token)}`
-    : "/family/accept";
+  const next = safeNextPath(params.next);
+  const returnPath = (() => {
+    const url = new URL("/family/accept", "https://local.invalid");
+    if (token) url.searchParams.set("token", token);
+    if (next) url.searchParams.set("next", next);
+    return `${url.pathname}${url.search}`;
+  })();
 
   const { userId, isAuthenticated } = await auth();
   if (!isAuthenticated || !userId) {
@@ -27,7 +37,7 @@ export default async function FamilyAcceptPage({ searchParams }: PageProps) {
 
   return (
     <div className="mx-auto max-w-lg pt-4">
-      <AcceptFamilyInvite token={token} />
+      <AcceptFamilyInvite token={token} nextPath={next} />
     </div>
   );
 }

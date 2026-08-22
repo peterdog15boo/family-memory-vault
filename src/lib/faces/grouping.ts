@@ -35,6 +35,7 @@ import {
   mergePeople,
   unassignFaceFromPerson,
 } from "@/lib/people";
+import { listVisibleFacesLinkedToPerson } from "@/lib/people/person-media";
 
 const LOG = "[faces.grouping]";
 
@@ -116,7 +117,7 @@ async function loadPersonClusters(userId: string): Promise<PersonCluster[]> {
   const clusters: PersonCluster[] = [];
 
   for (const person of people) {
-    const personFaces = await listFacesForPerson(person.id, userId);
+    const personFaces = await listVisibleFacesLinkedToPerson(userId, person.id);
     const embeddings = personFaces
       .map((f) => resolveModelEmbedding(f))
       .filter((e): e is NonNullable<typeof e> => Boolean(e));

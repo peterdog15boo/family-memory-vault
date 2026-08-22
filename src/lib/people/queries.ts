@@ -374,7 +374,8 @@ export async function getPersonWithPhotos(
   const listShape: PersonWithFaceCount = {
     ...person,
     faceCount: visible.debug.visibleFaceCount,
-    photoCount: photos.length,
+    // Same uncapped visible set as People list + Ask AI (gallery below may cap).
+    photoCount: visible.mediaIds.length,
   };
   const covers = await resolveCoversForPeople(userId, [listShape]);
 

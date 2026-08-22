@@ -414,6 +414,13 @@ export function AccountPrivacySettings({
               disabled={prefsState === "saving"}
               onChange={(v) => void savePreference("emailMilestoneCelebrations", v)}
             />
+            <ToggleRow
+              label={t("settings.weeklyDigest")}
+              description={t("settings.weeklyDigestEmail")}
+              checked={prefs.emailWeeklyDigest}
+              disabled={prefsState === "saving"}
+              onChange={(v) => void savePreference("emailWeeklyDigest", v)}
+            />
           </PreferenceGroup>
 
           <PreferenceGroup
@@ -451,6 +458,13 @@ export function AccountPrivacySettings({
               checked={prefs.inAppEmergencyAccess}
               disabled={prefsState === "saving"}
               onChange={(v) => void savePreference("inAppEmergencyAccess", v)}
+            />
+            <ToggleRow
+              label={t("settings.weeklyDigest")}
+              description={t("settings.weeklyDigestInApp")}
+              checked={prefs.inAppWeeklyDigest}
+              disabled={prefsState === "saving"}
+              onChange={(v) => void savePreference("inAppWeeklyDigest", v)}
             />
             <ToggleRow
               label={t("settings.notificationSound")}

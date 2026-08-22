@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Bot, Clapperboard, Plus, Upload } from "lucide-react";
+import { ArrowRight, Bot, CalendarDays, Clapperboard, Plus, Upload } from "lucide-react";
 import { AskAiOpenButton } from "@/components/assistant/AskAiOpenButton";
 import { BetaSurveyBanner } from "@/components/beta/BetaSurveyBanner";
 import { CurrentPlanBadge } from "@/components/billing/CurrentPlanBadge";
@@ -16,13 +16,14 @@ import { OnboardingChecklist } from "@/components/onboarding/OnboardingChecklist
 import { AppPageIntro } from "@/components/ui/AppPageIntro";
 import { PageHero } from "@/components/ui/PageHero";
 import { useCopy, useTranslations } from "@/components/i18n/LocaleProvider";
+import { FamilyCompletenessCard } from "@/components/dashboard/FamilyCompletenessCard";
+import { LegacyJourneyCard } from "@/components/gamification/LegacyJourneyCard";
 import type { AccountUsageSummary } from "@/lib/billing/account-usage";
 import { isBetaPlanPickerEnabled } from "@/lib/billing/beta-flags";
-import type { MediaReviewSummary } from "@/lib/media/queries";
-import type { SafeMediaItem } from "@/lib/media/queries";
-import type { MemoryListItem } from "@/lib/memories";
-import { LegacyJourneyCard } from "@/components/gamification/LegacyJourneyCard";
+import type { FamilyCompletenessSnapshot } from "@/lib/completeness/family-completeness";
 import type { JourneyBoardSnapshot } from "@/lib/gamification/journey-board";
+import type { MediaReviewSummary, SafeMediaItem } from "@/lib/media/queries";
+import type { MemoryListItem } from "@/lib/memories";
 import type { OnboardingProgress } from "@/lib/onboarding";
 
 type DashboardHomeModernProps = {
@@ -38,6 +39,10 @@ type DashboardHomeModernProps = {
   onboarding: OnboardingProgress;
   stripeConfigured: boolean;
   journeyBoard: JourneyBoardSnapshot;
+  completeness: FamilyCompletenessSnapshot;
+  /** Prior-year moments for today's month/day (0 hides teaser). */
+  onThisDayCount?: number;
+  onThisDayLabel?: string;
 };
 
 /**
@@ -57,6 +62,9 @@ export function DashboardHomeModern({
   onboarding,
   stripeConfigured,
   journeyBoard,
+  completeness,
+  onThisDayCount = 0,
+  onThisDayLabel,
 }: DashboardHomeModernProps) {
   const copy = useCopy();
   const t = useTranslations();
@@ -96,7 +104,34 @@ export function DashboardHomeModern({
 
         <BetaSurveyBanner />
         <UsageLimitBanner summary={usage} />
+        <FamilyCompletenessCard snapshot={completeness} />
         <LegacyJourneyCard initial={journeyBoard} />
+
+        {onThisDayCount > 0 && onThisDayLabel ? (
+          <section
+            className="home-shelf"
+            aria-labelledby="home-on-this-day-title"
+          >
+            <div className="home-shelf-header">
+              <div>
+                <h2 id="home-on-this-day-title" className="home-shelf-title">
+                  {t("dashboard.onThisDayTitle")}
+                </h2>
+                <p className="home-shelf-lead">
+                  {t("dashboard.onThisDayLead", { date: onThisDayLabel })}
+                </p>
+              </div>
+              <Link href="/on-this-day" className="home-shelf-link">
+                <CalendarDays className="size-3.5" aria-hidden />
+                {t("dashboard.onThisDayOpen")}
+                <ArrowRight className="size-3.5" aria-hidden />
+              </Link>
+            </div>
+            <p className="text-sm text-ink-muted">
+              {t("dashboard.onThisDayCount", { count: onThisDayCount })}
+            </p>
+          </section>
+        ) : null}
 
         <section className="home-shelf" aria-labelledby="home-memories-title">
           <div className="home-shelf-header">
@@ -256,6 +291,9 @@ export function DashboardHomeOriginal({
   onboarding,
   stripeConfigured,
   journeyBoard,
+  completeness,
+  onThisDayCount = 0,
+  onThisDayLabel,
 }: Omit<DashboardHomeModernProps, "displayName">) {
   const copy = useCopy();
   const t = useTranslations();
@@ -286,6 +324,27 @@ export function DashboardHomeOriginal({
 
         <BetaSurveyBanner />
         <LegacyJourneyCard initial={journeyBoard} />
+        <FamilyCompletenessCard snapshot={completeness} />
+
+        {onThisDayCount > 0 && onThisDayLabel ? (
+          <section className="rounded-2xl border border-ink/10 bg-canvas/60 px-5 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="font-medium text-ink">
+                  {t("dashboard.onThisDayTitle")}
+                </p>
+                <p className="mt-0.5 text-sm text-ink-muted">
+                  {t("dashboard.onThisDayLead", { date: onThisDayLabel })}{" "}
+                  {t("dashboard.onThisDayCount", { count: onThisDayCount })}
+                </p>
+              </div>
+              <Link href="/on-this-day" className="ui-btn ui-btn-secondary ui-btn-sm">
+                <CalendarDays className="size-3.5" aria-hidden />
+                {t("dashboard.onThisDayOpen")}
+              </Link>
+            </div>
+          </section>
+        ) : null}
 
         <section
           className="app-overview"

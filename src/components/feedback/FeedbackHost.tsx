@@ -30,6 +30,8 @@ function shouldHideFloatingFab(pathname: string, modalOpen: boolean): boolean {
 /**
  * Site-wide beta feedback host: modal + optional authenticated FAB.
  * Mount once near the root so marketing and app chrome share one modal.
+ * FAB stays off while the dialog is open and on Terms/Beta gates so it
+ * never covers inputs or Continue.
  */
 export function FeedbackHost({ showFloating = true }: FeedbackHostProps) {
   const enabled = isBetaFeedbackEnabled();

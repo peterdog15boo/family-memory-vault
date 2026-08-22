@@ -337,6 +337,27 @@
       "when": 1786480000000,
       "tag": "0058_family_chat_threads",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1786560000000,
+      "tag": "0059_movie_shares_photo_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1786640000000,
+      "tag": "0060_on_this_day_digest",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1786720000000,
+      "tag": "0061_media_content_hash",
+      "breakpoints": true
     }
   ]
 }

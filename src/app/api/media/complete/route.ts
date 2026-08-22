@@ -37,6 +37,11 @@ const completeBodySchema = completeMediaSchema.extend({
     .optional()
     .nullable(),
   importExternalId: z.string().min(1).max(512).optional().nullable(),
+  contentHash: z
+    .string()
+    .regex(/^[a-fA-F0-9]{64}$/)
+    .optional()
+    .nullable(),
 });
 
 /**
@@ -145,6 +150,7 @@ export async function POST(request: Request) {
     attachMemoryId,
     importProvider,
     importExternalId,
+    contentHash,
   } = parsed.data;
 
   try {
@@ -157,6 +163,7 @@ export async function POST(request: Request) {
       attachMemoryId: attachMemoryId ?? null,
       importProvider: importProvider ?? "device",
       importExternalId: importExternalId ?? null,
+      contentHash: contentHash ?? null,
       source: "api.media.complete",
     });
 

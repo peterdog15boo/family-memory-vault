@@ -6,6 +6,7 @@ import {
   Check,
   Clock,
   Copy,
+  ImagePlus,
   Loader2,
   LogOut,
   Mail,
@@ -18,6 +19,7 @@ import { UpgradePrompt } from "@/components/billing/UpgradePrompt";
 import { celebrateFromJourney } from "@/lib/celebrations/bus";
 import { FamilyCircleStrength } from "@/components/family/FamilyCircleStrength";
 import { FamilyLocationMap } from "@/components/family/FamilyLocationMap";
+import { RequestPhotosDialog } from "@/components/family/RequestPhotosDialog";
 import type { JourneyCelebrationPayload } from "@/lib/gamification/types";
 import { useCopy, useFormat, useTranslations } from "@/components/i18n/LocaleProvider";
 import type { TranslateFn } from "@/lib/i18n";
@@ -63,6 +65,11 @@ export function FamilySettingsPanel({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [inviteLinks, setInviteLinks] = useState<Record<string, string>>({});
+  const [requestTarget, setRequestTarget] = useState<{
+    familyId: string;
+    memberId: string;
+    label: string;
+  } | null>(null);
   useAnnounceStatus(notice, { priority: "polite" });
   useAnnounceStatus(error, { priority: "assertive" });
   const [pending, startTransition] = useTransition();
@@ -178,6 +185,9 @@ export function FamilySettingsPanel({
           seatCount >= capabilities.maxFamilyMembers;
         const canInvite =
           isOwner && capabilities.familySharing && !atMemberLimit;
+        const canRequestPhotos =
+          capabilities.familySharing &&
+          (isOwner || family.membership.role === "member");
 
         return (
           <section
@@ -378,6 +388,14 @@ export function FamilySettingsPanel({
                       pending={pending}
                       busyKey={busyKey}
                       inviteLink={inviteLinks[member.id]}
+                      canRequestPhotos={canRequestPhotos}
+                      onRequestPhotos={() =>
+                        setRequestTarget({
+                          familyId: family.id,
+                          memberId: member.id,
+                          label: member.displayName || member.invitedEmail,
+                        })
+                      }
                       onChangeRole={(role) =>
                         runAction(`role-${member.id}`, async () => {
                           const response = await fetch(
@@ -467,6 +485,14 @@ export function FamilySettingsPanel({
                       isOwner={isOwner}
                       pending={pending}
                       busyKey={busyKey}
+                      canRequestPhotos={canRequestPhotos}
+                      onRequestPhotos={() =>
+                        setRequestTarget({
+                          familyId: family.id,
+                          memberId: member.id,
+                          label: member.displayName || member.invitedEmail,
+                        })
+                      }
                       onChangeRole={(role) =>
                         runAction(`role-${member.id}`, async () => {
                           const response = await fetch(
@@ -591,6 +617,18 @@ export function FamilySettingsPanel({
             />
           </div>
         </details>
+      ) : null}
+
+      {requestTarget ? (
+        <RequestPhotosDialog
+          familyId={requestTarget.familyId}
+          targetMemberId={requestTarget.memberId}
+          targetLabel={requestTarget.label}
+          onClose={() => setRequestTarget(null)}
+          onCreated={() =>
+            setNotice(t("family.requestPhotosCreatedNotice"))
+          }
+        />
       ) : null}
     </div>
   );
@@ -778,6 +816,8 @@ function MemberRow({
   onChangeRole,
   onRemove,
   inviteLink,
+  canRequestPhotos = false,
+  onRequestPhotos,
 }: {
   member: SerializedFamilyMember;
   viewerUserId: string;
@@ -787,6 +827,8 @@ function MemberRow({
   onChangeRole: (role: "owner" | "member" | "viewer") => void;
   onRemove: () => void;
   inviteLink?: string;
+  canRequestPhotos?: boolean;
+  onRequestPhotos?: () => void;
 }) {
   const t = useTranslations();
   const format = useFormat();
@@ -889,6 +931,17 @@ function MemberRow({
               <Copy className="size-3" aria-hidden />
             )}
             {copied ? t("family.copied") : t("family.copyLink")}
+          </button>
+        ) : null}
+
+        {canRequestPhotos && !isSelf && onRequestPhotos ? (
+          <button
+            type="button"
+            onClick={onRequestPhotos}
+            className="inline-flex items-center gap-1 rounded-md border border-ink/10 px-2.5 py-1.5 text-xs font-medium text-ink transition hover:border-accent/35 hover:bg-accent/10"
+          >
+            <ImagePlus className="size-3" aria-hidden />
+            {t("family.requestPhotos")}
           </button>
         ) : null}
 

@@ -98,6 +98,8 @@ export const NOTIFICATION_TYPES = [
   "moderation_attention",
   "emergency_access",
   "family_chat",
+  "photo_request",
+  "weekly_digest",
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -142,8 +144,18 @@ export type PlanFeatures = {
   aiSoundtrack?: boolean;
   /** Monthly cap for completed AI soundtrack jobs; 0 = none. */
   maxAiSoundtracksPerMonth?: number;
+  /** Paid plans omit the soft “Made with Family Memory Vault” movie watermark. */
+  removeMovieWatermark?: boolean;
   [key: string]: unknown;
 };
+
+/** Lifecycle for family photo contribution requests. */
+export const PHOTO_REQUEST_STATUSES = [
+  "pending",
+  "completed",
+  "cancelled",
+] as const;
+export type PhotoRequestStatus = (typeof PHOTO_REQUEST_STATUSES)[number];
 
 export const mediaStatusEnum = pgEnum("media_status", MEDIA_STATUSES);
 export const mediaTypeEnum = pgEnum("media_type", MEDIA_TYPES);
@@ -209,6 +221,13 @@ export type AvaHelperProgress = {
   movieSkipped?: boolean;
   askAiSkipped?: boolean;
   inviteSkipped?: boolean;
+  /**
+   * First ready movie completed — Ava may encourage inviting one family member.
+   * Cleared / one-shot via inviteAfterFirstMoviePrompted.
+   */
+  inviteAfterFirstMovieReady?: boolean;
+  /** Ava already auto-opened the post-first-movie invite tip. */
+  inviteAfterFirstMoviePrompted?: boolean;
   documentsIntroSeen?: boolean;
   documentsSkipped?: boolean;
   completionCelebrated?: boolean;
@@ -271,6 +290,10 @@ export type UserAccountPreferences = {
   askAiRobotGreetingsEnabled?: boolean;
   /** Rare milestone emails (first photo, 50 photos, first family join, 50% legacy). */
   emailMilestoneCelebrations?: boolean;
+  /** Weekly vault highlights email — default on, one email per week max. */
+  emailWeeklyDigest?: boolean;
+  /** Weekly vault highlights in the notification bell. */
+  inAppWeeklyDigest?: boolean;
   /** Occasional product updates — opt-in only. */
   productUpdatesEmail?: boolean;
   /**
@@ -281,6 +304,8 @@ export type UserAccountPreferences = {
   idleTimeoutEnabled?: boolean;
   /** Internal dedupe for storage warning emails when in-app is off. */
   lastStorageWarningAt?: string | null;
+  /** Internal dedupe for weekly digest sends (ISO timestamp). */
+  lastWeeklyDigestAt?: string | null;
   /** UI locale (BCP 47), e.g. en-US. */
   locale?: string | null;
 };
@@ -298,9 +323,12 @@ export const DEFAULT_USER_ACCOUNT_PREFERENCES = {
   celebrationSoundEnabled: false,
   askAiRobotGreetingsEnabled: true,
   emailMilestoneCelebrations: true,
+  emailWeeklyDigest: true,
+  inAppWeeklyDigest: true,
   productUpdatesEmail: false,
   idleTimeoutEnabled: true,
   lastStorageWarningAt: null,
+  lastWeeklyDigestAt: null,
   locale: "en-US",
 } as const satisfies Required<UserAccountPreferences>;
 
@@ -466,10 +494,21 @@ export const media = pgTable(
     importExternalId: text("import_external_id"),
     importedAt: timestamp("imported_at", { withTimezone: true }),
     /**
+     * SHA-256 hex of file bytes when known (client or cloud import).
+     * Practical dedupe across re-uploads / re-imports of the same file.
+     */
+    contentHash: text("content_hash"),
+    /**
      * When set, auto-link to this owned memory after clean+ready.
      * Cleared after attach attempt (success or permanent skip).
      */
     pendingMemoryId: text("pending_memory_id"),
+
+    /**
+     * Original capture / taken time when known (EXIF, import provider).
+     * On This Day prefers this over created_at; null ⇒ no capture metadata yet.
+     */
+    takenAt: timestamp("taken_at", { withTimezone: true }),
 
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -490,6 +529,13 @@ export const media = pgTable(
       table.status,
       table.createdAt,
     ),
+    index("media_taken_at_idx").on(table.takenAt),
+    index("media_user_clean_ready_taken_idx").on(
+      table.userId,
+      table.moderationStatus,
+      table.status,
+      table.takenAt,
+    ),
     index("media_photodna_match_idx").on(table.photodnaMatch),
     index("media_ncmec_report_id_idx").on(table.ncmecReportId),
     index("media_scene_analyzed_at_idx").on(table.sceneAnalyzedAt),
@@ -503,6 +549,9 @@ export const media = pgTable(
       .where(
         sql`${table.importProvider} is not null and ${table.importExternalId} is not null`,
       ),
+    uniqueIndex("media_user_content_hash_uidx")
+      .on(table.userId, table.contentHash)
+      .where(sql`${table.contentHash} is not null`),
     index("media_pending_memory_id_idx").on(table.pendingMemoryId),
     index("media_import_provider_idx").on(table.userId, table.importProvider),
   ],
@@ -648,6 +697,39 @@ export const movies = pgTable(
 );
 
 /**
+ * Durable public share links for ready movies.
+ * Token resolves to a marketing page that only exposes that one movie.
+ */
+export const movieShares = pgTable(
+  "movie_shares",
+  {
+    id: text("id").primaryKey(),
+    movieId: text("movie_id")
+      .notNull()
+      .references(() => movies.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Opaque public token (URL segment). */
+    token: text("token").notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    viewCount: integer("view_count").default(0).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("movie_shares_token_uidx").on(table.token),
+    index("movie_shares_movie_id_idx").on(table.movieId),
+    index("movie_shares_user_id_idx").on(table.userId),
+  ],
+);
+
+/**
  * Named person identities for face grouping (per vault user).
  * `cover_face_id` points at a representative face thumbnail (optional).
  */
@@ -695,7 +777,7 @@ export const faces = pgTable(
   "faces",
   {
     id: text("id").primaryKey(),
-    /** Denormalized owner for scoped queries (must match media.user_id). */
+    /** People-graph owner (viewer). May differ from media.user_id for shared family photos. */
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
@@ -892,6 +974,50 @@ export const familyMembers = pgTable(
       table.familyId,
       table.invitedEmail,
     ),
+  ],
+);
+
+/**
+ * Ask a family member / invitee to upload photos (contribution request).
+ * Deep-linked via token; never exposes the requester’s private library.
+ */
+export const photoRequests = pgTable(
+  "photo_requests",
+  {
+    id: text("id").primaryKey(),
+    familyId: text("family_id")
+      .notNull()
+      .references(() => families.id, { onDelete: "cascade" }),
+    requestedByUserId: text("requested_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    targetMemberId: text("target_member_id")
+      .notNull()
+      .references(() => familyMembers.id, { onDelete: "cascade" }),
+    memoryId: text("memory_id").references(() => memories.id, {
+      onDelete: "set null",
+    }),
+    personId: text("person_id").references(() => people.id, {
+      onDelete: "set null",
+    }),
+    message: text("message").notNull(),
+    status: text("status").$type<PhotoRequestStatus>().default("pending").notNull(),
+    token: text("token").notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("photo_requests_token_uidx").on(table.token),
+    index("photo_requests_family_id_idx").on(table.familyId),
+    index("photo_requests_target_member_idx").on(table.targetMemberId),
+    index("photo_requests_requested_by_idx").on(table.requestedByUserId),
+    index("photo_requests_status_idx").on(table.status),
   ],
 );
 
@@ -3110,6 +3236,10 @@ export type MemoryMedia = typeof memoryMedia.$inferSelect;
 export type NewMemoryMedia = typeof memoryMedia.$inferInsert;
 export type Movie = typeof movies.$inferSelect;
 export type NewMovie = typeof movies.$inferInsert;
+export type MovieShare = typeof movieShares.$inferSelect;
+export type NewMovieShare = typeof movieShares.$inferInsert;
+export type PhotoRequest = typeof photoRequests.$inferSelect;
+export type NewPhotoRequest = typeof photoRequests.$inferInsert;
 export type Person = typeof people.$inferSelect;
 export type NewPerson = typeof people.$inferInsert;
 export type Face = typeof faces.$inferSelect;

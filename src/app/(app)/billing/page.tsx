@@ -53,8 +53,8 @@ export default async function BillingPage({ searchParams }: PageProps) {
         title="Billing & usage"
         description={
           betaMode
-            ? "Beta testing — plans are free to try. Switch anytime; limits update immediately and no payment is collected."
-            : "See what's included in your plan, how much you've used, and upgrade when you need more room for memories."
+            ? "Choose Free, Family, or Legacy+ by what you need to do. Switch anytime — limits update immediately and you will not be charged."
+            : "Choose Free, Family, or Legacy+ by what you need to do — then see storage, seats, and movies on your plan."
         }
       />
 

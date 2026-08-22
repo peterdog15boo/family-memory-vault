@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/auth/api";
 import { downloadRemoteFile } from "@/lib/media/import/cloud";
+import { sha256HexFromBytes } from "@/lib/media/import/content-hash";
 import {
   finalizeUploadedMedia,
   StorageQuotaError,
@@ -86,6 +87,7 @@ export async function POST(request: Request) {
 
       const key = buildTempUploadKey(userId, file.name);
       await putTempObjectBytes(key, file.body, { contentType: resolved });
+      const contentHash = sha256HexFromBytes(file.body);
 
       const result = await finalizeUploadedMedia({
         userId,
@@ -96,6 +98,7 @@ export async function POST(request: Request) {
         attachMemoryId: attachMemoryId ?? null,
         importProvider: provider,
         importExternalId: fileId,
+        contentHash,
         source: `api.media.import.${provider}`,
       });
 

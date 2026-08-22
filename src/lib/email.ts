@@ -18,6 +18,7 @@ import {
   paymentFailedEmail,
   paymentSuccessEmail,
   storageWarningEmail,
+  weeklyDigestEmail,
   welcomeEmail,
   type EmailContent,
 } from "@/lib/email/templates";
@@ -36,6 +37,7 @@ export {
   memoryBoxOrderAdminEmail,
   feedbackSubmissionAdminEmail,
   milestoneEmail,
+  weeklyDigestEmail,
   emailAppUrl,
 } from "@/lib/email/templates";
 
@@ -288,4 +290,19 @@ export async function sendMilestoneEmail(input: {
   href?: string;
 }): Promise<SendEmailResult> {
   return sendTemplated(input.to, milestoneEmail(input), "milestone");
+}
+
+export async function sendWeeklyDigestEmail(input: {
+  to: string;
+  firstName?: string | null;
+  highlights: Array<{ kind: string; title: string; href: string }>;
+  photosHref: string;
+  memoriesHref: string;
+  moviesHref: string;
+  onThisDayHref: string;
+  photoCount: number;
+  memoryCount: number;
+  movieCount: number;
+}): Promise<SendEmailResult> {
+  return sendTemplated(input.to, weeklyDigestEmail(input), "weekly_digest");
 }

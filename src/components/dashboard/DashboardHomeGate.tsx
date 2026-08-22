@@ -7,6 +7,7 @@ import {
 } from "@/components/dashboard/DashboardHome";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import type { AccountUsageSummary } from "@/lib/billing/account-usage";
+import type { FamilyCompletenessSnapshot } from "@/lib/completeness/family-completeness";
 import type { MediaReviewSummary, SafeMediaItem } from "@/lib/media/queries";
 import type { MemoryListItem } from "@/lib/memories";
 import type { OnboardingProgress } from "@/lib/onboarding/types";
@@ -30,6 +31,9 @@ type DashboardHomeProps = {
   onboarding: OnboardingProgress;
   stripeConfigured: boolean;
   journeyBoard: JourneyBoardSnapshot;
+  completeness: FamilyCompletenessSnapshot;
+  onThisDayCount?: number;
+  onThisDayLabel?: string;
 };
 
 /**

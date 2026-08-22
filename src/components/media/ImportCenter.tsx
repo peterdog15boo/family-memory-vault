@@ -82,7 +82,7 @@ function availabilityBadge(
     return t("mediaImport.limited");
   }
   if (provider.availability === "unavailable") {
-    return t("mediaImport.limited");
+    return t("mediaImport.availableAfterAuth");
   }
   return null;
 }
@@ -331,6 +331,12 @@ export function ImportCenter({
             <div className="space-y-3">
               <p className="text-sm font-medium text-ink">{detail.label}</p>
               <p className="text-sm text-ink-muted">{detail.permissionNote}</p>
+              {detail.availability === "pending_authorization" ||
+              detail.availability === "unavailable" ? (
+                <p className="rounded-md border border-ink/10 bg-canvas-deep/40 px-3 py-2 text-xs text-ink-muted">
+                  {t("mediaImport.comingSoonDetail")}
+                </p>
+              ) : null}
               {detail.limitationNote ? (
                 <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
                   {detail.limitationNote}

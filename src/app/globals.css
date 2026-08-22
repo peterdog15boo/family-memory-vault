@@ -8096,7 +8096,7 @@ html {
   }
 }
 
-/* Mobile legal gates — leave room for sticky Continue footer */
+/* Mobile legal gates — fixed acceptance footer so Continue stays tappable */
 @media (max-width: 719px) {
   .beta-nda-shell {
     padding-bottom: 0;
@@ -8106,7 +8106,13 @@ html {
   .beta-nda-page {
     min-height: 100dvh;
     gap: 1rem;
-    padding-bottom: 0.25rem;
+    /* Room for fixed footer (Terms: checkbox + Continue) */
+    padding-bottom: calc(9.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Beta NDA adds name/email fields in the sticky footer */
+  .beta-nda-page:has(.beta-nda-field) {
+    padding-bottom: calc(17.5rem + env(safe-area-inset-bottom, 0px));
   }
 
   .beta-nda-scroll {
@@ -8118,18 +8124,43 @@ html {
     min-height: 3rem;
     font-size: 1rem;
   }
+
+  .beta-nda-form--sticky-actions {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    width: 100%;
+    max-width: 42rem;
+    margin: 0 auto;
+    padding: 0.85rem max(1rem, env(safe-area-inset-right, 0px))
+      calc(0.9rem + env(safe-area-inset-bottom, 0px))
+      max(1rem, env(safe-area-inset-left, 0px));
+    background: color-mix(in srgb, var(--canvas) 98%, transparent);
+  }
 }
 
 /* Feedback modal — keyboard-safe on Android Chrome */
 @media (max-width: 640px) {
   [data-feedback-modal].ui-modal-backdrop {
     align-items: flex-end;
+    justify-content: flex-end;
     padding: 0;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    inset: auto;
+    left: 0;
+    right: 0;
+    /* Prefer visualViewport height when set by FeedbackModal */
+    top: var(--feedback-vv-offset, 0px);
+    height: var(--feedback-vv-height, 100dvh);
+    max-height: var(--feedback-vv-height, 100dvh);
   }
 
   .feedback-modal-panel {
-    max-height: min(92dvh, 100%);
+    max-height: min(
+      var(--feedback-vv-height, 92dvh),
+      100%
+    );
     max-width: 100%;
     width: 100%;
     border-bottom-left-radius: 0;
@@ -8137,7 +8168,11 @@ html {
   }
 
   .feedback-modal-actions {
-    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    padding-top: 0.75rem;
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
     background: var(--surface-elevated, var(--canvas));
   }
 }

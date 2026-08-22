@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { ALLOWED_UPLOAD_TYPES } from "@/lib/upload/constants";
 import { prepareUploadFile } from "@/lib/upload/prepare-upload-file";
+import { sha256HexFromFile } from "@/lib/media/import/content-hash-client";
 import { UpgradePrompt } from "@/components/billing/UpgradePrompt";
 import { useCopy, useTranslations } from "@/components/i18n/LocaleProvider";
 import { userFacingApiError } from "@/lib/http/user-messages";
@@ -284,6 +285,8 @@ export function MediaUploader({
 
         updateItem(item.id, { status: "finalizing", progress: 97 });
 
+        const contentHash = await sha256HexFromFile(file);
+
         const completeRes = await fetch("/api/media/complete", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -298,6 +301,7 @@ export function MediaUploader({
             ...(item.importExternalId
               ? { importExternalId: item.importExternalId }
               : {}),
+            ...(contentHash ? { contentHash } : {}),
           }),
         });
         const completeBody = await completeRes.json().catch(() => ({}));

@@ -135,7 +135,13 @@ export function MemoryFamilyShareControls({
             )}
           </div>
           <p className="mt-1 max-w-md text-xs leading-relaxed text-ink-muted">
-            {t("memories.shareHelp")}
+            {t("memories.shareHelp")}{" "}
+            <a
+              href="/family"
+              className="font-medium text-accent-deep underline-offset-2 hover:underline"
+            >
+              {t("family.requestPhotos")}
+            </a>
           </p>
         </div>
 

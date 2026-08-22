@@ -558,6 +558,8 @@ export type PlanCapabilities = {
   aiSoundtrack: boolean;
   aiSoundtracks: PlanGateResult;
   legacyPlus: boolean;
+  /** Free-plan soft branding watermark on rendered movies. */
+  movieWatermark: boolean;
 };
 
 export async function getPlanCapabilities(
@@ -580,6 +582,7 @@ export async function getPlanCapabilities(
     aiSoundtrack: featureFlag(limits.features, "aiSoundtrack"),
     aiSoundtracks,
     legacyPlus: hasLegacyPlusFeatures(limits.features),
+    movieWatermark: !featureFlag(limits.features, "removeMovieWatermark"),
   };
 }
 

@@ -15,7 +15,7 @@ import { canEditMemory } from "@/lib/permissions";
 
 type PageProps = {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ edit?: string }>;
+  searchParams: Promise<{ edit?: string; createMovie?: string }>;
 };
 
 /**
@@ -32,7 +32,7 @@ export default async function MemoryDetailPage({
   }
 
   const { id } = await params;
-  const { edit } = await searchParams;
+  const { edit, createMovie } = await searchParams;
   const memory = await getMemoryWithMedia(id, userId);
   if (!memory) {
     notFound();
@@ -70,6 +70,7 @@ export default async function MemoryDetailPage({
       canManageSharing={isOwner}
       hasFamily={hasFamily}
       startEditing={canEdit && edit === "1"}
+      startCreateMovie={isOwner && createMovie === "1"}
     />
   );
 }

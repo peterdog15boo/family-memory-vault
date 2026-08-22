@@ -11,6 +11,7 @@ import {
   getPublicPlans,
   isPaidPublicPlan,
   planFeatureBullets,
+  planJobToBeDone,
   RECOMMENDED_PLAN_SLUG,
 } from "@/lib/plans/pricing-display";
 import {
@@ -303,7 +304,7 @@ export function PricingGrid({
                   {plan.name}
                 </h3>
                 <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-                  {plan.description}
+                  {planJobToBeDone(plan)}
                 </p>
               </header>
 

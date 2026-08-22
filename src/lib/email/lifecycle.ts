@@ -364,6 +364,15 @@ export async function sendMediaReadyNotification(input: {
   } catch (error) {
     console.error("[email.lifecycle] media ready notification failed", error);
   }
+
+  try {
+    const { completePhotoRequestsForUploader } = await import(
+      "@/lib/photo-requests"
+    );
+    await completePhotoRequestsForUploader(input.userId);
+  } catch (error) {
+    console.error("[email.lifecycle] photo request complete failed", error);
+  }
 }
 
 export function queueMediaReadyNotification(input: {

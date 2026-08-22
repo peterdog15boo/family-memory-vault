@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type FocusEvent,
   type FormEvent,
 } from "react";
 import { createPortal } from "react-dom";
@@ -124,8 +125,23 @@ export function FeedbackModal({
     ...EMPTY,
   }));
 
-  /** Only reset when the dialog opens — not when Clerk `user` / pathname churn while typing. */
+  /**
+   * Reset only on closed → open. Keep refs for open-time values so Clerk
+   * user/pathname identity churn cannot re-run the reset while typing.
+   */
   const wasOpenRef = useRef(false);
+  const openSnapshotRef = useRef({
+    initialMode,
+    pathname,
+    userId: userIdForContext,
+    email: userEmailForContext,
+  });
+  openSnapshotRef.current = {
+    initialMode,
+    pathname,
+    userId: userIdForContext,
+    email: userEmailForContext,
+  };
 
   useEffect(() => setMounted(true), []);
 
@@ -134,11 +150,10 @@ export function FeedbackModal({
       wasOpenRef.current = false;
       return;
     }
-    // Android/Clerk often refreshes the user object while the modal is open;
-    // remounting field state on those updates wiped typed values mid-entry.
     if (wasOpenRef.current) return;
     wasOpenRef.current = true;
 
+    const snap = openSnapshotRef.current;
     setDone(false);
     setError(null);
     setDetailsOpen(false);
@@ -149,17 +164,17 @@ export function FeedbackModal({
     setCopied(false);
     setCategoryTouched(false);
     const next = collectFeedbackContext({
-      pathname,
-      userId: userIdForContext,
-      email: userEmailForContext,
+      pathname: snap.pathname,
+      userId: snap.userId,
+      email: snap.email,
     });
     setForm({
-      mode: initialMode,
+      mode: snap.initialMode,
       category: next.category,
       severity: "medium",
       ...EMPTY,
     });
-  }, [open, initialMode, pathname, userIdForContext, userEmailForContext]);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -186,14 +201,64 @@ export function FeedbackModal({
   }, [open, done]);
 
   const dialogRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
 
   useOverlayA11y({
     open,
     onClose,
     containerRef: dialogRef,
     escapeEnabled: !submitting && !hideForCapture,
-    initialFocusSelector: "input:not([type='hidden']), textarea, select, button",
+    // Prefer the title field — mode tabs are buttons and would steal focus.
+    initialFocusSelector: "#feedback-title",
   });
+
+  // Android Chrome: size the sheet to visualViewport so the keyboard does not
+  // cover the sticky submit row (same pattern as Ask AI).
+  useEffect(() => {
+    if (!open) return;
+    const mq = window.matchMedia("(max-width: 640px)");
+
+    function syncViewport() {
+      const root = backdropRef.current;
+      const vv = window.visualViewport;
+      if (!root || !vv) return;
+      if (!mq.matches) {
+        root.style.removeProperty("--feedback-vv-height");
+        root.style.removeProperty("--feedback-vv-offset");
+        return;
+      }
+      root.style.setProperty(
+        "--feedback-vv-height",
+        `${Math.round(vv.height)}px`,
+      );
+      root.style.setProperty(
+        "--feedback-vv-offset",
+        `${Math.round(vv.offsetTop)}px`,
+      );
+    }
+
+    syncViewport();
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", syncViewport);
+    vv?.addEventListener("scroll", syncViewport);
+    mq.addEventListener("change", syncViewport);
+    return () => {
+      vv?.removeEventListener("resize", syncViewport);
+      vv?.removeEventListener("scroll", syncViewport);
+      mq.removeEventListener("change", syncViewport);
+      backdropRef.current?.style.removeProperty("--feedback-vv-height");
+      backdropRef.current?.style.removeProperty("--feedback-vv-offset");
+    };
+  }, [open]);
+
+  function scrollFieldIntoView(
+    event: FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
+  ) {
+    const el = event.currentTarget;
+    window.requestAnimationFrame(() => {
+      el.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
+  }
 
   const setField = useCallback(
     <K extends keyof FormState>(key: K, value: FormState[K]) => {
@@ -281,6 +346,7 @@ export function FeedbackModal({
 
   return createPortal(
     <div
+      ref={backdropRef}
       data-feedback-modal
       className={cn(
         "ui-modal-backdrop z-[110]",
@@ -446,8 +512,10 @@ export function FeedbackModal({
                   className="ui-input"
                   value={form.title}
                   onChange={(e) => setField("title", e.target.value)}
+                  onFocus={scrollFieldIntoView}
                   maxLength={160}
                   required
+                  autoComplete="off"
                   placeholder={
                     form.mode === "bug"
                       ? t("feedback.titlePlaceholderBug")
@@ -467,6 +535,7 @@ export function FeedbackModal({
                   className="ui-input min-h-[5.5rem] resize-y"
                   value={form.description}
                   onChange={(e) => setField("description", e.target.value)}
+                  onFocus={scrollFieldIntoView}
                   maxLength={8000}
                   required
                   placeholder={
@@ -493,6 +562,7 @@ export function FeedbackModal({
                       onChange={(e) =>
                         setField("expectedBehavior", e.target.value)
                       }
+                      onFocus={scrollFieldIntoView}
                       maxLength={4000}
                       placeholder={t("feedback.expectedPlaceholder")}
                     />
@@ -544,6 +614,7 @@ export function FeedbackModal({
                         setCategoryTouched(true);
                         setField("category", e.target.value);
                       }}
+                      onFocus={scrollFieldIntoView}
                     >
                       {FEEDBACK_CATEGORIES.map((cat) => (
                         <option key={cat} value={cat}>
@@ -577,6 +648,7 @@ export function FeedbackModal({
                       onChange={(e) =>
                         setField("problemStatement", e.target.value)
                       }
+                      onFocus={scrollFieldIntoView}
                       maxLength={4000}
                       required
                       placeholder={t("feedback.problemPlaceholder")}
@@ -599,6 +671,7 @@ export function FeedbackModal({
                       onChange={(e) =>
                         setField("suggestedSolution", e.target.value)
                       }
+                      onFocus={scrollFieldIntoView}
                       maxLength={4000}
                       placeholder={t("feedback.solutionPlaceholder")}
                     />
@@ -618,6 +691,7 @@ export function FeedbackModal({
                         setCategoryTouched(true);
                         setField("category", e.target.value);
                       }}
+                      onFocus={scrollFieldIntoView}
                     >
                       {FEEDBACK_CATEGORIES.map((cat) => (
                         <option key={cat} value={cat}>
@@ -762,9 +836,7 @@ export function FeedbackModal({
                   {error}
                 </p>
               ) : null}
-            </div>
 
-            <div className="feedback-modal-actions flex flex-col gap-3 border-t border-ink/8 px-5 py-4 sm:px-6">
               <div className="flex flex-col gap-2 rounded-xl border border-ink/10 bg-ink/[0.03] px-3.5 py-3">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-ink">
@@ -809,26 +881,27 @@ export function FeedbackModal({
                   </a>
                 </div>
               ) : null}
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  className="ui-btn ui-btn-ghost ui-btn-sm"
-                  onClick={onClose}
-                  disabled={submitting}
-                >
-                  {t("feedback.cancel")}
-                </button>
-                <button
-                  type="submit"
-                  className="ui-btn ui-btn-primary ui-btn-sm inline-flex items-center gap-1.5"
-                  disabled={submitting || hideForCapture}
-                >
-                  {submitting ? (
-                    <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                  ) : null}
-                  {submitting ? t("feedback.sending") : t("feedback.submit")}
-                </button>
-              </div>
+            </div>
+
+            <div className="feedback-modal-actions flex shrink-0 items-center justify-end gap-2 border-t border-ink/8 px-5 py-3 sm:px-6">
+              <button
+                type="button"
+                className="ui-btn ui-btn-ghost ui-btn-sm"
+                onClick={onClose}
+                disabled={submitting}
+              >
+                {t("feedback.cancel")}
+              </button>
+              <button
+                type="submit"
+                className="ui-btn ui-btn-primary ui-btn-sm inline-flex items-center gap-1.5"
+                disabled={submitting || hideForCapture}
+              >
+                {submitting ? (
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                ) : null}
+                {submitting ? t("feedback.sending") : t("feedback.submit")}
+              </button>
             </div>
           </form>
         )}

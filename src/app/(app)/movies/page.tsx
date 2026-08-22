@@ -32,7 +32,7 @@ export default async function MoviesPage() {
         title={t("pages.moviesTitle")}
         description={t("pages.moviesDescription")}
         actions={
-          <Link href="/memories" className="ui-btn ui-btn-primary ui-btn-lg">
+          <Link href="/memories/new?intent=movie" className="ui-btn ui-btn-primary ui-btn-lg">
             <Film className="size-4" aria-hidden />
             {t("pages.moviesMake")}
           </Link>

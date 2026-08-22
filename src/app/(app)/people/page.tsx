@@ -1,4 +1,5 @@
-import { Heart } from "lucide-react";
+import Link from "next/link";
+import { Heart, ImagePlus } from "lucide-react";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { UpgradePrompt } from "@/components/billing/UpgradePrompt";
@@ -69,6 +70,14 @@ export default async function PeoplePage() {
           </>
         }
         description={t("pages.peopleDescription")}
+        actions={
+          capabilities.familySharing ? (
+            <Link href="/family" className="ui-btn ui-btn-secondary ui-btn-lg">
+              <ImagePlus className="size-4" aria-hidden />
+              {t("family.requestPhotos")}
+            </Link>
+          ) : null
+        }
         originalExtra={peopleMeta}
         modernExtra={peopleMeta}
       />

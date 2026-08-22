@@ -224,6 +224,19 @@ export async function resolveVisibleMediaIdsForPeople(
 }
 
 /**
+ * Faces linked to a person whose media is clean/ready and visible to the viewer.
+ * Prefer this over listFacesForPerson for matching / clustering so dirty or
+ * inaccessible (non-family) media never influence identity decisions.
+ */
+export async function listVisibleFacesLinkedToPerson(
+  userId: string,
+  personId: string,
+): Promise<Face[]> {
+  const visible = await listVisibleMediaLinkedToPerson(userId, personId);
+  return visible?.faces ?? [];
+}
+
+/**
  * Structured debug log for Ask AI / People person-media resolution.
  */
 export function logPersonMediaResolution(input: {

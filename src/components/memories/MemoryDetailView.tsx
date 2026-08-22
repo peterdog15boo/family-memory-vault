@@ -58,6 +58,8 @@ type MemoryDetailViewProps = {
   hasFamily: boolean;
   /** Open the title/description editor on mount (e.g. from ?edit=1). */
   startEditing?: boolean;
+  /** Open the create-movie panel on mount (e.g. from ?createMovie=1). */
+  startCreateMovie?: boolean;
 };
 
 type ViewMode = "grid" | "timeline";
@@ -72,6 +74,7 @@ export function MemoryDetailView({
   canManageSharing,
   hasFamily,
   startEditing = false,
+  startCreateMovie = false,
 }: MemoryDetailViewProps) {
   const router = useRouter();
   const copy = useCopy();
@@ -86,7 +89,9 @@ export function MemoryDetailView({
   );
   const [addOpen, setAddOpen] = useState(false);
   const [slideshowOpen, setSlideshowOpen] = useState(false);
-  const [movieOpen, setMovieOpen] = useState(false);
+  const [movieOpen, setMovieOpen] = useState(
+    Boolean(canManageMedia && startCreateMovie && initialMemory.media.length > 0),
+  );
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [moviesRefreshKey, setMoviesRefreshKey] = useState(0);
   const [pickedIds, setPickedIds] = useState<string[]>([]);

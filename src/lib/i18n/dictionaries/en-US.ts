@@ -74,6 +74,7 @@ export const enUS = {
     memories: "Memories",
     movies: "Movies",
     photos: "Photos",
+    onThisDay: "On This Day",
     upload: "Upload",
     people: "People",
     askAi: "Ask AI",
@@ -182,6 +183,11 @@ export const enUS = {
     milestoneEmails: "Milestone notes",
     milestoneEmailsHelp:
       "A short email for rare moments: first photo, 50 photos, first family member joined, or 50% Legacy Strength.",
+    weeklyDigest: "Weekly highlights",
+    weeklyDigestEmail:
+      "One calm email each week with a few vault highlights and links — skipped when there’s nothing new.",
+    weeklyDigestInApp:
+      "A weekly note in your notification bell with the same highlights.",
     browserPushGroup: "This device",
     browserPushHelp:
       "Get a gentle alert when a movie is ready or you reach a rare milestone — even if the vault is closed. We never use this for marketing. You can turn it off anytime.",
@@ -311,6 +317,8 @@ export const enUS = {
       "Watch the short films made from your memories — or open an album to make a new one.",
     moviesMake: "Make a movie",
     moviesBrowse: "Browse memories",
+    movieIntentHint:
+      "Pick photos for your movie album — after you save, we’ll open the movie maker.",
     peopleEyebrow: "Family faces",
     peopleTitle: "People",
     peopleDescription:
@@ -373,10 +381,12 @@ export const enUS = {
       "Every import uses the same private safety pipeline (storage → moderation → clean/ready). Nothing bypasses family sharing rules.",
     sectionDevice: "1. Device",
     sectionExport: "2. Export packages (recommended for social)",
-    sectionCloud: "3. Cloud folders",
-    sectionDirect: "4. Direct social connect",
-    availableAfterAuth: "Available after authorization",
-    needsConfig: "Not configured",
+    sectionCloud: "3–4. Cloud folders (Dropbox, then Google Drive)",
+    sectionDirect: "Direct social connect",
+    availableAfterAuth: "Coming soon",
+    comingSoonDetail:
+      "Not available yet — no fake connect. Use an official export zip above, or device / cloud import.",
+    needsConfig: "Not configured on this server",
     loadError: "Could not load import options.",
     connectError: "Could not start account connection.",
     connectAccount: "Connect account",
@@ -390,6 +400,7 @@ export const enUS = {
       "Found {count} media file(s) from {source}. Queued for safety checks ({skipped} skipped).",
     connected: "Connected",
     limited: "Limited",
+    alreadyImported: "Already in your library — skipped duplicate.",
     browseError: "Could not list files from this account.",
     importError: "Could not import the selected files.",
     importQueued: "{count} file(s) queued for safety checks.",
@@ -451,19 +462,20 @@ export const enUS = {
     emptyMedia:
       "Add a few photos to this memory first, then come back to make a movie.",
     shareEyebrow: "Share movie",
-    shareLead: "Send a link or download the video for social apps.",
+    shareLead: "Send a lasting link or download the video for social apps.",
     closeShare: "Close share",
     notReadyTitle: "Not ready to share",
     notReadyBody: "This movie doesn’t have a shareable file yet.",
+    preparingShare: "Preparing your share link…",
     copyLink: "Copy link",
     linkCopied: "Link copied",
     downloadMp4: "Download MP4",
     moreSharing: "More sharing options…",
     shareFootnote:
-      "Instagram and TikTok don’t accept video links from the web — we download the file so you can upload it in those apps. Share links are temporary.",
-    noteCopied:
-      "Link copied. Links expire after a while — download for lasting shares.",
+      "Instagram and TikTok don’t accept video links from the web — download the file to upload in those apps. Your share link opens a public page for this movie only.",
+    noteCopied: "Share link copied. Anyone with the link can watch this movie.",
     noteCopyFailed: "Couldn’t copy the link. Try Download instead.",
+    noteShareLinkFailed: "Couldn’t create a share link. Try Download instead.",
     noteDownloadUnavailable: "Download isn’t available for this movie yet.",
     noteInstagram:
       "Video saved. Open Instagram and post it from your camera roll or drafts.",
@@ -900,6 +912,58 @@ export const enUS = {
     originalTitle: "Your vault",
     originalDescription:
       "A calm place for photos, stories, and the people you love.",
+    onThisDayTitle: "On This Day",
+    onThisDayLead: "Moments from {date} in years past.",
+    onThisDayCount: "{count} from prior years",
+    onThisDayOpen: "Open On This Day",
+  },
+  completeness: {
+    eyebrow: "Getting started",
+    title: "Family Completeness",
+    lead: "{done} of {total} first wins done",
+    complete: "complete",
+    percentAria: "{percent} percent complete",
+    nextLabel: "Next best step",
+    allDoneLead: "Your first wins are in place.",
+    allDoneBody:
+      "Keep adding photos, naming people, and inviting family whenever you’re ready.",
+    item: {
+      mediaUploaded: "Photos uploaded",
+      peopleNamed: "People named",
+      firstMovie: "First movie",
+      familyInvited: "Family invited",
+      legacyStarted: "Legacy started",
+    },
+    next: {
+      mediaUploaded: "Add a few photos to open your vault.",
+      peopleNamed: "Name someone in People so Ask AI can find them.",
+      firstMovie: "Turn a memory into your first short movie.",
+      familyInvited: "Invite one family member to share the vault.",
+      legacyStarted:
+        "Start Digital Legacy — Private Documents and guidance on Legacy+.",
+    },
+    cta: {
+      mediaUploaded: "Upload photos",
+      peopleNamed: "Open People",
+      firstMovie: "Make a movie",
+      familyInvited: "Invite family",
+      legacyStarted: "Open Legacy",
+      legacyStartedUpgrade: "Open Billing",
+    },
+  },
+  onThisDay: {
+    eyebrow: "Looking back",
+    title: "On This Day · {date}",
+    description:
+      "Photos and videos from this month and day in prior years — only what you’re allowed to see.",
+    emptyTitle: "Nothing from {date} yet",
+    emptyBody:
+      "When you upload photos with dates from years past, they’ll show up here. Upload dates count when capture dates aren’t known.",
+    allYears: "All years",
+    makeMemory: "Make a memory",
+    makeMovie: "Make a movie",
+    preselectedHint:
+      "Pre-selected from On This Day. Adjust the selection or cover before saving.",
   },
   memories: {
     eyebrow: "Albums & stories",
@@ -985,6 +1049,11 @@ export const enUS = {
     storageFullHint:
       "Your existing memories are safe — only new uploads are paused.",
     upgradeStorage: "Upgrade for more storage",
+    requestTitle: "Photo request from {family}",
+    requestFrom: "{name} asked: {message}",
+    requestHint:
+      "Upload when you’re ready — only clean, ready photos join the family vault.",
+    requestCompleteTitle: "Thanks — this request is complete",
   },
   assistant: {
     eyebrow: "Here to help",
@@ -1234,6 +1303,7 @@ export const enUS = {
     welcomeToFamily:
       "Welcome to the family. Shared photos and memories will appear when they’re ready.",
     viewFamily: "View family",
+    uploadPhotosCta: "Upload photos",
     joiningFamily: "Joining family…",
     confirmingInvite: "Confirming your invite.",
     connectingAccount: "One moment while we connect your account.",
@@ -1241,6 +1311,18 @@ export const enUS = {
     roleMember: "Member",
     roleViewer: "Viewer",
     errorGeneric: "Something went wrong.",
+    requestPhotos: "Request photos",
+    requestPhotosTitle: "Request photos",
+    requestPhotosLead: "Ask {name} to upload photos to the family vault.",
+    requestPhotosMessage: "Message",
+    requestPhotosSend: "Send request",
+    requestPhotosSent:
+      "Request sent. Copy the link if you’d like to share it again.",
+    requestPhotosCopyLink: "Copy request link",
+    requestPhotosCopied: "Link copied",
+    requestPhotosCopyFailed: "Couldn’t copy the link.",
+    requestPhotosFailed: "Couldn’t send that photo request.",
+    requestPhotosCreatedNotice: "Photo request sent.",
     familySharingTitle: "Family sharing",
     familySharingBody:
       "Invite people you trust to a shared household vault. Available on Family plans and above.",
@@ -1845,6 +1927,8 @@ export const enUS = {
       inviteTitle: "Invite family",
       inviteDescription:
         "Share the vault with a spouse or family member when you’re ready.",
+      inviteAfterMovieDescription:
+        "Nice — your first movie is ready. Invite one family member so they can enjoy it with you.",
       inviteCta: "Open Family",
       documentsTitle: "Documents & Digital Legacy",
       documentsDescription: "Advanced tools for later — no rush.",
@@ -1929,6 +2013,16 @@ export const enUS = {
       messageTitle: "Family chat",
       messagePreview: "{name}: {preview}",
       messageFallback: "{name} sent a message in Family Chat.",
+    },
+    photoRequest: {
+      title: "Photos requested",
+      message: "{message}",
+      messageWithName: "{name} asked: {message}",
+    },
+    weeklyDigest: {
+      title: "Your week in the vault",
+      message:
+        "Highlights ready: {photos} photos, {memories} memories, {movies} movies.",
     },
     storageWarning: {
       titleNear: "Storage is getting full",

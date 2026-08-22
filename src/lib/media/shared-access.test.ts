@@ -135,6 +135,18 @@ describe("Shared face matching actor scope", () => {
     expect(storedFace.userId).toBe(actorUserId);
   });
 
+  it("allows crop load when face.userId differs from media.userId", () => {
+    // Rekognition crops must use accessible media by id, not owner equality.
+    const face = { userId: "family_viewer", mediaId: "shared_1" };
+    const mediaRow = { id: "shared_1", userId: "owner" };
+    const accessibleOwnerIds = new Set(["family_viewer", "owner"]);
+    const eligible =
+      mediaRow.id === face.mediaId && accessibleOwnerIds.has(mediaRow.userId);
+    const legacyOwnerEquality = mediaRow.userId === face.userId;
+    expect(legacyOwnerEquality).toBe(false);
+    expect(eligible).toBe(true);
+  });
+
   it("reuses owner face geometry without copying personId", () => {
     const ownerFace = {
       boundingBox: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 },

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarDays, Film, HardDrive } from "lucide-react";
+import { CalendarDays, Film, HardDrive, Users } from "lucide-react";
 import type { AccountUsageSummary } from "@/lib/billing/account-usage";
 import { cn } from "@/lib/utils";
 
@@ -10,7 +10,7 @@ type AccountUsageOverviewProps = {
 };
 
 /**
- * Plan + storage + movies usage for billing/settings pages.
+ * Plan + storage + seats + movies usage for billing/settings pages.
  */
 export function AccountUsageOverview({
   summary,
@@ -49,11 +49,16 @@ export function AccountUsageOverview({
           </Link>
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <UsageMeterCompact
             icon={HardDrive}
             title="Storage"
             meter={summary.storageMeter}
+          />
+          <UsageMeterCompact
+            icon={Users}
+            title="Family seats"
+            meter={summary.seats}
           />
           <UsageMeterCompact
             icon={Film}
@@ -83,11 +88,17 @@ export function AccountUsageOverview({
         </p>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-3">
         <UsageMeterCard
           icon={HardDrive}
           title="Storage"
           meter={summary.storageMeter}
+          planName={summary.planName}
+        />
+        <UsageMeterCard
+          icon={Users}
+          title="Family seats"
+          meter={summary.seats}
           planName={summary.planName}
         />
         <UsageMeterCard
