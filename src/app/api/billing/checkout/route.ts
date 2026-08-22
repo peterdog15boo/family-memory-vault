@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireApiUser } from "@/lib/auth/api";
+import { isBetaBillingOverride } from "@/lib/billing/beta-flags";
+import { assignUserPlan } from "@/lib/plans/assign";
 import {
   enforceRateLimit,
   RATE_LIMITS,
@@ -22,7 +24,10 @@ const bodySchema = z.object({
 /**
  * POST /api/billing/checkout
  * Creates a Stripe Checkout session for upgrading to a paid plan.
- * Free plan does not use Stripe — never call this for `free` / `legacy`.
+ *
+ * When BETA_BILLING_OVERRIDE is on, never creates Checkout — assigns the plan
+ * in-DB with plan_source=beta and returns { beta: true, charged: false }.
+ * Free / legacy never use this route for Stripe.
  */
 export async function POST(request: Request) {
   const authResult = await requireApiUser();
@@ -35,17 +40,6 @@ export async function POST(request: Request) {
     RATE_LIMITS.billing.windowMs,
   );
   if (limited) return limited;
-
-  if (!isStripeConfigured()) {
-    return NextResponse.json(
-      {
-        error:
-          "Billing is not configured yet. Add STRIPE_SECRET_KEY and price IDs to .env.local.",
-        code: "stripe_not_configured",
-      },
-      { status: 503 },
-    );
-  }
 
   let body: unknown;
   try {
@@ -65,6 +59,46 @@ export async function POST(request: Request) {
   const { planSlug, interval } = parsed.data;
   if (!isPaidPlanSlug(planSlug) || !isBillingInterval(interval)) {
     return NextResponse.json({ error: "Invalid plan or interval" }, { status: 400 });
+  }
+
+  // Beta testing: no Stripe charges — assign plan immediately.
+  if (isBetaBillingOverride()) {
+    try {
+      await ensureAppUser(userId);
+      const result = await assignUserPlan(userId, planSlug, {
+        source: "beta",
+      });
+      console.info("[billing.checkout] beta override — no Stripe session", {
+        userId,
+        planSlug: result.planSlug,
+      });
+      return NextResponse.json({
+        ok: true,
+        beta: true,
+        charged: false,
+        planSlug: result.planSlug,
+        planName: result.planName,
+        message:
+          "Plan updated for beta testing. You will not be charged.",
+      });
+    } catch (error) {
+      console.error("[billing.checkout] beta assign failed", error);
+      return NextResponse.json(
+        { error: "Could not update plan for beta testing." },
+        { status: 500 },
+      );
+    }
+  }
+
+  if (!isStripeConfigured()) {
+    return NextResponse.json(
+      {
+        error:
+          "Billing is not configured yet. Add STRIPE_SECRET_KEY and price IDs to .env.local.",
+        code: "stripe_not_configured",
+      },
+      { status: 503 },
+    );
   }
 
   try {

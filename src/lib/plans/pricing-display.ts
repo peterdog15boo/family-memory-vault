@@ -18,6 +18,14 @@ export function getPublicPlans(): PlanSeed[] {
   ).sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
+/**
+ * Beta plan picker: Free / Family / Family Plus / Legacy (prices for context).
+ * Only used when NEXT_PUBLIC_BETA_PLAN_PICKER / BETA_BILLING_OVERRIDE is on.
+ */
+export function getBetaSelectablePlans(): PlanSeed[] {
+  return [...PLAN_CATALOG].sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
 export function formatStorageLabel(bytes: number | null): string {
   if (bytes == null) return "Unlimited storage";
   const gb = bytes / 1024 ** 3;

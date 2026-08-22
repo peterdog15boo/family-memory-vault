@@ -102,6 +102,44 @@ Apply the webhook dedupe migration: `npm run db:migrate` (includes `0010_stripe_
 
 ---
 
+## Beta plan testing
+
+Temporary override so beta testers can switch Free / Family / Family Plus / Legacy **without Stripe charges**.
+
+| Flag | Role |
+|------|------|
+| `NEXT_PUBLIC_BETA_PLAN_PICKER=true` | Shows beta picker UI + enables server override |
+| `BETA_BILLING_OVERRIDE=true` | Server-only: allows assign + short-circuits Checkout (no charges) |
+
+Behavior while enabled:
+
+- `/billing` and `/pricing` show a **Beta testing mode** banner and “Use this plan (beta)” CTAs.
+- Real dollar amounts stay visible for context (“Listed price — not charged in beta”).
+- `POST /api/billing/beta-assign` upserts `subscriptions` with `plan_source = 'beta'` and `plan_assigned_at`.
+- `POST /api/billing/checkout` **never** creates a Stripe Checkout session when override is on — it assigns the plan the same way and returns `{ beta: true, charged: false }`.
+- Feature gates (`getUserPlan`) apply exactly as in production (storage, seats, movies, etc.).
+- Confirmation copy: “Plan updated for beta testing. You will not be charged.”
+
+### Undo for launch
+
+1. Set both flags to `false` / remove them and **redeploy**.
+2. Beta picker hides; Checkout resumes paid Stripe flow; `beta-assign` returns 404.
+3. Existing `plan_source = 'beta'` rows keep their entitlements until you decide conversion policy, **or** reset:
+
+```sql
+UPDATE subscriptions
+SET plan_id = (SELECT id FROM plans WHERE slug = 'free'),
+    billing_interval = 'none',
+    plan_source = 'free',
+    plan_assigned_at = now(),
+    updated_at = now()
+WHERE plan_source = 'beta';
+```
+
+Code: `src/lib/billing/beta-flags.ts`, `src/lib/plans/assign.ts`, `src/app/api/billing/beta-assign`.
+
+---
+
 ## UI
 
 | Surface | What |

@@ -15,7 +15,6 @@ import {
   sql,
   type SQL,
 } from "drizzle-orm";
-import { nanoid } from "nanoid";
 import { logAdminAudit } from "@/lib/admin/audit";
 import { assertAdminUser } from "@/lib/auth/admin";
 import { formatBytes } from "@/lib/billing/quotas";
@@ -32,11 +31,7 @@ import {
   users,
   type PlanSlug,
 } from "@/lib/db/schema";
-import {
-  getPlanBySlug,
-  seedPlans,
-  startOfUtcMonth,
-} from "@/lib/plans";
+import { assignUserPlan } from "@/lib/plans/assign";
 
 export type AdminUserListFilter = {
   q?: string;
@@ -404,60 +399,16 @@ export async function adminSetUserPlan(
 ): Promise<{ planSlug: string; planName: string }> {
   await assertAdminUser(actorUserId);
 
-  await seedPlans();
-  const plan = await getPlanBySlug(planSlug);
-  if (!plan) {
-    throw new Error(`Unknown plan slug: ${planSlug}`);
-  }
-
-  const db = getDb();
-  const now = new Date();
-
-  const [exists] = await db
+  const [exists] = await getDb()
     .select({ id: users.id })
     .from(users)
     .where(eq(users.id, targetUserId))
     .limit(1);
   if (!exists) throw new Error("User not found.");
 
-  const [prior] = await db
-    .select()
-    .from(subscriptions)
-    .where(eq(subscriptions.userId, targetUserId))
-    .limit(1);
-
-  const billingInterval =
-    plan.slug === "free" || plan.priceMonthlyCents === 0 ? "none" : "monthly";
-
-  if (prior) {
-    await db
-      .update(subscriptions)
-      .set({
-        planId: plan.id,
-        status: "active",
-        billingInterval,
-        currentPeriodStart: startOfUtcMonth(now),
-        currentPeriodEnd: null,
-        cancelAtPeriodEnd: false,
-        canceledAt: null,
-        updatedAt: now,
-      })
-      .where(eq(subscriptions.id, prior.id));
-  } else {
-    await db.insert(subscriptions).values({
-      id: nanoid(),
-      userId: targetUserId,
-      familyId: null,
-      planId: plan.id,
-      status: "active",
-      billingInterval,
-      currentPeriodStart: startOfUtcMonth(now),
-      currentPeriodEnd: null,
-      cancelAtPeriodEnd: false,
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
+  const result = await assignUserPlan(targetUserId, planSlug, {
+    source: "admin",
+  });
 
   await logAdminAudit({
     actorId: actorUserId,
@@ -465,15 +416,15 @@ export async function adminSetUserPlan(
     targetType: "user",
     targetId: targetUserId,
     metadata: {
-      planSlug: plan.slug,
-      planName: plan.name,
-      previousPlanId: prior?.planId ?? null,
-      billingInterval,
+      planSlug: result.planSlug,
+      planName: result.planName,
+      previousPlanId: result.previousPlanId,
+      planSource: "admin",
       supportOverride: true,
     },
   });
 
-  return { planSlug: plan.slug, planName: plan.name };
+  return { planSlug: result.planSlug, planName: result.planName };
 }
 
 export async function isUserSuspended(userId: string): Promise<boolean> {

@@ -960,6 +960,12 @@ export const subscriptions = pgTable(
     stripeCustomerId: text("stripe_customer_id"),
     stripeSubscriptionId: text("stripe_subscription_id"),
     stripePriceId: text("stripe_price_id"),
+    /**
+     * How this plan was assigned: stripe | admin | beta | free.
+     * Beta mode (BETA_BILLING_OVERRIDE) writes `beta` — see BILLING.md undo notes.
+     */
+    planSource: text("plan_source"),
+    planAssignedAt: timestamp("plan_assigned_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -972,6 +978,7 @@ export const subscriptions = pgTable(
     index("subscriptions_family_id_idx").on(table.familyId),
     index("subscriptions_plan_id_idx").on(table.planId),
     index("subscriptions_status_idx").on(table.status),
+    index("subscriptions_plan_source_idx").on(table.planSource),
     uniqueIndex("subscriptions_stripe_subscription_id_uidx").on(
       table.stripeSubscriptionId,
     ),

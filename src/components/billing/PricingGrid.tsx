@@ -1,17 +1,21 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Check, Loader2, Sparkles } from "lucide-react";
+import { Check, FlaskConical, Loader2, Sparkles } from "lucide-react";
 import type { BillingInterval, PaidPlanSlug } from "@/lib/stripe/config";
 import {
   formatCents,
+  getBetaSelectablePlans,
   getPublicPlans,
   isPaidPublicPlan,
   planFeatureBullets,
   RECOMMENDED_PLAN_SLUG,
 } from "@/lib/plans/pricing-display";
+import { isBetaPlanPickerEnabled } from "@/lib/billing/beta-flags";
 import { useFormat } from "@/components/i18n/LocaleProvider";
+import { announce } from "@/lib/a11y/announce";
 import { cn } from "@/lib/utils";
 
 type PricingGridProps = {
@@ -26,6 +30,7 @@ type PricingGridProps = {
 
 /**
  * Public plan comparison with monthly/yearly toggle and Checkout CTAs.
+ * When beta plan picker is enabled, assigns plans with no Stripe charges.
  */
 export function PricingGrid({
   currentPlanSlug = null,
@@ -36,11 +41,51 @@ export function PricingGrid({
   className,
 }: PricingGridProps) {
   const format = useFormat();
+  const router = useRouter();
+  const betaMode = isBetaPlanPickerEnabled();
   const [interval, setInterval] = useState<BillingInterval>("monthly");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const plans = getPublicPlans();
+  const plans = betaMode ? getBetaSelectablePlans() : getPublicPlans();
+
+  function runBetaAssign(planSlug: string) {
+    if (!isSignedIn) {
+      window.location.href = `/sign-up?redirect_url=${encodeURIComponent("/billing")}`;
+      return;
+    }
+    setError(null);
+    setNotice(null);
+    setBusy(`beta-${planSlug}`);
+    startTransition(async () => {
+      try {
+        const response = await fetch("/api/billing/beta-assign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ planSlug }),
+        });
+        const data = (await response.json().catch(() => ({}))) as {
+          error?: string;
+          message?: string;
+          planName?: string;
+        };
+        if (!response.ok) {
+          throw new Error(data.error || "Could not update plan.");
+        }
+        const message =
+          data.message ||
+          "Plan updated for beta testing. You will not be charged.";
+        setNotice(message);
+        announce(message, { priority: "polite" });
+        setBusy(null);
+        router.refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Plan update failed.");
+        setBusy(null);
+      }
+    });
+  }
 
   function runCheckout(planSlug: PaidPlanSlug) {
     if (!isSignedIn) {
@@ -48,6 +93,7 @@ export function PricingGrid({
       return;
     }
     setError(null);
+    setNotice(null);
     setBusy(`checkout-${planSlug}`);
     startTransition(async () => {
       try {
@@ -59,7 +105,20 @@ export function PricingGrid({
         const data = (await response.json().catch(() => ({}))) as {
           url?: string;
           error?: string;
+          beta?: boolean;
+          message?: string;
         };
+        // Beta override short-circuits Checkout (no charge, no Stripe URL).
+        if (response.ok && data.beta) {
+          const message =
+            data.message ||
+            "Plan updated for beta testing. You will not be charged.";
+          setNotice(message);
+          announce(message, { priority: "polite" });
+          setBusy(null);
+          router.refresh();
+          return;
+        }
         if (!response.ok || !data.url) {
           throw new Error(data.error || "Could not start checkout.");
         }
@@ -94,48 +153,91 @@ export function PricingGrid({
 
   return (
     <div className={cn(className)}>
-      <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-        <div
-          className="inline-flex rounded-lg border border-ink/10 bg-canvas/80 p-1 shadow-sm"
-          role="group"
-          aria-label="Billing interval"
-        >
-          {(["monthly", "yearly"] as const).map((value) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setInterval(value)}
-              className={cn(
-                "rounded-md px-4 py-2 text-sm font-medium transition",
-                interval === value
-                  ? "bg-accent text-accent-foreground"
-                  : "text-ink-muted hover:text-ink",
-              )}
-            >
-              {value === "monthly" ? "Monthly" : "Yearly"}
-              {value === "yearly" ? (
-                <span
-                  className={cn(
-                    "ml-1.5 text-xs",
-                    interval === value
-                      ? "text-accent-foreground/85"
-                      : "text-accent-deep",
-                  )}
-                >
-                  save ~17%
-                </span>
-              ) : null}
-            </button>
-          ))}
+      {betaMode ? (
+        <div className="mb-6 rounded-lg border border-amber-300/80 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <p className="flex items-center gap-2 font-semibold">
+            <FlaskConical className="size-4 shrink-0" aria-hidden />
+            Beta testing mode
+          </p>
+          <p className="mt-1 text-amber-950/90">
+            You can switch plans freely. No payment is collected. Prices below
+            are shown for context only.
+          </p>
         </div>
-      </div>
+      ) : null}
+
+      {!betaMode ? (
+        <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+          <div
+            className="inline-flex rounded-lg border border-ink/10 bg-canvas/80 p-1 shadow-sm"
+            role="group"
+            aria-label="Billing interval"
+          >
+            {(["monthly", "yearly"] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setInterval(value)}
+                className={cn(
+                  "rounded-md px-4 py-2 text-sm font-medium transition",
+                  interval === value
+                    ? "bg-accent text-accent-foreground"
+                    : "text-ink-muted hover:text-ink",
+                )}
+              >
+                {value === "monthly" ? "Monthly" : "Yearly"}
+                {value === "yearly" ? (
+                  <span
+                    className={cn(
+                      "ml-1.5 text-xs",
+                      interval === value
+                        ? "text-accent-foreground/85"
+                        : "text-accent-deep",
+                    )}
+                  >
+                    save ~17%
+                  </span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+          <div
+            className="inline-flex rounded-lg border border-ink/10 bg-canvas/80 p-1 shadow-sm"
+            role="group"
+            aria-label="Price display interval"
+          >
+            {(["monthly", "yearly"] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setInterval(value)}
+                className={cn(
+                  "rounded-md px-4 py-2 text-sm font-medium transition",
+                  interval === value
+                    ? "bg-accent text-accent-foreground"
+                    : "text-ink-muted hover:text-ink",
+                )}
+              >
+                {value === "monthly" ? "Monthly prices" : "Yearly prices"}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div
         className={cn(
           "mt-10 grid gap-5",
           variant === "page"
-            ? "lg:grid-cols-3 lg:items-stretch"
-            : "md:grid-cols-3",
+            ? betaMode
+              ? "lg:grid-cols-2 xl:grid-cols-4 lg:items-stretch"
+              : "lg:grid-cols-3 lg:items-stretch"
+            : betaMode
+              ? "md:grid-cols-2"
+              : "md:grid-cols-3",
         )}
       >
         {plans.map((plan, index) => {
@@ -177,7 +279,7 @@ export function PricingGrid({
                 </p>
               </header>
 
-              <p className="mt-6 flex items-baseline gap-1">
+              <p className="mt-6 flex flex-wrap items-baseline gap-1">
                 <span className="font-display text-4xl tracking-tight text-ink">
                   {formatCents(priceCents, format.locale)}
                 </span>
@@ -188,6 +290,11 @@ export function PricingGrid({
                 ) : (
                   <span className="text-sm text-ink-muted">forever</span>
                 )}
+                {betaMode && priceCents > 0 ? (
+                  <span className="w-full text-xs font-medium text-amber-900">
+                    Listed price — not charged in beta
+                  </span>
+                ) : null}
               </p>
 
               <ul className="mt-6 flex-1 space-y-2.5">
@@ -209,9 +316,9 @@ export function PricingGrid({
                 {isCurrent ? (
                   <div className="space-y-2">
                     <p className="rounded-md border border-accent/25 bg-accent/10 px-3 py-2.5 text-center text-sm font-medium text-accent-deep">
-                      Current plan
+                      {betaMode ? "Current beta plan" : "Current plan"}
                     </p>
-                    {paid && canManageBilling && isSignedIn ? (
+                    {!betaMode && paid && canManageBilling && isSignedIn ? (
                       <button
                         type="button"
                         disabled={pending}
@@ -229,6 +336,23 @@ export function PricingGrid({
                       </button>
                     ) : null}
                   </div>
+                ) : betaMode ? (
+                  <button
+                    type="button"
+                    disabled={pending || !isSignedIn}
+                    onClick={() => runBetaAssign(plan.slug)}
+                    className={cn(
+                      "inline-flex w-full items-center justify-center gap-2 rounded-md px-4 py-3 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50",
+                      recommended
+                        ? "bg-accent text-accent-foreground hover:bg-accent-deep"
+                        : "border border-ink/15 bg-canvas text-ink hover:border-accent/35 hover:bg-accent/10",
+                    )}
+                  >
+                    {busy === `beta-${plan.slug}` ? (
+                      <Loader2 className="size-4 animate-spin" aria-hidden />
+                    ) : null}
+                    {!isSignedIn ? "Sign in to switch" : "Use this plan (beta)"}
+                  </button>
                 ) : paid ? (
                   <button
                     type="button"
@@ -272,13 +396,22 @@ export function PricingGrid({
         })}
       </div>
 
+      {notice ? (
+        <p
+          className="mx-auto mt-6 max-w-lg rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-sm text-emerald-900"
+          role="status"
+        >
+          {notice}
+        </p>
+      ) : null}
+
       {error ? (
         <p className="mx-auto mt-6 max-w-lg rounded-md border border-red-200 bg-red-50 px-3 py-2 text-center text-sm text-red-800">
           {error}
         </p>
       ) : null}
 
-      {isSignedIn && !stripeConfigured ? (
+      {!betaMode && isSignedIn && !stripeConfigured ? (
         <p className="mx-auto mt-4 max-w-lg text-center text-xs text-ink-muted">
           Stripe isn’t configured in this environment yet — Free still works.
         </p>

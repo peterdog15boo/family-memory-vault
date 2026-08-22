@@ -7,6 +7,10 @@ import { PricingGrid } from "@/components/billing/PricingGrid";
 import { UsageLimitBanner } from "@/components/billing/UsageLimitBanner";
 import { AppPageIntro } from "@/components/ui/AppPageIntro";
 import { getAccountUsageSummary } from "@/lib/billing/account-usage";
+import {
+  isBetaBillingOverride,
+  isBetaPlanPickerEnabled,
+} from "@/lib/billing/beta-flags";
 import { ensureFreeSubscription } from "@/lib/plans";
 import { isStripeConfigured } from "@/lib/stripe";
 import { ensureAppUser } from "@/lib/users";
@@ -39,6 +43,7 @@ export default async function BillingPage({ searchParams }: PageProps) {
           : null;
 
   const stripeConfigured = isStripeConfigured();
+  const betaMode = isBetaPlanPickerEnabled() || isBetaBillingOverride();
 
   return (
     <>
@@ -46,7 +51,11 @@ export default async function BillingPage({ searchParams }: PageProps) {
         slot="billing"
         compact
         title="Billing & usage"
-        description="See what's included in your plan, how much you've used, and upgrade when you need more room for memories."
+        description={
+          betaMode
+            ? "Switch plans freely while we beta-test. Prices are shown for context — no payment is collected."
+            : "See what's included in your plan, how much you've used, and upgrade when you need more room for memories."
+        }
       />
 
       <div className="app-page mx-auto max-w-3xl">
@@ -55,6 +64,7 @@ export default async function BillingPage({ searchParams }: PageProps) {
             planName={summary.planName}
             planSlug={summary.planSlug}
             billingInterval={summary.billingInterval}
+            planSource={summary.planSource}
             canManageBilling={summary.canManageBilling}
             stripeConfigured={stripeConfigured}
           />
@@ -73,10 +83,12 @@ export default async function BillingPage({ searchParams }: PageProps) {
             <div className="flex items-end justify-between gap-3">
               <div>
                 <h2 className="font-display text-lg tracking-tight text-ink">
-                  Change plan
+                  {betaMode ? "Choose a beta plan" : "Change plan"}
                 </h2>
                 <p className="mt-1 text-sm text-ink-muted">
-                  Compare limits and upgrade securely with Stripe.
+                  {betaMode
+                    ? "Feature limits update immediately. You will not be charged."
+                    : "Compare limits and upgrade securely with Stripe."}
                 </p>
               </div>
               <Link

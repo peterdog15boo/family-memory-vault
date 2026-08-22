@@ -228,6 +228,7 @@ export function DashboardHomeModern({
               planName={usage.planName}
               planSlug={usage.planSlug}
               billingInterval={usage.billingInterval}
+              planSource={usage.planSource}
               canManageBilling={usage.canManageBilling}
               stripeConfigured={stripeConfigured}
             />
@@ -290,11 +291,12 @@ export function DashboardHomeOriginal({
         >
           <UsageLimitBanner summary={usage} />
           <CurrentPlanBadge
-            planName={usage.planName}
-            planSlug={usage.planSlug}
-            billingInterval={usage.billingInterval}
-            canManageBilling={usage.canManageBilling}
-            stripeConfigured={stripeConfigured}
+              planName={usage.planName}
+              planSlug={usage.planSlug}
+              billingInterval={usage.billingInterval}
+              planSource={usage.planSource}
+              canManageBilling={usage.canManageBilling}
+              stripeConfigured={stripeConfigured}
           />
           <StorageUsageCard snapshot={usage.storage} variant="compact" />
           <ReviewStatusBanner summary={reviewSummary} />

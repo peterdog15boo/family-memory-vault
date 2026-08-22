@@ -68,6 +68,7 @@ export default async function SettingsPage() {
               planName={summary.planName}
               planSlug={summary.planSlug}
               billingInterval={summary.billingInterval}
+              planSource={summary.planSource}
               canManageBilling={summary.canManageBilling}
               stripeConfigured={stripeConfigured}
             />

@@ -270,6 +270,8 @@ export async function syncStripeSubscription(
     stripeCustomerId: customerId ?? existing?.stripeCustomerId ?? null,
     stripeSubscriptionId,
     stripePriceId,
+    planSource: isTerminalCancel || !mapped ? "free" : "stripe",
+    planAssignedAt: now,
     updatedAt: now,
   };
 
@@ -330,6 +332,8 @@ export async function downgradeToFreeFromStripe(opts: {
       stripeSubscriptionId: null,
       stripePriceId: null,
       // Keep stripeCustomerId so they can re-subscribe via portal/checkout.
+      planSource: "free",
+      planAssignedAt: now,
       updatedAt: now,
     })
     .where(eq(subscriptions.id, existing.id))

@@ -276,6 +276,8 @@ export async function ensureFreeSubscription(
         currentPeriodEnd: null,
         cancelAtPeriodEnd: false,
         canceledAt: null,
+        planSource: prior.planSource ?? "free",
+        planAssignedAt: prior.planAssignedAt ?? now,
         updatedAt: now,
       })
       .where(eq(subscriptions.id, prior.id))
@@ -295,6 +297,8 @@ export async function ensureFreeSubscription(
       currentPeriodStart: startOfUtcMonth(now),
       currentPeriodEnd: null,
       cancelAtPeriodEnd: false,
+      planSource: "free",
+      planAssignedAt: now,
       createdAt: now,
       updatedAt: now,
     })

@@ -34,6 +34,8 @@ export type AccountUsageSummary = {
   planName: string;
   planSlug: string;
   billingInterval: string | null;
+  /** stripe | admin | beta | free | null */
+  planSource: string | null;
   nextBillingDate: Date | null;
   nextBillingLabel: string | null;
   canManageBilling: boolean;
@@ -170,6 +172,7 @@ export async function getAccountUsageSummary(
     planName: planCtx.plan.name,
     planSlug: String(planCtx.plan.slug),
     billingInterval: planCtx.subscription?.billingInterval ?? null,
+    planSource: planCtx.subscription?.planSource ?? null,
     nextBillingDate,
     nextBillingLabel:
       nextBillingDate && isPaid

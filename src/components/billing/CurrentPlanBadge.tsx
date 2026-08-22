@@ -9,6 +9,7 @@ type CurrentPlanBadgeProps = {
   planName: string;
   planSlug: string;
   billingInterval?: string | null;
+  planSource?: string | null;
   canManageBilling: boolean;
   stripeConfigured: boolean;
   variant?: "dashboard" | "compact";
@@ -22,6 +23,7 @@ export function CurrentPlanBadge({
   planName,
   planSlug,
   billingInterval,
+  planSource = null,
   canManageBilling,
   stripeConfigured,
   variant = "dashboard",
@@ -33,7 +35,9 @@ export function CurrentPlanBadge({
     planSlug === "family" ||
     planSlug === "family_plus" ||
     planSlug === "legacy";
-  const showManage = isPaid && canManageBilling && stripeConfigured;
+  const isBetaPlan = planSource === "beta";
+  const showManage =
+    isPaid && canManageBilling && stripeConfigured && !isBetaPlan;
 
   function openPortal() {
     setError(null);
@@ -76,13 +80,20 @@ export function CurrentPlanBadge({
           <p className="text-sm font-medium text-ink">
             {planName} plan
             <span className="font-normal text-ink-muted">{intervalLabel}</span>
+            {isBetaPlan ? (
+              <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-950">
+                Beta
+              </span>
+            ) : null}
           </p>
           <p className="mt-0.5 text-xs text-ink-muted">
-            {planSlug === "free"
-              ? "Upgrade anytime for more storage, family seats, and movies."
-              : planSlug === "legacy"
-                ? "Grandfathered plan — manage details in settings."
-                : "You’re on a paid plan. Change or cancel anytime."}
+            {isBetaPlan
+              ? "Assigned for beta testing — you are not being charged."
+              : planSlug === "free"
+                ? "Upgrade anytime for more storage, family seats, and movies."
+                : planSlug === "legacy"
+                  ? "Grandfathered plan — manage details in settings."
+                  : "You’re on a paid plan. Change or cancel anytime."}
           </p>
           {error ? (
             <p className="mt-1 text-xs text-red-700">{error}</p>
