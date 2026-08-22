@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireApiUser } from "@/lib/auth/api";
+import { requireLegacyPlusApiUser } from "@/lib/auth/plan-api";
 import { apiError, apiErrorFromUnknown } from "@/lib/http/api-error";
 import { LINKED_ACCOUNT_CATEGORIES } from "@/lib/plaid/categories";
 import { updateLinkedAccountCategory } from "@/lib/plaid/service";
@@ -25,7 +25,7 @@ export async function PATCH(request: Request) {
   const originBlock = rejectUntrustedOrigin(request);
   if (originBlock) return originBlock;
 
-  const authResult = await requireApiUser();
+  const authResult = await requireLegacyPlusApiUser();
   if (!authResult.ok) return authResult.response;
   const { userId } = authResult;
 

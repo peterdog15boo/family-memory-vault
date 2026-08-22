@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
-import { requireApiUser } from "@/lib/auth/api";
+import { requireLegacyPlusApiUser } from "@/lib/auth/plan-api";
 import {
   deletePrivateDocumentWithStorage,
   getPrivateDocumentWithCategory,
@@ -42,7 +42,7 @@ const patchSchema = z.object({
  * GET /api/documents/[id]
  */
 export async function GET(_request: Request, context: RouteContext) {
-  const authResult = await requireApiUser();
+  const authResult = await requireLegacyPlusApiUser();
   if (!authResult.ok) return authResult.response;
   const { userId } = authResult;
   const { id } = await context.params;
@@ -67,7 +67,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   const originBlocked = rejectUntrustedOrigin(request);
   if (originBlocked) return originBlocked;
 
-  const authResult = await requireApiUser();
+  const authResult = await requireLegacyPlusApiUser();
   if (!authResult.ok) return authResult.response;
   const { userId } = authResult;
   const { id } = await context.params;
@@ -131,7 +131,7 @@ export async function DELETE(request: Request, context: RouteContext) {
   const originBlocked = rejectUntrustedOrigin(request);
   if (originBlocked) return originBlocked;
 
-  const authResult = await requireApiUser();
+  const authResult = await requireLegacyPlusApiUser();
   if (!authResult.ok) return authResult.response;
   const { userId } = authResult;
   const { id } = await context.params;

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/auth/api";
+import { isBetaBillingOverride } from "@/lib/billing/beta-flags";
 import {
   enforceRateLimit,
   RATE_LIMITS,
@@ -26,6 +27,17 @@ export async function POST() {
     RATE_LIMITS.billing.windowMs,
   );
   if (limited) return limited;
+
+  if (isBetaBillingOverride()) {
+    return NextResponse.json(
+      {
+        error:
+          "Billing portal is paused during beta plan testing. Switch plans on Billing — no payment is collected.",
+        code: "beta_billing_override",
+      },
+      { status: 400 },
+    );
+  }
 
   if (!isStripeConfigured()) {
     return NextResponse.json(

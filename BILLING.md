@@ -104,25 +104,30 @@ Apply the webhook dedupe migration: `npm run db:migrate` (includes `0010_stripe_
 
 ## Beta plan testing
 
-Temporary override so beta testers can switch Free / Family / Family Plus / Legacy **without Stripe charges**.
+Temporary override so beta testers can switch **Free / Family / Legacy+** without Stripe charges.
 
 | Flag | Role |
 |------|------|
 | `NEXT_PUBLIC_BETA_PLAN_PICKER=true` | Shows beta picker UI + enables server override |
 | `BETA_BILLING_OVERRIDE=true` | Server-only: allows assign + short-circuits Checkout (no charges) |
+| *(unset)* | Follows `NEXT_PUBLIC_ENABLE_BETA_FEEDBACK` — product beta turns plan switching on |
+| Explicit `false` | Disables even when feedback beta is on |
 
 Behavior while enabled:
 
-- `/billing` and `/pricing` show a **Beta testing mode** banner and “Use this plan (beta)” CTAs.
+- `/billing` and `/pricing` show **“Beta testing — plans are free to try”** and free switch CTAs.
 - Real dollar amounts stay visible for context (“Listed price — not charged in beta”).
 - `POST /api/billing/beta-assign` upserts `subscriptions` with `plan_source = 'beta'` and `plan_assigned_at`.
 - `POST /api/billing/checkout` **never** creates a Stripe Checkout session when override is on — it assigns the plan the same way and returns `{ beta: true, charged: false }`.
-- Feature gates (`getUserPlan`) apply exactly as in production (storage, seats, movies, etc.).
-- Confirmation copy: “Plan updated for beta testing. You will not be charged.”
+- Stripe Customer Portal is blocked with a clear beta message.
+- Feature gates (`getUserPlan`) apply exactly as in production (storage, seats, movies, Legacy+ vaults, etc.).
+- Confirmation copy: “You’re now on the {plan} plan for beta testing. No payment will be taken.”
+
+Legacy+ unlocks Private Documents, Digital Legacy, and Connected Accounts (`features.legacy` on the `legacy` plan slug).
 
 ### Undo for launch
 
-1. Set both flags to `false` / remove them and **redeploy**.
+1. Set both flags to `false` (do not leave them unset if feedback beta stays on) and **redeploy**.
 2. Beta picker hides; Checkout resumes paid Stripe flow; `beta-assign` returns 404.
 3. Existing `plan_source = 'beta'` rows keep their entitlements until you decide conversion policy, **or** reset:
 

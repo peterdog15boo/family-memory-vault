@@ -17,6 +17,7 @@ import { AppPageIntro } from "@/components/ui/AppPageIntro";
 import { PageHero } from "@/components/ui/PageHero";
 import { useCopy, useTranslations } from "@/components/i18n/LocaleProvider";
 import type { AccountUsageSummary } from "@/lib/billing/account-usage";
+import { isBetaPlanPickerEnabled } from "@/lib/billing/beta-flags";
 import type { MediaReviewSummary } from "@/lib/media/queries";
 import type { SafeMediaItem } from "@/lib/media/queries";
 import type { MemoryListItem } from "@/lib/memories";
@@ -231,6 +232,7 @@ export function DashboardHomeModern({
               planSource={usage.planSource}
               canManageBilling={usage.canManageBilling}
               stripeConfigured={stripeConfigured}
+              betaMode={isBetaPlanPickerEnabled()}
             />
             <StorageUsageCard snapshot={usage.storage} variant="compact" />
             <ReviewStatusBanner summary={reviewSummary} />
@@ -297,6 +299,7 @@ export function DashboardHomeOriginal({
               planSource={usage.planSource}
               canManageBilling={usage.canManageBilling}
               stripeConfigured={stripeConfigured}
+              betaMode={isBetaPlanPickerEnabled()}
           />
           <StorageUsageCard snapshot={usage.storage} variant="compact" />
           <ReviewStatusBanner summary={reviewSummary} />

@@ -18,12 +18,17 @@ export function getPublicPlans(): PlanSeed[] {
   ).sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
+/** Plans shown in beta billing mode (Free / Family / Legacy+). */
+export const BETA_PLAN_SLUGS = ["free", "family", "legacy"] as const;
+
 /**
- * Beta plan picker: Free / Family / Family Plus / Legacy (prices for context).
- * Only used when NEXT_PUBLIC_BETA_PLAN_PICKER / BETA_BILLING_OVERRIDE is on.
+ * Beta plan picker: Free / Family / Legacy+ (prices for context only).
+ * Only used when beta plan picker / billing override is on.
  */
 export function getBetaSelectablePlans(): PlanSeed[] {
-  return [...PLAN_CATALOG].sort((a, b) => a.sortOrder - b.sortOrder);
+  return PLAN_CATALOG.filter((p) =>
+    (BETA_PLAN_SLUGS as readonly string[]).includes(p.slug),
+  ).sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
 export function formatStorageLabel(bytes: number | null): string {
@@ -79,6 +84,15 @@ export function planFeatureBullets(plan: PlanSeed): string[] {
   }
   if (plan.features.priorityRender) {
     bullets.push("Priority movie rendering");
+  }
+  if (plan.features.privateDocuments || plan.features.legacy) {
+    bullets.push("Private Documents");
+  }
+  if (plan.features.digitalLegacy || plan.features.legacy) {
+    bullets.push("Digital Legacy vault");
+  }
+  if (plan.features.connectedAccounts || plan.features.legacy) {
+    bullets.push("Connected Accounts");
   }
 
   return bullets;

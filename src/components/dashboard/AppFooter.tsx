@@ -7,19 +7,28 @@ import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { APP_FOOTER_MEDIA } from "@/content/page-hero-media";
 
+type AppFooterProps = {
+  /** Documents / Connected Accounts — Legacy+ only. */
+  showLegacyPlusNav?: boolean;
+};
+
 /**
  * Modern app footer — restrained full-bleed cinematic close with brand,
  * warm tagline, and useful vault links. Original theme does not render this.
  */
-export function AppFooter() {
+export function AppFooter({ showLegacyPlusNav = false }: AppFooterProps) {
   const year = new Date().getFullYear();
   const t = useTranslations();
   const footerLinks = [
     { href: "/settings", label: t("nav.settings") },
     { href: "/family", label: t("nav.family") },
     { href: "/family-memory-box", label: t("nav.digitize") },
-    { href: "/documents", label: t("nav.documents") },
-    { href: "/accounts", label: t("nav.accounts") },
+    ...(showLegacyPlusNav
+      ? [
+          { href: "/documents", label: t("nav.documents") },
+          { href: "/accounts", label: t("nav.accounts") },
+        ]
+      : []),
     { href: "/memories", label: t("nav.memories") },
     { href: "/privacy", label: t("nav.privacy") },
     { href: "/terms", label: t("nav.terms") },
@@ -47,9 +56,7 @@ export function AppFooter() {
             >
               <BrandLogo tone="color" size="lg" decorative />
             </Link>
-            <p className="app-footer-tagline">
-              {t("meta.tagline")}
-            </p>
+            <p className="app-footer-tagline">{t("meta.tagline")}</p>
           </div>
 
           <nav className="app-footer-links" aria-label={t("nav.footer")}>

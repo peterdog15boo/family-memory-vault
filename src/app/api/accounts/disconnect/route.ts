@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireApiUser } from "@/lib/auth/api";
+import { requireLegacyPlusApiUser } from "@/lib/auth/plan-api";
 import { apiError, apiErrorFromUnknown } from "@/lib/http/api-error";
 import { disconnectPlaidItemForUser } from "@/lib/plaid/service";
 import {
@@ -40,6 +40,9 @@ export async function POST(request: Request) {
       details: parsed.error.flatten(),
     });
   }
+
+  const authResult = await requireLegacyPlusApiUser();
+  if (!authResult.ok) return authResult.response;
 
   const stepUp = await requireSensitiveStepUp({
     allowExplicitConfirm: true,

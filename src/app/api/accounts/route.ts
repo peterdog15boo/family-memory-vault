@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireApiUser } from "@/lib/auth/api";
+import { requireLegacyPlusApiUser } from "@/lib/auth/plan-api";
 import { apiErrorFromUnknown } from "@/lib/http/api-error";
 import { listConnectedAccountsForUser } from "@/lib/plaid/service";
 import {
@@ -14,7 +14,7 @@ export const runtime = "nodejs";
  * GET /api/accounts — list owner-scoped linked financial accounts.
  */
 export async function GET() {
-  const authResult = await requireApiUser();
+  const authResult = await requireLegacyPlusApiUser();
   if (!authResult.ok) return authResult.response;
   const { userId } = authResult;
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireApiUser } from "@/lib/auth/api";
+import { requireLegacyPlusApiUser } from "@/lib/auth/plan-api";
 import { LEGACY_VIDEO_SECTION_TYPES } from "@/lib/db/schema";
 import { reorderLegacyVideos } from "@/lib/legacy/videos";
 import { serializeLegacyVideo } from "@/lib/legacy/serialize";
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   const originBlocked = rejectUntrustedOrigin(request);
   if (originBlocked) return originBlocked;
 
-  const authResult = await requireApiUser();
+  const authResult = await requireLegacyPlusApiUser();
   if (!authResult.ok) return authResult.response;
   const { userId } = authResult;
 

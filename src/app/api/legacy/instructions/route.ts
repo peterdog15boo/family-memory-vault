@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
-import { requireApiUser } from "@/lib/auth/api";
+import { requireLegacyPlusApiUser } from "@/lib/auth/plan-api";
 import { LEGACY_INSTRUCTION_SECTION_TYPES } from "@/lib/db/schema";
 import { listPrivateDocuments } from "@/lib/documents";
 import {
@@ -28,7 +28,7 @@ const createSchema = z.object({
 });
 
 export async function GET(request: Request) {
-  const authResult = await requireApiUser();
+  const authResult = await requireLegacyPlusApiUser();
   if (!authResult.ok) return authResult.response;
   const { userId } = authResult;
 
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
   const originBlocked = rejectUntrustedOrigin(request);
   if (originBlocked) return originBlocked;
 
-  const authResult = await requireApiUser();
+  const authResult = await requireLegacyPlusApiUser();
   if (!authResult.ok) return authResult.response;
   const { userId } = authResult;
 

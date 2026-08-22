@@ -48,6 +48,17 @@ describe("getCatalogPlan", () => {
     expect(family.features.cinematicThemes).toBe(true);
     expect(family.features.aiSoundtrack).toBe(true);
   });
+
+  it("gates Legacy+ vault tools on the legacy plan only", () => {
+    const legacy = PLAN_CATALOG.find((p) => p.slug === "legacy")!;
+    const free = PLAN_CATALOG.find((p) => p.slug === "free")!;
+    const family = PLAN_CATALOG.find((p) => p.slug === "family")!;
+    expect(legacy.name).toBe("Legacy+");
+    expect(legacy.features.legacy).toBe(true);
+    expect(legacy.features.privateDocuments).toBe(true);
+    expect(free.features.legacy).toBeFalsy();
+    expect(family.features.legacy).toBeFalsy();
+  });
 });
 
 describe("isAdvancedMovieTheme", () => {

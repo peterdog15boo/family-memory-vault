@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireApiUser } from "@/lib/auth/api";
+import { requireLegacyPlusApiUser } from "@/lib/auth/plan-api";
 import {
   deleteLegacyVideo,
   getLegacyVideoForUser,
@@ -30,7 +30,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   const originBlocked = rejectUntrustedOrigin(request);
   if (originBlocked) return originBlocked;
 
-  const authResult = await requireApiUser();
+  const authResult = await requireLegacyPlusApiUser();
   if (!authResult.ok) return authResult.response;
   const { userId } = authResult;
 
@@ -82,7 +82,7 @@ export async function DELETE(request: Request, context: RouteContext) {
   const originBlocked = rejectUntrustedOrigin(request);
   if (originBlocked) return originBlocked;
 
-  const authResult = await requireApiUser();
+  const authResult = await requireLegacyPlusApiUser();
   if (!authResult.ok) return authResult.response;
   const { userId } = authResult;
 
@@ -110,7 +110,7 @@ export async function DELETE(request: Request, context: RouteContext) {
  * GET /api/legacy/videos/[id] — metadata only (no signed URLs).
  */
 export async function GET(_request: Request, context: RouteContext) {
-  const authResult = await requireApiUser();
+  const authResult = await requireLegacyPlusApiUser();
   if (!authResult.ok) return authResult.response;
   const { userId } = authResult;
 

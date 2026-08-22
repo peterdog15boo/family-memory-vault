@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
-import { requireApiUser } from "@/lib/auth/api";
+import { requireLegacyPlusApiUser } from "@/lib/auth/plan-api";
 import { denyEmergencyAccess } from "@/lib/emergency-access";
 import { serializeEmergencyAccessDesignation } from "@/lib/emergency-access/serialize";
 import { apiError, apiErrorFromUnknown } from "@/lib/http/api-error";
@@ -20,7 +20,7 @@ export async function POST(request: Request, context: RouteContext) {
   const originBlocked = rejectUntrustedOrigin(request);
   if (originBlocked) return originBlocked;
 
-  const authResult = await requireApiUser();
+  const authResult = await requireLegacyPlusApiUser();
   if (!authResult.ok) return authResult.response;
   const { userId } = authResult;
   const { id } = await context.params;

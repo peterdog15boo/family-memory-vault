@@ -96,12 +96,13 @@ export const PLAN_CATALOG: readonly PlanSeed[] = [
   },
   {
     id: "plan_legacy",
-    name: "Legacy",
+    name: "Legacy+",
     slug: "legacy",
     description:
-      "Grandfathered plan for early families — generous limits, no public checkout.",
-    priceMonthlyCents: 0,
-    priceYearlyCents: 0,
+      "Top-tier vault — Digital Legacy, Private Documents, Connected Accounts, and generous limits.",
+    /** Display / context pricing for beta; grandfathered Stripe checkouts stay closed. */
+    priceMonthlyCents: 2999,
+    priceYearlyCents: 29990,
     storageLimitBytes: null,
     maxFamilyMembers: 20,
     maxMoviesPerMonth: 200,
@@ -115,7 +116,11 @@ export const PLAN_CATALOG: readonly PlanSeed[] = [
       maxAiSoundtracksPerMonth: 100,
       maxPeople: null,
       supportLevel: "priority",
+      /** Unlocks Digital Legacy, Private Documents, Connected Accounts. */
       legacy: true,
+      privateDocuments: true,
+      digitalLegacy: true,
+      connectedAccounts: true,
     },
     sortOrder: 99,
   },

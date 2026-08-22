@@ -17,7 +17,12 @@ import {
   publicAccountPreferences,
 } from "@/lib/account-preferences";
 import { getAccountUsageSummary } from "@/lib/billing/account-usage";
+import {
+  isBetaBillingOverride,
+  isBetaPlanPickerEnabled,
+} from "@/lib/billing/beta-flags";
 import { getTranslations } from "@/lib/i18n/server";
+import { canUseLegacyPlusFeatures } from "@/lib/plans/gates";
 import { ensureFreeSubscription } from "@/lib/plans";
 import { isStripeConfigured } from "@/lib/stripe";
 import { ensureAppUser } from "@/lib/users";
@@ -34,13 +39,17 @@ export default async function SettingsPage() {
   await ensureAppUser(userId);
   await ensureFreeSubscription(userId);
 
-  const [summary, preferences, idleTimeout, t] = await Promise.all([
-    getAccountUsageSummary(userId),
-    getAccountPreferences(userId),
-    getIdleTimeoutPolicyForUser(userId),
-    getTranslations(),
-  ]);
+  const [summary, preferences, idleTimeout, t, legacyPlusGate] =
+    await Promise.all([
+      getAccountUsageSummary(userId),
+      getAccountPreferences(userId),
+      getIdleTimeoutPolicyForUser(userId),
+      getTranslations(),
+      canUseLegacyPlusFeatures(userId),
+    ]);
+  const showLegacyPlusLinks = legacyPlusGate.allowed;
   const stripeConfigured = isStripeConfigured();
+  const betaMode = isBetaPlanPickerEnabled() || isBetaBillingOverride();
 
   return (
     <>
@@ -71,6 +80,7 @@ export default async function SettingsPage() {
               planSource={summary.planSource}
               canManageBilling={summary.canManageBilling}
               stripeConfigured={stripeConfigured}
+              betaMode={betaMode}
             />
             <p className="text-sm text-ink-muted">
               {t("settings.billingHelp").split("{billing}")[0]}
@@ -94,42 +104,46 @@ export default async function SettingsPage() {
         </div>
 
         <ul className="settings-link-list mt-6 space-y-3">
-          <li>
-            <Link
-              href="/accounts"
-              className="settings-link-card group flex items-start gap-4 rounded-2xl border border-ink/10 bg-canvas/80 px-5 py-4 transition hover:border-accent/35 hover:bg-accent/5"
-            >
-              <span className="settings-link-icon mt-0.5 rounded-md bg-accent/15 p-2 text-accent-deep">
-                <Landmark className="size-5" aria-hidden />
-              </span>
-              <span className="min-w-0">
-                <span className="block font-display text-lg tracking-tight text-ink group-hover:text-accent-deep">
-                  {t("settings.connectedAccounts")}
+          {showLegacyPlusLinks ? (
+            <li>
+              <Link
+                href="/accounts"
+                className="settings-link-card group flex items-start gap-4 rounded-2xl border border-ink/10 bg-canvas/80 px-5 py-4 transition hover:border-accent/35 hover:bg-accent/5"
+              >
+                <span className="settings-link-icon mt-0.5 rounded-md bg-accent/15 p-2 text-accent-deep">
+                  <Landmark className="size-5" aria-hidden />
                 </span>
-                <span className="mt-1 block text-sm leading-relaxed text-ink-muted">
-                  {t("settings.connectedAccountsDescription")}
+                <span className="min-w-0">
+                  <span className="block font-display text-lg tracking-tight text-ink group-hover:text-accent-deep">
+                    {t("settings.connectedAccounts")}
+                  </span>
+                  <span className="mt-1 block text-sm leading-relaxed text-ink-muted">
+                    {t("settings.connectedAccountsDescription")}
+                  </span>
                 </span>
-              </span>
-            </Link>
-          </li>
-          <li>
-            <Link
-              href="/legacy"
-              className="settings-link-card group flex items-start gap-4 rounded-2xl border border-ink/10 bg-canvas/80 px-5 py-4 transition hover:border-accent/35 hover:bg-accent/5"
-            >
-              <span className="settings-link-icon mt-0.5 rounded-md bg-accent/15 p-2 text-accent-deep">
-                <Heart className="size-5" aria-hidden />
-              </span>
-              <span className="min-w-0">
-                <span className="block font-display text-lg tracking-tight text-ink group-hover:text-accent-deep">
-                  {t("settings.digitalLegacy")}
+              </Link>
+            </li>
+          ) : null}
+          {showLegacyPlusLinks ? (
+            <li>
+              <Link
+                href="/legacy"
+                className="settings-link-card group flex items-start gap-4 rounded-2xl border border-ink/10 bg-canvas/80 px-5 py-4 transition hover:border-accent/35 hover:bg-accent/5"
+              >
+                <span className="settings-link-icon mt-0.5 rounded-md bg-accent/15 p-2 text-accent-deep">
+                  <Heart className="size-5" aria-hidden />
                 </span>
-                <span className="mt-1 block text-sm leading-relaxed text-ink-muted">
-                  {t("settings.digitalLegacyDescription")}
+                <span className="min-w-0">
+                  <span className="block font-display text-lg tracking-tight text-ink group-hover:text-accent-deep">
+                    {t("settings.digitalLegacy")}
+                  </span>
+                  <span className="mt-1 block text-sm leading-relaxed text-ink-muted">
+                    {t("settings.digitalLegacyDescription")}
+                  </span>
                 </span>
-              </span>
-            </Link>
-          </li>
+              </Link>
+            </li>
+          ) : null}
           <li>
             <Link
               href="/emergency-access"

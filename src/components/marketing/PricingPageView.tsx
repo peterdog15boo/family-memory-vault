@@ -13,6 +13,7 @@ type PricingPageViewProps = {
   isSignedIn: boolean;
   canManageBilling: boolean;
   stripeConfigured: boolean;
+  betaMode?: boolean;
 };
 
 /**
@@ -25,6 +26,7 @@ export function PricingPageView({
   isSignedIn,
   canManageBilling,
   stripeConfigured,
+  betaMode = false,
 }: PricingPageViewProps) {
   const { theme, ready } = useTheme();
   const [domTheme, setDomTheme] = useState<AppTheme | null>(null);
@@ -89,6 +91,7 @@ export function PricingPageView({
             isSignedIn={isSignedIn}
             stripeConfigured={stripeConfigured}
             canManageBilling={canManageBilling}
+            betaMode={betaMode}
           />
         </section>
 
@@ -162,6 +165,7 @@ export function PricingPageView({
           isSignedIn={isSignedIn}
           stripeConfigured={stripeConfigured}
           canManageBilling={canManageBilling}
+          betaMode={betaMode}
         />
       </section>
 

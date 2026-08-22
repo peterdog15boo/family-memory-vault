@@ -10,6 +10,7 @@ import { shouldRedirectToTerms } from "@/lib/terms/gate";
 import { getUnreadCount } from "@/lib/notifications";
 import type { AvaProgress } from "@/lib/ava/types";
 import { getIdleTimeoutPolicyForUser } from "@/lib/account-preferences";
+import { canUseLegacyPlusFeatures } from "@/lib/plans/gates";
 import { ensureAppUser } from "@/lib/users";
 
 /**
@@ -124,14 +125,21 @@ export default async function AppLayout({
     redirect(`/terms-agree?redirect_url=${encodeURIComponent(safe)}`);
   }
 
-  const [{ displayName, email }, unreadCount, admin, avaProgress, idleTimeoutPolicy] =
-    await Promise.all([
-      resolveShellUser(userId),
-      safeUnreadCount(userId),
-      isAdmin(userId),
-      safeAvaProgress(userId),
-      safeIdleTimeoutPolicy(userId),
-    ]);
+  const [
+    { displayName, email },
+    unreadCount,
+    admin,
+    avaProgress,
+    idleTimeoutPolicy,
+    showLegacyPlusNav,
+  ] = await Promise.all([
+    resolveShellUser(userId),
+    safeUnreadCount(userId),
+    isAdmin(userId),
+    safeAvaProgress(userId),
+    safeIdleTimeoutPolicy(userId),
+    safeShowLegacyPlusNav(userId),
+  ]);
 
   return (
     <DashboardShell
@@ -141,10 +149,24 @@ export default async function AppLayout({
       initialUnreadCount={unreadCount}
       initialAvaProgress={avaProgress}
       idleTimeoutPolicy={idleTimeoutPolicy}
+      showLegacyPlusNav={showLegacyPlusNav}
     >
       {children}
     </DashboardShell>
   );
+}
+
+async function safeShowLegacyPlusNav(
+  userId: string | null | undefined,
+): Promise<boolean> {
+  if (!userId) return false;
+  try {
+    const gate = await canUseLegacyPlusFeatures(userId);
+    return gate.allowed;
+  } catch (error) {
+    console.warn("[app.layout] canUseLegacyPlusFeatures failed", error);
+    return false;
+  }
 }
 
 async function safeUnreadCount(

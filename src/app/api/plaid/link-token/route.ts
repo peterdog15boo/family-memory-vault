@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireApiUser } from "@/lib/auth/api";
+import { requireLegacyPlusApiUser } from "@/lib/auth/plan-api";
 import { apiError, apiErrorFromUnknown } from "@/lib/http/api-error";
 import { isPlaidConfigured } from "@/lib/plaid/config";
 import { createLinkTokenForUser } from "@/lib/plaid/service";
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   const originBlock = rejectUntrustedOrigin(request);
   if (originBlock) return originBlock;
 
-  const authResult = await requireApiUser();
+  const authResult = await requireLegacyPlusApiUser();
   if (!authResult.ok) return authResult.response;
   const { userId } = authResult;
 

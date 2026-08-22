@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireApiUser } from "@/lib/auth/api";
-import { isBetaBillingOverride } from "@/lib/billing/beta-flags";
+import {
+  betaPlanSuccessMessage,
+  isBetaBillingOverride,
+} from "@/lib/billing/beta-flags";
 import {
   assignUserPlan,
   isAssignablePlanSlug,
@@ -67,14 +71,23 @@ export async function POST(request: Request) {
       previousPlanId: result.previousPlanId,
     });
 
+    revalidatePath("/billing");
+    revalidatePath("/pricing");
+    revalidatePath("/dashboard");
+    revalidatePath("/documents");
+    revalidatePath("/legacy");
+    revalidatePath("/accounts");
+    revalidatePath("/family");
+    revalidatePath("/upload");
+    revalidatePath("/", "layout");
+
     return NextResponse.json({
       ok: true,
       beta: true,
       charged: false,
       planSlug: result.planSlug,
       planName: result.planName,
-      message:
-        "Plan updated for beta testing. You will not be charged.",
+      message: `${betaPlanSuccessMessage(result.planName)} You will not be charged. No payment info is required.`,
     });
   } catch (error) {
     console.error("[billing.beta-assign] failed", error);

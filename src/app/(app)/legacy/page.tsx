@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { LegacyPlusLockedPage } from "@/components/billing/LegacyPlusLockedPage";
 import { LegacyPlanningBoard } from "@/components/legacy/LegacyPlanningBoard";
 import { AppPageIntro } from "@/components/ui/AppPageIntro";
 import { HintTooltip } from "@/components/ui/HintTooltip";
@@ -10,6 +11,7 @@ import {
   serializePlanningBoard,
 } from "@/lib/legacy/planning";
 import { serializeLegacyDocumentOption } from "@/lib/legacy/serialize";
+import { canUseLegacyPlusFeatures } from "@/lib/plans/gates";
 import { ensureAppUser } from "@/lib/users";
 
 export default async function LegacyPlanningPage() {
@@ -17,6 +19,11 @@ export default async function LegacyPlanningPage() {
   if (!isAuthenticated || !userId) redirect("/");
 
   await ensureAppUser(userId);
+  const gate = await canUseLegacyPlusFeatures(userId);
+  if (!gate.allowed) {
+    return <LegacyPlusLockedPage featureLabel="Digital Legacy" gate={gate} />;
+  }
+
   const t = await getTranslations();
 
   const [{ score, items }, documents] = await Promise.all([

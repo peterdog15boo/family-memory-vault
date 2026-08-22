@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { ArrowUpRight, CreditCard, Loader2 } from "lucide-react";
+import { BETA_PLAN_BADGE, isBetaPlanPickerEnabled } from "@/lib/billing/beta-flags";
 import { cn } from "@/lib/utils";
 
 type CurrentPlanBadgeProps = {
@@ -12,6 +13,8 @@ type CurrentPlanBadgeProps = {
   planSource?: string | null;
   canManageBilling: boolean;
   stripeConfigured: boolean;
+  /** Server-resolved beta mode (preferred over client env alone). */
+  betaMode?: boolean;
   variant?: "dashboard" | "compact";
   className?: string;
 };
@@ -26,18 +29,23 @@ export function CurrentPlanBadge({
   planSource = null,
   canManageBilling,
   stripeConfigured,
+  betaMode: betaModeProp,
   variant = "dashboard",
   className,
 }: CurrentPlanBadgeProps) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const betaMode =
+    typeof betaModeProp === "boolean"
+      ? betaModeProp
+      : isBetaPlanPickerEnabled();
   const isPaid =
     planSlug === "family" ||
     planSlug === "family_plus" ||
     planSlug === "legacy";
-  const isBetaPlan = planSource === "beta";
+  const isBetaPlan = planSource === "beta" || betaMode;
   const showManage =
-    isPaid && canManageBilling && stripeConfigured && !isBetaPlan;
+    isPaid && canManageBilling && stripeConfigured && !isBetaPlan && !betaMode;
 
   function openPortal() {
     setError(null);
@@ -87,12 +95,12 @@ export function CurrentPlanBadge({
             ) : null}
           </p>
           <p className="mt-0.5 text-xs text-ink-muted">
-            {isBetaPlan
-              ? "Assigned for beta testing — you are not being charged."
+            {betaMode || planSource === "beta"
+              ? BETA_PLAN_BADGE
               : planSlug === "free"
                 ? "Upgrade anytime for more storage, family seats, and movies."
                 : planSlug === "legacy"
-                  ? "Grandfathered plan — manage details in settings."
+                  ? "Legacy+ includes Digital Legacy, Private Documents, and Connected Accounts."
                   : "You’re on a paid plan. Change or cancel anytime."}
           </p>
           {error ? (
@@ -115,7 +123,15 @@ export function CurrentPlanBadge({
             Manage billing
           </button>
         ) : null}
-        {planSlug !== "legacy" && planSlug !== "family_plus" ? (
+        {betaMode ? (
+          <Link
+            href="/billing"
+            className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-foreground transition hover:bg-accent-deep"
+          >
+            Switch plans
+            <ArrowUpRight className="size-3.5" aria-hidden />
+          </Link>
+        ) : planSlug !== "legacy" && planSlug !== "family_plus" ? (
           <Link
             href="/pricing"
             className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-foreground transition hover:bg-accent-deep"
@@ -131,7 +147,7 @@ export function CurrentPlanBadge({
             View plans
           </Link>
         ) : null}
-        {variant === "dashboard" && planSlug === "legacy" ? (
+        {variant === "dashboard" && planSlug === "legacy" && !betaMode ? (
           <Link
             href="/billing"
             className="text-sm font-medium text-accent-deep hover:text-accent"

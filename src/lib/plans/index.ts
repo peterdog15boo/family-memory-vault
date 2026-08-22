@@ -480,6 +480,8 @@ export {
   canUseFaceDetection,
   canCreatePerson,
   canGenerateAiSoundtrack,
+  canUseLegacyPlusFeatures,
+  hasLegacyPlusFeatures,
   countAiSoundtracksThisMonth,
   getPlanCapabilities,
   countFamilyMemberSeats,

@@ -28,6 +28,8 @@ type DashboardShellProps = {
   initialUnreadCount?: number;
   initialAvaProgress?: AvaProgress | null;
   idleTimeoutPolicy?: IdleTimeoutPolicy;
+  /** Legacy+ plan: show Documents / Digital Legacy / Connected Accounts nav. */
+  showLegacyPlusNav?: boolean;
   children: ReactNode;
 };
 
@@ -50,6 +52,7 @@ function DashboardShellInner({
   initialUnreadCount = 0,
   initialAvaProgress = null,
   idleTimeoutPolicy,
+  showLegacyPlusNav = false,
   children,
 }: DashboardShellProps) {
   const { isModern } = useTheme();
@@ -112,13 +115,16 @@ function DashboardShellInner({
       </header>
 
       <div className="dashboard-shell-body flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">
-        <DashboardSidebar isAdmin={isAdmin} />
+        <DashboardSidebar
+          isAdmin={isAdmin}
+          showLegacyPlusNav={showLegacyPlusNav}
+        />
         <div className="dashboard-shell-main app-shell-stage flex min-w-0 flex-1 flex-col px-5 py-8 sm:px-8 sm:pb-12">
           {children}
         </div>
       </div>
 
-      {isModern ? <AppFooter /> : null}
+      {isModern ? <AppFooter showLegacyPlusNav={showLegacyPlusNav} /> : null}
 
       <AvaHelper initialProgress={initialAvaProgress} />
       <CelebrationHost />

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { Check, FlaskConical, Loader2, Sparkles } from "lucide-react";
 import type { BillingInterval, PaidPlanSlug } from "@/lib/stripe/config";
@@ -13,7 +13,11 @@ import {
   planFeatureBullets,
   RECOMMENDED_PLAN_SLUG,
 } from "@/lib/plans/pricing-display";
-import { isBetaPlanPickerEnabled } from "@/lib/billing/beta-flags";
+import {
+  BETA_PLAN_BADGE,
+  betaPlanSuccessMessage,
+  isBetaPlanPickerEnabled,
+} from "@/lib/billing/beta-flags";
 import { useFormat } from "@/components/i18n/LocaleProvider";
 import { announce } from "@/lib/a11y/announce";
 import { cn } from "@/lib/utils";
@@ -25,6 +29,11 @@ type PricingGridProps = {
   canManageBilling?: boolean;
   /** Compact layout for settings embed. */
   variant?: "page" | "embedded";
+  /**
+   * Server-resolved beta mode. When omitted, falls back to
+   * NEXT_PUBLIC_BETA_PLAN_PICKER / feedback beta flag.
+   */
+  betaMode?: boolean;
   className?: string;
 };
 
@@ -38,17 +47,28 @@ export function PricingGrid({
   stripeConfigured,
   canManageBilling = false,
   variant = "page",
+  betaMode: betaModeProp,
   className,
 }: PricingGridProps) {
   const format = useFormat();
   const router = useRouter();
-  const betaMode = isBetaPlanPickerEnabled();
+  const betaMode =
+    typeof betaModeProp === "boolean"
+      ? betaModeProp
+      : isBetaPlanPickerEnabled();
   const [interval, setInterval] = useState<BillingInterval>("monthly");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [activePlanSlug, setActivePlanSlug] = useState<string | null>(
+    currentPlanSlug,
+  );
   const [pending, startTransition] = useTransition();
   const plans = betaMode ? getBetaSelectablePlans() : getPublicPlans();
+
+  useEffect(() => {
+    setActivePlanSlug(currentPlanSlug);
+  }, [currentPlanSlug]);
 
   function runBetaAssign(planSlug: string) {
     if (!isSignedIn) {
@@ -69,13 +89,16 @@ export function PricingGrid({
           error?: string;
           message?: string;
           planName?: string;
+          planSlug?: string;
         };
         if (!response.ok) {
           throw new Error(data.error || "Could not update plan.");
         }
+        const planName = data.planName || planSlug;
         const message =
           data.message ||
-          "Plan updated for beta testing. You will not be charged.";
+          betaPlanSuccessMessage(planName);
+        setActivePlanSlug(data.planSlug || planSlug);
         setNotice(message);
         announce(message, { priority: "polite" });
         setBusy(null);
@@ -107,12 +130,15 @@ export function PricingGrid({
           error?: string;
           beta?: boolean;
           message?: string;
+          planName?: string;
+          planSlug?: string;
         };
         // Beta override short-circuits Checkout (no charge, no Stripe URL).
         if (response.ok && data.beta) {
+          const planName = data.planName || planSlug;
           const message =
-            data.message ||
-            "Plan updated for beta testing. You will not be charged.";
+            data.message || betaPlanSuccessMessage(planName);
+          setActivePlanSlug(data.planSlug || planSlug);
           setNotice(message);
           announce(message, { priority: "polite" });
           setBusy(null);
@@ -157,11 +183,12 @@ export function PricingGrid({
         <div className="mb-6 rounded-lg border border-amber-300/80 bg-amber-50 px-4 py-3 text-sm text-amber-950">
           <p className="flex items-center gap-2 font-semibold">
             <FlaskConical className="size-4 shrink-0" aria-hidden />
-            Beta testing mode
+            {BETA_PLAN_BADGE}
           </p>
           <p className="mt-1 text-amber-950/90">
-            You can switch plans freely. No payment is collected. Prices below
-            are shown for context only.
+            Switch Free, Family, or Legacy+ anytime. Limits and gated features
+            update immediately. No payment info is required — you will not be
+            charged. Prices below are shown for context only.
           </p>
         </div>
       ) : null}
@@ -233,16 +260,16 @@ export function PricingGrid({
           "mt-10 grid gap-5",
           variant === "page"
             ? betaMode
-              ? "lg:grid-cols-2 xl:grid-cols-4 lg:items-stretch"
+              ? "lg:grid-cols-3 lg:items-stretch"
               : "lg:grid-cols-3 lg:items-stretch"
             : betaMode
-              ? "md:grid-cols-2"
+              ? "md:grid-cols-3"
               : "md:grid-cols-3",
         )}
       >
         {plans.map((plan, index) => {
           const recommended = plan.slug === RECOMMENDED_PLAN_SLUG;
-          const isCurrent = currentPlanSlug === plan.slug;
+          const isCurrent = activePlanSlug === plan.slug;
           const priceCents =
             plan.priceMonthlyCents === 0
               ? 0
@@ -260,6 +287,7 @@ export function PricingGrid({
                 recommended
                   ? "border-accent/45 bg-canvas shadow-[0_20px_50px_rgba(42,40,37,0.1)] lg:-translate-y-2 lg:scale-[1.02]"
                   : "border-ink/10 bg-canvas/75",
+                isCurrent && "ring-2 ring-accent/40",
               )}
               style={{ animationDelay: `${0.08 * index}s` }}
             >
@@ -318,6 +346,23 @@ export function PricingGrid({
                     <p className="rounded-md border border-accent/25 bg-accent/10 px-3 py-2.5 text-center text-sm font-medium text-accent-deep">
                       {betaMode ? "Current beta plan" : "Current plan"}
                     </p>
+                    {betaMode ? (
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => runBetaAssign(plan.slug)}
+                        className="w-full text-center text-sm font-medium text-accent-deep hover:text-accent disabled:opacity-60"
+                      >
+                        {busy === `beta-${plan.slug}` ? (
+                          <Loader2
+                            className="mx-auto size-4 animate-spin"
+                            aria-hidden
+                          />
+                        ) : (
+                          "Confirm again (no charge)"
+                        )}
+                      </button>
+                    ) : null}
                     {!betaMode && paid && canManageBilling && isSignedIn ? (
                       <button
                         type="button"
@@ -351,7 +396,9 @@ export function PricingGrid({
                     {busy === `beta-${plan.slug}` ? (
                       <Loader2 className="size-4 animate-spin" aria-hidden />
                     ) : null}
-                    {!isSignedIn ? "Sign in to switch" : "Use this plan (beta)"}
+                    {!isSignedIn
+                      ? "Sign in to switch"
+                      : `Use ${plan.name} (free in beta)`}
                   </button>
                 ) : paid ? (
                   <button

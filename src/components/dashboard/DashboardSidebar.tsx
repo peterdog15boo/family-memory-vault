@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useLayoutEffect, useState } from "react";
+import { useLayoutEffect, useMemo, useState } from "react";
 import {
   CreditCard,
   FileText,
@@ -31,6 +31,8 @@ import { cn } from "@/lib/utils";
 
 type DashboardSidebarProps = {
   isAdmin?: boolean;
+  /** Documents / Digital Legacy / Connected Accounts — Legacy+ only. */
+  showLegacyPlusNav?: boolean;
 };
 
 type NavItem = {
@@ -40,13 +42,20 @@ type NavItem = {
   match?: "exact" | "prefix";
   /** Opens floating Ask AI instead of navigating. */
   openAskAi?: boolean;
+  /** Requires Legacy+ plan features. */
+  legacyPlusOnly?: boolean;
 };
+
+const LEGACY_PLUS_HREFS = new Set(["/documents", "/legacy", "/accounts"]);
 
 /**
  * App navigation. Modern: Home-first + grouped everyday vs keep-safe vs account.
  * Original: flat historical order preserved for revertability.
  */
-export function DashboardSidebar({ isAdmin = false }: DashboardSidebarProps) {
+export function DashboardSidebar({
+  isAdmin = false,
+  showLegacyPlusNav = false,
+}: DashboardSidebarProps) {
   const pathname = usePathname();
   const { theme, ready } = useTheme();
   const t = useTranslations();
@@ -63,63 +72,122 @@ export function DashboardSidebar({ isAdmin = false }: DashboardSidebarProps) {
     : (domTheme ?? APP_THEME_DEFAULT);
   const isModern = effective === "modern";
 
-  const originalItems: NavItem[] = [
-    { href: "/assistant", label: t("nav.askAi"), icon: Bot, openAskAi: true },
-    { href: "/memories", label: t("nav.memories"), icon: Images },
-    { href: "/movies", label: t("nav.movies"), icon: Film },
-    { href: "/media", label: t("nav.photos"), icon: ImageIcon },
-    { href: "/upload", label: t("nav.upload"), icon: Upload },
-    { href: "/documents", label: t("nav.documents"), icon: FileText },
-    { href: "/legacy", label: t("nav.legacy"), icon: Heart },
-    { href: "/accounts", label: t("nav.accounts"), icon: Landmark },
-    { href: "/people", label: t("nav.people"), icon: Users },
-    { href: "/family", label: t("nav.family"), icon: Home },
-    { href: "/family-memory-box", label: t("nav.digitize"), icon: Package },
-    { href: "/billing", label: t("nav.billing"), icon: CreditCard },
-    { href: "/settings", label: t("nav.settings"), icon: Settings },
-    ...(isAdmin
-      ? [{ href: "/admin", label: t("nav.admin"), icon: Shield } as NavItem]
-      : []),
-  ];
+  const originalItems: NavItem[] = useMemo(
+    () => [
+      { href: "/assistant", label: t("nav.askAi"), icon: Bot, openAskAi: true },
+      { href: "/memories", label: t("nav.memories"), icon: Images },
+      { href: "/movies", label: t("nav.movies"), icon: Film },
+      { href: "/media", label: t("nav.photos"), icon: ImageIcon },
+      { href: "/upload", label: t("nav.upload"), icon: Upload },
+      {
+        href: "/documents",
+        label: t("nav.documents"),
+        icon: FileText,
+        legacyPlusOnly: true,
+      },
+      {
+        href: "/legacy",
+        label: t("nav.legacy"),
+        icon: Heart,
+        legacyPlusOnly: true,
+      },
+      {
+        href: "/accounts",
+        label: t("nav.accounts"),
+        icon: Landmark,
+        legacyPlusOnly: true,
+      },
+      { href: "/people", label: t("nav.people"), icon: Users },
+      { href: "/family", label: t("nav.family"), icon: Home },
+      { href: "/family-memory-box", label: t("nav.digitize"), icon: Package },
+      { href: "/billing", label: t("nav.billing"), icon: CreditCard },
+      { href: "/settings", label: t("nav.settings"), icon: Settings },
+      ...(isAdmin
+        ? [{ href: "/admin", label: t("nav.admin"), icon: Shield } as NavItem]
+        : []),
+    ],
+    [isAdmin, t],
+  );
 
-  const modernGroups: { label?: string; items: NavItem[] }[] = [
-    {
-      items: [
-        { href: "/dashboard", label: t("nav.home"), icon: Home, match: "exact" },
-        { href: "/memories", label: t("nav.memories"), icon: Images },
-        { href: "/movies", label: t("nav.movies"), icon: Film },
-        { href: "/media", label: t("nav.photos"), icon: ImageIcon },
-        { href: "/upload", label: t("nav.upload"), icon: Upload },
-        { href: "/people", label: t("nav.people"), icon: Users },
-        { href: "/assistant", label: t("nav.askAi"), icon: Bot, openAskAi: true },
-      ],
-    },
-    {
-      label: t("nav.keepSafe"),
-      items: [
-        {
-          href: "/documents",
-          label: t("nav.documents"),
-          icon: FileText,
-          match: "exact",
-        },
-        { href: "/legacy", label: t("nav.legacy"), icon: Heart },
-        { href: "/accounts", label: t("nav.accounts"), icon: Landmark },
-        { href: "/family", label: t("nav.family"), icon: Users },
-      ],
-    },
-    {
-      label: t("nav.account"),
-      items: [
-        { href: "/family-memory-box", label: t("nav.digitize"), icon: Package },
-        { href: "/billing", label: t("nav.plan"), icon: CreditCard },
-        { href: "/settings", label: t("nav.settings"), icon: Settings },
-        ...(isAdmin
-          ? [{ href: "/admin", label: t("nav.admin"), icon: Shield } as NavItem]
-          : []),
-      ],
-    },
-  ];
+  const modernGroups: { label?: string; items: NavItem[] }[] = useMemo(
+    () => [
+      {
+        items: [
+          {
+            href: "/dashboard",
+            label: t("nav.home"),
+            icon: Home,
+            match: "exact",
+          },
+          { href: "/memories", label: t("nav.memories"), icon: Images },
+          { href: "/movies", label: t("nav.movies"), icon: Film },
+          { href: "/media", label: t("nav.photos"), icon: ImageIcon },
+          { href: "/upload", label: t("nav.upload"), icon: Upload },
+          { href: "/people", label: t("nav.people"), icon: Users },
+          {
+            href: "/assistant",
+            label: t("nav.askAi"),
+            icon: Bot,
+            openAskAi: true,
+          },
+        ],
+      },
+      {
+        label: t("nav.keepSafe"),
+        items: [
+          {
+            href: "/documents",
+            label: t("nav.documents"),
+            icon: FileText,
+            match: "exact",
+            legacyPlusOnly: true,
+          },
+          {
+            href: "/legacy",
+            label: t("nav.legacy"),
+            icon: Heart,
+            legacyPlusOnly: true,
+          },
+          {
+            href: "/accounts",
+            label: t("nav.accounts"),
+            icon: Landmark,
+            legacyPlusOnly: true,
+          },
+          { href: "/family", label: t("nav.family"), icon: Users },
+        ],
+      },
+      {
+        label: t("nav.account"),
+        items: [
+          {
+            href: "/family-memory-box",
+            label: t("nav.digitize"),
+            icon: Package,
+          },
+          { href: "/billing", label: t("nav.plan"), icon: CreditCard },
+          { href: "/settings", label: t("nav.settings"), icon: Settings },
+          ...(isAdmin
+            ? [
+                {
+                  href: "/admin",
+                  label: t("nav.admin"),
+                  icon: Shield,
+                } as NavItem,
+              ]
+            : []),
+        ],
+      },
+    ],
+    [isAdmin, t],
+  );
+
+  function isVisible(item: NavItem) {
+    if (item.legacyPlusOnly || LEGACY_PLUS_HREFS.has(item.href)) {
+      return showLegacyPlusNav;
+    }
+    return true;
+  }
 
   function isActive(item: NavItem) {
     if (item.href === "/dashboard") return pathname === "/dashboard";
@@ -147,7 +215,12 @@ export function DashboardSidebar({ isAdmin = false }: DashboardSidebarProps) {
     return pathname === item.href || pathname.startsWith(`${item.href}/`);
   }
 
-  const groups = isModern ? modernGroups : [{ items: originalItems }];
+  const groups = (isModern ? modernGroups : [{ items: originalItems }])
+    .map((group) => ({
+      ...group,
+      items: group.items.filter(isVisible),
+    }))
+    .filter((group) => group.items.length > 0);
 
   return (
     <aside

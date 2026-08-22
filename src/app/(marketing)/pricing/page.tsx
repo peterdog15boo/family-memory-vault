@@ -1,5 +1,9 @@
 import { auth } from "@clerk/nextjs/server";
 import { PricingPageView } from "@/components/marketing/PricingPageView";
+import {
+  isBetaBillingOverride,
+  isBetaPlanPickerEnabled,
+} from "@/lib/billing/beta-flags";
 import { ensureFreeSubscription, getUserPlan } from "@/lib/plans";
 import { isStripeConfigured } from "@/lib/stripe";
 import { ensureAppUser } from "@/lib/users";
@@ -30,12 +34,15 @@ export default async function PricingPage() {
     );
   }
 
+  const betaMode = isBetaPlanPickerEnabled() || isBetaBillingOverride();
+
   return (
     <PricingPageView
       currentPlanSlug={currentPlanSlug}
       isSignedIn={Boolean(isAuthenticated && userId)}
       canManageBilling={canManageBilling}
       stripeConfigured={isStripeConfigured()}
+      betaMode={betaMode}
     />
   );
 }

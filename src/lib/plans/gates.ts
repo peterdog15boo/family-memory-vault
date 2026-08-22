@@ -27,7 +27,8 @@ export type PlanGateCode =
   | "people_limit"
   | "ai_soundtrack_disabled"
   | "ai_soundtrack_quota"
-  | "ai_soundtrack_unavailable";
+  | "ai_soundtrack_unavailable"
+  | "legacy_plus_required";
 
 export type PlanGateResult = {
   allowed: boolean;
@@ -510,6 +511,37 @@ export async function canGenerateAiSoundtrack(
 }
 
 /**
+ * Legacy+ tools: Private Documents, Digital Legacy, Connected Accounts.
+ * Catalog sets `features.legacy` (and related flags) on the Legacy+ plan only.
+ */
+export function hasLegacyPlusFeatures(features: PlanFeatures): boolean {
+  return (
+    featureFlag(features, "legacy") ||
+    featureFlag(features, "privateDocuments") ||
+    featureFlag(features, "digitalLegacy") ||
+    featureFlag(features, "connectedAccounts")
+  );
+}
+
+export async function canUseLegacyPlusFeatures(
+  userId: string,
+): Promise<PlanGateResult> {
+  const limits = await loadLimits(userId);
+  if (!hasLegacyPlusFeatures(limits.features)) {
+    return denied(
+      limits,
+      "legacy_plus_required",
+      `Private Documents, Digital Legacy, and Connected Accounts are included on Legacy+ — not on ${limits.name}.`,
+      {
+        upgradeHint:
+          "Switch to the Legacy+ plan (free during beta) to unlock these vaults.",
+      },
+    );
+  }
+  return allowed(limits);
+}
+
+/**
  * Snapshot for UI (movie panel, family settings, etc.).
  */
 export type PlanCapabilities = {
@@ -525,6 +557,7 @@ export type PlanCapabilities = {
   priorityRender: boolean;
   aiSoundtrack: boolean;
   aiSoundtracks: PlanGateResult;
+  legacyPlus: boolean;
 };
 
 export async function getPlanCapabilities(
@@ -546,6 +579,7 @@ export async function getPlanCapabilities(
     priorityRender: featureFlag(limits.features, "priorityRender"),
     aiSoundtrack: featureFlag(limits.features, "aiSoundtrack"),
     aiSoundtracks,
+    legacyPlus: hasLegacyPlusFeatures(limits.features),
   };
 }
 

@@ -53,7 +53,7 @@ export default async function BillingPage({ searchParams }: PageProps) {
         title="Billing & usage"
         description={
           betaMode
-            ? "Switch plans freely while we beta-test. Prices are shown for context — no payment is collected."
+            ? "Beta testing — plans are free to try. Switch anytime; limits update immediately and no payment is collected."
             : "See what's included in your plan, how much you've used, and upgrade when you need more room for memories."
         }
       />
@@ -67,6 +67,7 @@ export default async function BillingPage({ searchParams }: PageProps) {
             planSource={summary.planSource}
             canManageBilling={summary.canManageBilling}
             stripeConfigured={stripeConfigured}
+            betaMode={betaMode}
           />
 
           {billingNotice ? (
@@ -104,6 +105,7 @@ export default async function BillingPage({ searchParams }: PageProps) {
               isSignedIn
               stripeConfigured={stripeConfigured}
               canManageBilling={summary.canManageBilling}
+              betaMode={betaMode}
             />
           </section>
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireApiUser } from "@/lib/auth/api";
+import { requireLegacyPlusApiUser } from "@/lib/auth/plan-api";
 import { loadLegacyVault } from "@/lib/legacy/load-vault";
 import { apiErrorFromUnknown } from "@/lib/http/api-error";
 import { ensureAppUser } from "@/lib/users";
@@ -8,7 +8,7 @@ import { ensureAppUser } from "@/lib/users";
  * GET /api/legacy — full owner vault + progress checklist.
  */
 export async function GET() {
-  const authResult = await requireApiUser();
+  const authResult = await requireLegacyPlusApiUser();
   if (!authResult.ok) return authResult.response;
   const { userId } = authResult;
 

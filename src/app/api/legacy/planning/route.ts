@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
-import { requireApiUser } from "@/lib/auth/api";
+import { requireLegacyPlusApiUser } from "@/lib/auth/plan-api";
 import { listPrivateDocuments } from "@/lib/documents";
 import { afterLegacyPlanningChanged } from "@/lib/gamification/legacy-ready";
 import { apiError, apiErrorFromUnknown } from "@/lib/http/api-error";
@@ -36,7 +36,7 @@ const createSchema = z.object({
 });
 
 export async function GET() {
-  const authResult = await requireApiUser();
+  const authResult = await requireLegacyPlusApiUser();
   if (!authResult.ok) return authResult.response;
 
   try {
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
   const originBlocked = rejectUntrustedOrigin(request);
   if (originBlocked) return originBlocked;
 
-  const authResult = await requireApiUser();
+  const authResult = await requireLegacyPlusApiUser();
   if (!authResult.ok) return authResult.response;
   const { userId } = authResult;
 

@@ -17,6 +17,7 @@ import { MemoryError } from "@/lib/memories/errors";
 import { MovieError } from "@/lib/movies/errors";
 import { PeopleError } from "@/lib/people";
 import { logger } from "@/lib/observability/logger";
+import { PlanGateError } from "@/lib/plans/gates";
 import { StripeBillingError } from "@/lib/stripe/subscriptions";
 
 export type ApiErrorCode =
@@ -228,6 +229,18 @@ export function apiErrorFromUnknown(
           ? 404
           : 400;
     return apiError(error.message, { status, code: error.code });
+  }
+
+  if (error instanceof PlanGateError) {
+    return apiError(error.message, {
+      status: 403,
+      code: error.code ?? "plan_limit",
+      details: {
+        upgradeHint: error.gate.upgradeHint,
+        planSlug: error.gate.planSlug,
+        planName: error.gate.planName,
+      },
+    });
   }
 
   console.error(fallbackMessage, error);
