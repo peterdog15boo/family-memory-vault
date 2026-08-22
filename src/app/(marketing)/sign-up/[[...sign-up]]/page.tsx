@@ -2,6 +2,7 @@ import { SignUp } from "@clerk/nextjs";
 import { AuthClerkMount } from "@/components/auth/AuthClerkMount";
 import { AuthPageShell } from "@/components/auth/AuthPageShell";
 import { authClerkAppearance } from "@/lib/auth/clerk-appearance";
+import { APP_HOME_PATH } from "@/lib/routes";
 
 /**
  * Do not set forceRedirectUrl — preserves redirect_url deep links after signup.
@@ -15,7 +16,7 @@ export default function SignUpPage() {
     >
       <AuthClerkMount>
         <SignUp
-          fallbackRedirectUrl="/dashboard"
+          fallbackRedirectUrl={APP_HOME_PATH}
           appearance={authClerkAppearance}
         />
       </AuthClerkMount>

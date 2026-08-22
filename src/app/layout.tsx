@@ -12,6 +12,7 @@ import {
   LOCALE_STORAGE_KEY,
 } from "@/lib/i18n/locales";
 import { getLocale, getTranslations } from "@/lib/i18n/server";
+import { APP_HOME_PATH } from "@/lib/routes";
 import {
   APP_THEME_DEFAULT,
   APP_THEME_STORAGE_KEY,
@@ -117,7 +118,10 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: localeBootScript }} />
       </head>
       <body className="page-atmosphere min-h-full font-sans">
-        <ClerkProvider>
+        <ClerkProvider
+          signInFallbackRedirectUrl={APP_HOME_PATH}
+          signUpFallbackRedirectUrl={APP_HOME_PATH}
+        >
           <ThemeProvider>
             <LocaleProvider initialLocale={locale}>
               <LiveAnnouncer />

@@ -22,6 +22,7 @@ import {
 import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { useAskAiOptional } from "@/components/assistant/AskAiContext";
+import { APP_HOME_PATH } from "@/lib/routes";
 import {
   APP_THEME_DEFAULT,
   isAppTheme,
@@ -234,7 +235,7 @@ export function DashboardSidebar({
       {!isModern ? (
         <div className="dashboard-sidebar-brand flex items-center gap-2 px-5 py-5">
           <Link
-            href="/dashboard"
+            href={APP_HOME_PATH}
             className="font-display text-lg tracking-tight text-ink transition-opacity hover:opacity-80"
           >
             {t("meta.appName")}

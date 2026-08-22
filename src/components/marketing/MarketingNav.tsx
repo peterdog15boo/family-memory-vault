@@ -3,12 +3,13 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Show, UserButton } from "@clerk/nextjs";
+import { Show, useAuth, UserButton } from "@clerk/nextjs";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { FeedbackButton } from "@/components/feedback/FeedbackButton";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { useTheme } from "@/components/theme/ThemeProvider";
+import { APP_HOME_PATH, MARKETING_HOME_PATH } from "@/lib/routes";
 import { isAppTheme, type AppTheme } from "@/lib/theme/types";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +19,7 @@ import { cn } from "@/lib/utils";
  */
 export function MarketingNav() {
   const pathname = usePathname();
+  const { isSignedIn } = useAuth();
   const { theme, ready } = useTheme();
   const t = useTranslations();
   const [domTheme, setDomTheme] = useState<AppTheme | null>(null);
@@ -45,6 +47,7 @@ export function MarketingNav() {
   const navLinks = modern ? modernNavLinks : originalNavLinks;
   const isLanding = pathname === "/" || pathname === "";
   const overMedia = modern && isLanding && !scrolled;
+  const homeHref = isSignedIn ? APP_HOME_PATH : MARKETING_HOME_PATH;
 
   useEffect(() => {
     const sync = () => setScrolled(window.scrollY > 28);
@@ -63,7 +66,7 @@ export function MarketingNav() {
     >
       <div className="marketing-nav-inner">
         <Link
-          href="/"
+          href={homeHref}
           className="marketing-nav-brand"
           aria-label={t("meta.appName")}
         >
@@ -119,7 +122,7 @@ export function MarketingNav() {
                 overMedia && "marketing-nav-feedback--on-dark",
               )}
             />
-            <Link href="/dashboard" className="marketing-nav-signin">
+            <Link href={APP_HOME_PATH} className="marketing-nav-signin">
               {modern ? t("nav.openVault") : t("nav.goToVault")}
             </Link>
             <UserButton

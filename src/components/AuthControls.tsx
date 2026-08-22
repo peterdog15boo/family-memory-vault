@@ -8,6 +8,7 @@ import {
   UserButton,
 } from "@clerk/nextjs";
 import { Shield } from "lucide-react";
+import { APP_HOME_PATH } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 type AuthControlsProps = {
@@ -18,7 +19,7 @@ export function AuthControls({ className }: AuthControlsProps) {
   return (
     <div className={cn("flex items-center gap-3", className)}>
       <Show when="signed-out">
-        <SignInButton mode="modal" forceRedirectUrl="/dashboard">
+        <SignInButton mode="modal" forceRedirectUrl={APP_HOME_PATH}>
           <button
             type="button"
             className="hidden text-sm text-ink-muted transition-colors hover:text-ink sm:inline"
@@ -26,7 +27,7 @@ export function AuthControls({ className }: AuthControlsProps) {
             Sign in
           </button>
         </SignInButton>
-        <SignUpButton mode="modal" forceRedirectUrl="/dashboard">
+        <SignUpButton mode="modal" forceRedirectUrl={APP_HOME_PATH}>
           <button
             type="button"
             className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3.5 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-deep"
@@ -38,7 +39,7 @@ export function AuthControls({ className }: AuthControlsProps) {
       </Show>
       <Show when="signed-in">
         <Link
-          href="/dashboard"
+          href={APP_HOME_PATH}
           className="hidden text-sm text-ink-muted transition-colors hover:text-ink sm:inline"
         >
           Dashboard

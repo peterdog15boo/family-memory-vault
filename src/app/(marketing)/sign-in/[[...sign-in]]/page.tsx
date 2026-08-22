@@ -4,6 +4,7 @@ import { AuthClerkMount } from "@/components/auth/AuthClerkMount";
 import { AuthPageShell } from "@/components/auth/AuthPageShell";
 import { InactivitySignInNotice } from "@/components/auth/InactivitySignInNotice";
 import { authClerkAppearance } from "@/lib/auth/clerk-appearance";
+import { APP_HOME_PATH } from "@/lib/routes";
 
 /**
  * Do not set forceRedirectUrl — it would ignore invite / deep-link
@@ -21,7 +22,7 @@ export default function SignInPage() {
       </Suspense>
       <AuthClerkMount>
         <SignIn
-          fallbackRedirectUrl="/dashboard"
+          fallbackRedirectUrl={APP_HOME_PATH}
           appearance={authClerkAppearance}
         />
       </AuthClerkMount>

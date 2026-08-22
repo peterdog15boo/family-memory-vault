@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { Shield, Bot } from "lucide-react";
 import { AskAiFab } from "@/components/assistant/AskAiFab";
 import { AskAiPanel } from "@/components/assistant/AskAiPanel";
@@ -25,6 +26,7 @@ import { PushSubscriptionSync } from "@/components/notifications/PushSubscriptio
 import { IdleSessionGuard } from "@/components/session/IdleSessionGuard";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import type { AvaProgress } from "@/lib/ava/types";
+import { APP_HOME_PATH } from "@/lib/routes";
 import type { IdleTimeoutPolicy } from "@/lib/session/idle-timeout-policy";
 import { cn } from "@/lib/utils";
 
@@ -84,7 +86,13 @@ function DashboardShellInner({
       >
         {isModern ? (
           <div className="dashboard-shell-brand-cluster min-w-0">
-            <BrandLogo tone="color" size="lg" priority decorative />
+            <Link
+              href={APP_HOME_PATH}
+              className="inline-flex shrink-0 transition-opacity hover:opacity-80"
+              aria-label={t("meta.appName")}
+            >
+              <BrandLogo tone="color" size="lg" priority decorative />
+            </Link>
             <p className="dashboard-shell-greeting truncate text-sm text-ink-muted lg:text-[0.95rem]">
               {t("nav.welcomeBack")}
             </p>

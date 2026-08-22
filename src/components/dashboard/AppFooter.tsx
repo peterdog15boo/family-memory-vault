@@ -6,6 +6,7 @@ import { CinematicBackdrop } from "@/components/cinematic/CinematicBackdrop";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { APP_FOOTER_MEDIA } from "@/content/page-hero-media";
+import { APP_HOME_PATH } from "@/lib/routes";
 
 type AppFooterProps = {
   /** Documents / Connected Accounts — Legacy+ only. */
@@ -50,7 +51,7 @@ export function AppFooter({ showLegacyPlusNav = false }: AppFooterProps) {
         <div className="app-footer-inner">
           <div className="app-footer-brand">
             <Link
-              href="/dashboard"
+              href={APP_HOME_PATH}
               className="app-footer-logo"
               aria-label={t("meta.appName")}
             >
