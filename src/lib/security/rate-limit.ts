@@ -126,4 +126,6 @@ export const RATE_LIMITS = {
   termsAccept: { limit: 10, windowMs: 60_000 },
   feedbackSubmit: { limit: 5, windowMs: 60_000 },
   pushSubscribe: { limit: 20, windowMs: 60_000 },
+  familyChatSend: { limit: 30, windowMs: 60_000 },
+  familyChatRead: { limit: 60, windowMs: 60_000 },
 } as const;

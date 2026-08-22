@@ -182,6 +182,17 @@ export async function createFamily(
     updatedAt: now,
   });
 
+  try {
+    const { upsertChatParticipant } = await import("@/lib/family-chat");
+    await upsertChatParticipant({
+      familyId,
+      userId: ownerId,
+      include: true,
+    });
+  } catch (error) {
+    console.error("[family.create] chat participant seed failed", error);
+  }
+
   return created;
 }
 
@@ -434,6 +445,18 @@ export async function acceptInvite(
   if (!updated) {
     throw new FamilyError("Failed to accept invite.");
   }
+
+  try {
+    const { upsertChatParticipant } = await import("@/lib/family-chat");
+    await upsertChatParticipant({
+      familyId: updated.familyId,
+      userId,
+      include: true,
+    });
+  } catch (error) {
+    console.error("[family.accept] chat participant seed failed", error);
+  }
+
   return updated;
 }
 
@@ -711,6 +734,19 @@ export async function removeMember(
   if (!updated) {
     throw new FamilyError("Failed to remove member.");
   }
+
+  if (updated.userId) {
+    try {
+      const { excludeChatParticipant } = await import("@/lib/family-chat");
+      await excludeChatParticipant({
+        familyId,
+        userId: updated.userId,
+      });
+    } catch (error) {
+      console.error("[family.remove] chat exclude failed", error);
+    }
+  }
+
   return updated;
 }
 
@@ -746,6 +782,14 @@ export async function leaveFamily(
   if (!updated) {
     throw new FamilyError("Failed to leave family.");
   }
+
+  try {
+    const { excludeChatParticipant } = await import("@/lib/family-chat");
+    await excludeChatParticipant({ familyId, userId });
+  } catch (error) {
+    console.error("[family.leave] chat exclude failed", error);
+  }
+
   return updated;
 }
 

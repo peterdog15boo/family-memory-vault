@@ -97,6 +97,7 @@ export const NOTIFICATION_TYPES = [
   "storage_warning",
   "moderation_attention",
   "emergency_access",
+  "family_chat",
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -891,6 +892,130 @@ export const familyMembers = pgTable(
       table.familyId,
       table.invitedEmail,
     ),
+  ],
+);
+
+/* -------------------------------------------------------------------------- */
+/* Family Chat (one group thread per family vault)                            */
+/* -------------------------------------------------------------------------- */
+
+export const familyChatThreads = pgTable(
+  "family_chat_threads",
+  {
+    id: text("id").primaryKey(),
+    familyId: text("family_id")
+      .notNull()
+      .references(() => families.id, { onDelete: "cascade" }),
+    createdByUserId: text("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("family_chat_threads_family_id_idx").on(table.familyId),
+    index("family_chat_threads_family_updated_idx").on(
+      table.familyId,
+      table.updatedAt,
+    ),
+  ],
+);
+
+/**
+ * Family-level chat eligibility (owner can opt members out of all chat).
+ * Separate from per-thread participants.
+ */
+export const familyChatEligibility = pgTable(
+  "family_chat_eligibility",
+  {
+    id: text("id").primaryKey(),
+    familyId: text("family_id")
+      .notNull()
+      .references(() => families.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    eligible: boolean("eligible").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("family_chat_eligibility_family_user_uidx").on(
+      table.familyId,
+      table.userId,
+    ),
+    index("family_chat_eligibility_family_eligible_idx").on(
+      table.familyId,
+      table.eligible,
+    ),
+  ],
+);
+
+export const familyChatParticipants = pgTable(
+  "family_chat_participants",
+  {
+    id: text("id").primaryKey(),
+    threadId: text("thread_id")
+      .notNull()
+      .references(() => familyChatThreads.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /**
+     * Legacy column from single-thread model. Thread membership is presence in
+     * this table; family-level opt-out lives on family_chat_eligibility.
+     */
+    included: boolean("included").notNull().default(true),
+    lastReadAt: timestamp("last_read_at", { withTimezone: true }),
+    addedAt: timestamp("added_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("family_chat_participants_thread_user_uidx").on(
+      table.threadId,
+      table.userId,
+    ),
+    index("family_chat_participants_user_id_idx").on(table.userId),
+    index("family_chat_participants_thread_included_idx").on(
+      table.threadId,
+      table.included,
+    ),
+  ],
+);
+
+export const familyChatMessages = pgTable(
+  "family_chat_messages",
+  {
+    id: text("id").primaryKey(),
+    threadId: text("thread_id")
+      .notNull()
+      .references(() => familyChatThreads.id, { onDelete: "cascade" }),
+    senderUserId: text("sender_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("family_chat_messages_thread_created_idx").on(
+      table.threadId,
+      table.createdAt,
+    ),
+    index("family_chat_messages_sender_idx").on(table.senderUserId),
   ],
 );
 
@@ -2637,12 +2762,72 @@ export const familiesRelations = relations(families, ({ one, many }) => ({
     references: [users.id],
   }),
   members: many(familyMembers),
+  chatThreads: many(familyChatThreads),
+  chatEligibility: many(familyChatEligibility),
   subscriptions: many(subscriptions),
   usageRecords: many(usageRecords),
   familyProgress: one(familyProgress),
   userProgressRows: many(userProgress),
   userAchievements: many(userAchievements),
 }));
+
+export const familyChatThreadsRelations = relations(
+  familyChatThreads,
+  ({ one, many }) => ({
+    family: one(families, {
+      fields: [familyChatThreads.familyId],
+      references: [families.id],
+    }),
+    createdBy: one(users, {
+      fields: [familyChatThreads.createdByUserId],
+      references: [users.id],
+    }),
+    participants: many(familyChatParticipants),
+    messages: many(familyChatMessages),
+  }),
+);
+
+export const familyChatEligibilityRelations = relations(
+  familyChatEligibility,
+  ({ one }) => ({
+    family: one(families, {
+      fields: [familyChatEligibility.familyId],
+      references: [families.id],
+    }),
+    user: one(users, {
+      fields: [familyChatEligibility.userId],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const familyChatParticipantsRelations = relations(
+  familyChatParticipants,
+  ({ one }) => ({
+    thread: one(familyChatThreads, {
+      fields: [familyChatParticipants.threadId],
+      references: [familyChatThreads.id],
+    }),
+    user: one(users, {
+      fields: [familyChatParticipants.userId],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const familyChatMessagesRelations = relations(
+  familyChatMessages,
+  ({ one }) => ({
+    thread: one(familyChatThreads, {
+      fields: [familyChatMessages.threadId],
+      references: [familyChatThreads.id],
+    }),
+    sender: one(users, {
+      fields: [familyChatMessages.senderUserId],
+      references: [users.id],
+    }),
+  }),
+);
 
 export const familyMembersRelations = relations(familyMembers, ({ one }) => ({
   family: one(families, {
@@ -2937,6 +3122,14 @@ export type Family = typeof families.$inferSelect;
 export type NewFamily = typeof families.$inferInsert;
 export type FamilyMember = typeof familyMembers.$inferSelect;
 export type NewFamilyMember = typeof familyMembers.$inferInsert;
+export type FamilyChatThread = typeof familyChatThreads.$inferSelect;
+export type NewFamilyChatThread = typeof familyChatThreads.$inferInsert;
+export type FamilyChatEligibility = typeof familyChatEligibility.$inferSelect;
+export type NewFamilyChatEligibility = typeof familyChatEligibility.$inferInsert;
+export type FamilyChatParticipant = typeof familyChatParticipants.$inferSelect;
+export type NewFamilyChatParticipant = typeof familyChatParticipants.$inferInsert;
+export type FamilyChatMessage = typeof familyChatMessages.$inferSelect;
+export type NewFamilyChatMessage = typeof familyChatMessages.$inferInsert;
 export type Plan = typeof plans.$inferSelect;
 export type NewPlan = typeof plans.$inferInsert;
 export type Subscription = typeof subscriptions.$inferSelect;

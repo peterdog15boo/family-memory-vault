@@ -9,6 +9,7 @@ import {
 } from "@/lib/ai/help/knowledge";
 import { canCreateMovie } from "@/lib/plans/gates";
 import { getUserPlan } from "@/lib/plans";
+import { isBetaPlanModeActive } from "@/lib/plans/legacy-plus-guidance";
 import { formatBytes, getStorageQuotaForUser } from "@/lib/billing/quotas";
 import type { AppLocale, TranslateFn } from "@/lib/i18n";
 import { DEFAULT_LOCALE } from "@/lib/i18n";
@@ -147,6 +148,30 @@ async function buildPlanContext(
       }
     }
 
+    const needsLegacyPlus = entries.some(
+      (e) => e.id === "private_documents" || e.id === "digital_legacy",
+    );
+    if (needsLegacyPlus) {
+      const unlocked = Boolean(
+        limits.features?.legacy ||
+          limits.features?.privateDocuments ||
+          limits.features?.digitalLegacy ||
+          limits.features?.connectedAccounts,
+      );
+      if (!unlocked) {
+        const beta = isBetaPlanModeActive();
+        lines.push(
+          beta
+            ? `Private Documents and Digital Legacy are part of Legacy+ — not included on ${plan.name}. Switch to Legacy+ on Billing during beta (no payment collected).`
+            : `Private Documents and Digital Legacy are part of Legacy+ — not included on ${plan.name}. Upgrade on Billing when you’re ready.`,
+        );
+      } else {
+        lines.push(
+          "Your Legacy+ plan includes Private Documents, Digital Legacy, and Connected Accounts.",
+        );
+      }
+    }
+
     const needsStorage = entries.some(
       (e) => e.id === "storage_limits" || e.id === "billing_upgrade",
     );
@@ -201,11 +226,17 @@ export async function answerProductHelp(
       });
     }
   }
-  if (planLines.some((l) => /upgrade/i.test(l))) {
+  if (planLines.some((l) => /upgrade|Legacy\+/i.test(l))) {
     linkMap.set("/billing", {
       label: t?.("assistant.actions.billing") ?? "Billing",
       href: "/billing",
     });
+    // Prefer Billing over deep links the user cannot open yet.
+    for (const href of ["/documents", "/documents/legacy", "/accounts"]) {
+      if (linkMap.has(href) && planLines.some((l) => /not included|part of Legacy\+/i.test(l))) {
+        linkMap.delete(href);
+      }
+    }
   }
 
   if (entries.length === 0) {

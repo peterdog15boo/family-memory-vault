@@ -271,11 +271,15 @@ export const HELP_KNOWLEDGE: readonly HelpKnowledgeEntry[] = [
     summary:
       "Private Documents are only for you — policies, IDs, and paperwork. They never appear in Memories, Movies, or family sharing.",
     steps: [
-      "Open Documents in the sidebar.",
+      "Open Documents in the sidebar (shown when you’re on Legacy+).",
       "Create a category if you need one, then upload or file a document.",
       "Use secure view/download when you need the file — access is logged for your safety.",
     ],
     relatedRoutes: [{ label: "Documents", href: "/documents" }],
+    planAware: true,
+    notes: [
+      "Private Documents is part of the Legacy+ plan. Free and Family do not include it.",
+    ],
   },
   {
     id: "digital_legacy",
@@ -289,11 +293,12 @@ export const HELP_KNOWLEDGE: readonly HelpKnowledgeEntry[] = [
       "contacts",
       "after i'm gone",
       "guidance",
+      "connected accounts",
     ],
     summary:
       "Digital Legacy is a calm place to leave contacts, instructions, and notes for people you love. It stays private to your account until you choose otherwise.",
     steps: [
-      "Open Digital Legacy from Documents → Legacy (or /documents/legacy).",
+      "Open Digital Legacy from the sidebar when you’re on Legacy+ (or /documents/legacy).",
       "Add trusted contacts, practical instructions, and any guidance you want ready.",
       "Review the checklist so you can see what’s still missing.",
       "Optionally set up emergency access for someone you trust.",
@@ -301,10 +306,13 @@ export const HELP_KNOWLEDGE: readonly HelpKnowledgeEntry[] = [
     relatedRoutes: [
       { label: "Digital Legacy", href: "/documents/legacy" },
       { label: "Emergency Access", href: "/emergency-access" },
+      { label: "Billing", href: "/billing" },
     ],
+    planAware: true,
     notes: [
+      "Digital Legacy, emergency access setup, and Connected Accounts are part of Legacy+.",
       "Secure notes may contain sensitive details — treat them like a locked drawer.",
-      "Ask AI can help draft guidance or review your checklist, but it won’t casually store passwords.",
+      "Ask AI can help explain Legacy+, but it can’t unlock features your plan doesn’t include.",
     ],
   },
   {

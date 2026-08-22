@@ -9,6 +9,7 @@ import {
   Loader2,
   LogOut,
   Mail,
+  MessagesSquare,
   Shield,
   UserMinus,
   Users,
@@ -549,6 +550,13 @@ export function FamilySettingsPanel({
                 )}
               </ul>
             </div>
+
+            {isOwner ? (
+              <FamilyChatInclusionSettings
+                familyId={family.id}
+                className="mt-8"
+              />
+            ) : null}
           </section>
         );
       })}
@@ -712,6 +720,9 @@ function InviteForm({
       </h3>
       <p className="mt-1 text-xs leading-relaxed text-ink-muted">
         {t("family.inviteLead")}
+      </p>
+      <p className="mt-2 text-xs leading-relaxed text-ink-muted">
+        {t("family.inviteChatNotice")}
       </p>
       <div className="mt-3 flex flex-col gap-2 sm:flex-row">
         <label className="sr-only" htmlFor={`invite-email-${familyId}`}>
@@ -898,6 +909,159 @@ function MemberRow({
         ) : null}
       </div>
     </li>
+  );
+}
+
+type ChatParticipantRow = {
+  userId: string;
+  memberId: string;
+  included: boolean;
+  displayName: string | null;
+  imageUrl: string | null;
+  invitedEmail: string | null;
+  role: string;
+};
+
+function FamilyChatInclusionSettings({
+  familyId,
+  className,
+}: {
+  familyId: string;
+  className?: string;
+}) {
+  const t = useTranslations();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [participants, setParticipants] = useState<ChatParticipantRow[]>([]);
+  const [busyUserId, setBusyUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(
+          `/api/family/${familyId}/chat/participants`,
+        );
+        const data = (await response.json().catch(() => ({}))) as {
+          participants?: ChatParticipantRow[];
+          error?: string;
+        };
+        if (!response.ok) {
+          throw new Error(data.error || t("familyChat.settingsLoadError"));
+        }
+        if (!cancelled) setParticipants(data.participants ?? []);
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : t("familyChat.settingsLoadError"),
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [familyId, t]);
+
+  async function toggleIncluded(userId: string, included: boolean) {
+    setBusyUserId(userId);
+    setError(null);
+    try {
+      const response = await fetch(
+        `/api/family/${familyId}/chat/participants`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, included }),
+        },
+      );
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data.error || t("familyChat.settingsUpdateError"));
+      }
+      setParticipants((prev) =>
+        prev.map((p) => (p.userId === userId ? { ...p, included } : p)),
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : t("familyChat.settingsUpdateError"),
+      );
+    } finally {
+      setBusyUserId(null);
+    }
+  }
+
+  return (
+    <div className={cn(className)}>
+      <h3 className="flex items-center gap-2 text-sm font-medium text-ink">
+        <MessagesSquare className="size-4 text-accent-deep" aria-hidden />
+        {t("familyChat.settingsTitle")}
+      </h3>
+      <p className="mt-1 text-xs leading-relaxed text-ink-muted">
+        {t("familyChat.settingsLead")}
+      </p>
+      {loading ? (
+        <p className="mt-3 flex items-center gap-2 text-xs text-ink-muted">
+          <Loader2 className="size-3.5 animate-spin" aria-hidden />
+          {t("common.loading")}
+        </p>
+      ) : error ? (
+        <p className="mt-3 text-xs text-red-800" role="alert">
+          {error}
+        </p>
+      ) : (
+        <ul className="mt-3 divide-y divide-ink/8 rounded-xl border border-ink/10 bg-canvas">
+          {participants.map((p) => {
+            const name =
+              p.displayName?.trim() ||
+              p.invitedEmail ||
+              t("familyChat.memberFallback");
+            const busy = busyUserId === p.userId;
+            return (
+              <li
+                key={p.userId}
+                className="flex items-center justify-between gap-3 px-4 py-3"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-ink">{name}</p>
+                  <p className="truncate text-xs text-ink-muted">
+                    {roleLabel(t, p.role)}
+                  </p>
+                </div>
+                <label className="inline-flex shrink-0 items-center gap-2 text-xs text-ink">
+                  <span className="sr-only">
+                    {t("familyChat.includeToggleFor", { name })}
+                  </span>
+                  <span className="hidden sm:inline" aria-hidden>
+                    {t("familyChat.includeToggle")}
+                  </span>
+                  {busy ? (
+                    <Loader2 className="size-3.5 animate-spin text-ink-muted" />
+                  ) : null}
+                  <input
+                    type="checkbox"
+                    checked={p.included}
+                    disabled={busy}
+                    onChange={(event) =>
+                      void toggleIncluded(p.userId, event.target.checked)
+                    }
+                    className="size-4 rounded border-ink/25 text-accent focus:ring-accent/30"
+                  />
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }
 

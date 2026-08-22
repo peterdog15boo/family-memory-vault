@@ -77,6 +77,7 @@ export const enUS = {
     upload: "Upload",
     people: "People",
     askAi: "Ask AI",
+    familyChat: "Family Chat",
     documents: "Documents",
     legacy: "Legacy",
     accounts: "Accounts",
@@ -1285,6 +1286,8 @@ export const enUS = {
     inviteSomeone: "Invite someone",
     inviteLead:
       "We’ll email them a secure invite link to join this family vault. Sending again to a pending invite refreshes the link and resends the email.",
+    inviteChatNotice:
+      "New family members are added to Family Chat automatically. You can exclude someone later in Family settings.",
     emailRequired: "Email (required)",
     emailPlaceholder: "family@example.com",
     role: "Role",
@@ -1314,6 +1317,43 @@ export const enUS = {
     distanceNearby: "Nearby",
     distanceMiles: "About {distance} miles away",
     distanceShareHint: "Share your location in Settings to see distances.",
+  },
+  familyChat: {
+    title: "Family Chat",
+    subtitle: "Private to your family vault",
+    subtitleNamed: "{name} · private to your vault",
+    empty:
+      "This is your family chat. Ask for photos, share updates, and keep everyone in the loop.",
+    emptyList:
+      "No chats yet. Start a conversation with one person or your whole family.",
+    noMessagesYet: "No messages yet",
+    newChat: "New chat",
+    chooseFamily: "Choose a family",
+    chooseFamilyLead: "Pick which family vault this chat belongs to.",
+    chattingIn: "Chatting in {name}",
+    composeLead:
+      "Choose who to include. Everyone eligible is selected by default.",
+    selectAll: "Select all",
+    clearAll: "Clear all",
+    startChat: "Start chat",
+    back: "Back to chats",
+    noEligibleMembers: "No other family members are available for chat yet.",
+    createError: "Could not start chat.",
+    placeholder: "Message your family…",
+    composerLabel: "Family chat message",
+    send: "Send",
+    close: "Close family chat",
+    loadError: "Could not load family chat.",
+    sendError: "Could not send message.",
+    openWithUnread: "Family Chat, {count} unread",
+    memberFallback: "Family member",
+    settingsTitle: "Family Chat",
+    settingsLead:
+      "Everyone who joins is included by default. Turn off to hide chat from that person.",
+    includeToggle: "Include in family chat",
+    includeToggleFor: "Include {name} in family chat",
+    settingsLoadError: "Could not load chat settings.",
+    settingsUpdateError: "Could not update chat access.",
   },
   beta: {
     eyebrow: "Private beta",
@@ -1808,7 +1848,17 @@ export const enUS = {
       inviteCta: "Open Family",
       documentsTitle: "Documents & Digital Legacy",
       documentsDescription: "Advanced tools for later — no rush.",
+      documentsDescriptionUpgrade:
+        "Private Documents and Digital Legacy are calm vaults for paperwork and guidance — they unlock on Legacy+.",
+      documentsDescriptionUpgradeBeta:
+        "Private Documents and Digital Legacy are calm vaults for paperwork and guidance. They’re part of Legacy+, which you can try free during beta.",
       documentsCta: "Take a peek",
+      documentsCtaUpgrade: "Open Billing",
+      documentsCtaUpgradeBeta: "Switch to Legacy+ (free in beta)",
+      documentsUpgradeNote:
+        "You’ll need to upgrade to Legacy+ to use these. I won’t pretend they’re available on your current plan.",
+      documentsUpgradeNoteBeta:
+        "You’ll need Legacy+ to use these. Open Billing to switch plans free during beta — no payment is collected.",
       completeTitle: "You’re all set",
       completeDescription: "I’ll stay nearby if you need a nudge.",
       completeCta: "Thanks, Ava",
@@ -1871,6 +1921,14 @@ export const enUS = {
         "You've received an invitation to “{family}”. Accept to start sharing memories together.",
       messageFull:
         "You've received an invitation from {inviter} to “{family}”. Accept to start sharing memories together.",
+    },
+    familyChat: {
+      someone: "Someone",
+      newChatTitle: "New family chat",
+      newChatMessage: "{name} started a chat with you.",
+      messageTitle: "Family chat",
+      messagePreview: "{name}: {preview}",
+      messageFallback: "{name} sent a message in Family Chat.",
     },
     storageWarning: {
       titleNear: "Storage is getting full",

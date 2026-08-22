@@ -214,6 +214,8 @@ export async function userAllowsInApp(
       return prefs.inAppEmergencyAccess;
     case "moderation_attention":
       return true;
+    case "family_chat":
+      return true;
     default:
       return true;
   }

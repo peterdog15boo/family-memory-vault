@@ -2,6 +2,7 @@
 
 import { Bot } from "lucide-react";
 import { useAskAi } from "@/components/assistant/AskAiContext";
+import { useFamilyChat } from "@/components/family-chat/FamilyChatContext";
 import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { cn } from "@/lib/utils";
 
@@ -11,6 +12,7 @@ import { cn } from "@/lib/utils";
  */
 export function AskAiFab({ className }: { className?: string }) {
   const { open, minimized, toggleAskAi, restoreAskAi } = useAskAi();
+  const { closeFamilyChat } = useFamilyChat();
   const t = useTranslations();
 
   if (open) return null;
@@ -19,7 +21,10 @@ export function AskAiFab({ className }: { className?: string }) {
     return (
       <button
         type="button"
-        onClick={restoreAskAi}
+        onClick={() => {
+          closeFamilyChat();
+          restoreAskAi();
+        }}
         className={cn(
           "ask-ai-fab ask-ai-fab--restore",
           className,
@@ -38,7 +43,10 @@ export function AskAiFab({ className }: { className?: string }) {
   return (
     <button
       type="button"
-      onClick={toggleAskAi}
+      onClick={() => {
+        closeFamilyChat();
+        toggleAskAi();
+      }}
       className={cn("ask-ai-fab", className)}
       aria-label={t("nav.askAi")}
       aria-haspopup="dialog"

@@ -322,6 +322,37 @@ async function dispatchAction(
 async function executePrivateVault(
   input: ExecuteAssistantActionInput,
 ): Promise<Omit<ExecuteAssistantActionOutcome, "actionId">> {
+  const { resolveLegacyPlusGuidance } = await import(
+    "@/lib/plans/legacy-plus-guidance"
+  );
+  const kind =
+    input.intent.action === "add_legacy_contact" ||
+    input.intent.action === "draft_legacy_business" ||
+    input.intent.action === "review_legacy_checklist"
+      ? ("digital_legacy" as const)
+      : ("private_documents" as const);
+  const guidance = await resolveLegacyPlusGuidance(input.userId, kind);
+  if (!guidance.hasAccess) {
+    return {
+      status: "succeeded",
+      result: {
+        type: "answer_help",
+        topicIds: [kind === "digital_legacy" ? "digital_legacy" : "private_documents"],
+        links: [
+          { label: guidance.ctaLabel, href: guidance.href },
+          { label: "Compare plans", href: "/pricing" },
+        ],
+      },
+      assistantMessage: [
+        guidance.upgradeNote,
+        "",
+        "I can explain how it works, but I can’t open or change those vaults on your current plan.",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    };
+  }
+
   const outcome = await executePrivateVaultIntent(input.userId, input.intent);
   return {
     status: "succeeded",

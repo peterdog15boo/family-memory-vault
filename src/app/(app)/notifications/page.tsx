@@ -25,6 +25,7 @@ export default async function NotificationsPage() {
     link: n.link,
     readAt: n.readAt?.toISOString() ?? null,
     createdAt: n.createdAt.toISOString(),
+    metadata: n.metadata ?? null,
   }));
 
   return (

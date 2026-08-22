@@ -90,6 +90,14 @@ export type NotificationData = {
     designateeName?: string;
     link?: string;
   };
+  family_chat: {
+    familyId: string;
+    threadId: string;
+    kind: "thread_created" | "message";
+    senderName?: string;
+    preview?: string;
+    link?: string;
+  };
 };
 
 type CreateNotificationInput<T extends NotificationType> = {
@@ -269,6 +277,40 @@ export async function notifyFamilyInvite(
     title: t("notifications.familyInvite.title"),
     message,
     data: { ...data, link: data.link ?? "/family" },
+  });
+}
+
+export async function notifyFamilyChat(
+  userId: string,
+  data: NotificationData["family_chat"],
+): Promise<Notification | null> {
+  const { t } = await translatorForUserId(userId);
+  const sender = data.senderName?.trim() || t("notifications.familyChat.someone");
+  const link =
+    data.link ??
+    `/#family-chat=${encodeURIComponent(data.threadId)}&family=${encodeURIComponent(data.familyId)}`;
+
+  if (data.kind === "thread_created") {
+    return createNotification({
+      userId,
+      type: "family_chat",
+      title: t("notifications.familyChat.newChatTitle"),
+      message: t("notifications.familyChat.newChatMessage", { name: sender }),
+      data: { ...data, link },
+    });
+  }
+
+  return createNotification({
+    userId,
+    type: "family_chat",
+    title: t("notifications.familyChat.messageTitle", { name: sender }),
+    message: data.preview
+      ? t("notifications.familyChat.messagePreview", {
+          name: sender,
+          preview: data.preview,
+        })
+      : t("notifications.familyChat.messageFallback", { name: sender }),
+    data: { ...data, link },
   });
 }
 

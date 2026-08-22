@@ -49,6 +49,8 @@ import {
   isAppLocale,
   type TranslateFn,
 } from "@/lib/i18n";
+import { canUseLegacyPlusFeatures } from "@/lib/plans/gates";
+import { isBetaPlanModeActive } from "@/lib/plans/legacy-plus-guidance";
 
 export type {
   AvaAutoOpenReason,
@@ -104,6 +106,16 @@ async function countCleanPhotos(userId: string): Promise<number> {
     .select({ value: count() })
     .from(media)
     .where(and(cleanReadyMediaFilter(userId), eq(media.type, "photo")));
+  return Number(row?.value ?? 0);
+}
+
+/** Clean + ready photos and videos — usable for movie creation. */
+async function countCleanUsableMedia(userId: string): Promise<number> {
+  const db = getDb();
+  const [row] = await db
+    .select({ value: count() })
+    .from(media)
+    .where(cleanReadyMediaFilter(userId));
   return Number(row?.value ?? 0);
 }
 
@@ -396,7 +408,10 @@ function buildSteps(
   state: UserOnboardingState,
   signals: AvaSignals,
   t: TranslateFn = createTranslator(DEFAULT_LOCALE),
+  options: { legacyPlus?: boolean; betaMode?: boolean } = {},
 ): AvaStep[] {
+  const hasLegacyPlus = Boolean(options.legacyPlus);
+  const betaMode = Boolean(options.betaMode);
   const hp = state.helperProgress ?? emptyProgress();
   const welcomeDone =
     Boolean(hp.welcomeSeen) || Boolean(state.welcomeSeenAt);
@@ -421,6 +436,8 @@ function buildSteps(
     Boolean(hp.peopleExplained) ||
     Boolean(hp.peopleSkipped);
   const movieDone = signals.movieCount > 0 || Boolean(hp.movieSkipped);
+  /** Movies need enough clean/ready library media to be worth encouraging. */
+  const moviePromptEligible = signals.cleanUsableMediaCount >= 5;
   const askAiDone =
     signals.assistantConversationCount > 0 || Boolean(hp.askAiSkipped);
   const inviteDone = signals.inviteCount > 0 || Boolean(hp.inviteSkipped);
@@ -571,10 +588,10 @@ function buildSteps(
       href: movieHref,
       ctaLabel: t("ava.steps.createMovieCta"),
       optional: true,
-      status: !postMemoryUnlocked
-        ? "locked"
-        : movieDone
-          ? "done"
+      status: movieDone
+        ? "done"
+        : !postMemoryUnlocked || !moviePromptEligible
+          ? "locked"
           : "available",
     }),
     step({
@@ -607,10 +624,23 @@ function buildSteps(
     step({
       id: "documents_legacy",
       title: t("ava.steps.documentsTitle"),
-      description: t("ava.steps.documentsDescription"),
-      href: "/documents",
-      ctaLabel: t("ava.steps.documentsCta"),
+      description: hasLegacyPlus
+        ? t("ava.steps.documentsDescription")
+        : betaMode
+          ? t("ava.steps.documentsDescriptionUpgradeBeta")
+          : t("ava.steps.documentsDescriptionUpgrade"),
+      href: hasLegacyPlus ? "/documents" : "/billing",
+      ctaLabel: hasLegacyPlus
+        ? t("ava.steps.documentsCta")
+        : betaMode
+          ? t("ava.steps.documentsCtaUpgradeBeta")
+          : t("ava.steps.documentsCtaUpgrade"),
       optional: true,
+      upgradeNote: hasLegacyPlus
+        ? null
+        : betaMode
+          ? t("ava.steps.documentsUpgradeNoteBeta")
+          : t("ava.steps.documentsUpgradeNote"),
       status: !docsUnlocked
         ? "locked"
         : docsDone
@@ -693,28 +723,35 @@ export async function getAvaProgress(userId: string): Promise<AvaProgress> {
     mediaCount,
     pendingModerationCount,
     cleanPhotoCount,
+    cleanUsableMediaCount,
     memoryCount,
     peopleCount,
     movieCount,
     inviteCount,
     assistantConversationCount,
     latestMemoryId,
+    legacyPlusGate,
   ] = await Promise.all([
     countAnyMedia(userId),
     countPendingModeration(userId),
     countCleanPhotos(userId),
+    countCleanUsableMedia(userId),
     countMemories(userId),
     countPeople(userId),
     countMovies(userId),
     countInvitesSent(userId),
     countAssistantConversations(userId),
     getLatestMemoryId(userId),
+    canUseLegacyPlusFeatures(userId).catch(() => ({
+      allowed: false as const,
+    })),
   ]);
 
   const signals: AvaSignals = {
     mediaCount,
     pendingModerationCount,
     cleanPhotoCount,
+    cleanUsableMediaCount,
     memoryCount,
     peopleCount,
     movieCount,
@@ -762,7 +799,12 @@ export async function getAvaProgress(userId: string): Promise<AvaProgress> {
     }).catch(() => undefined);
   }
 
-  const steps = buildSteps(liveState, signals, t);
+  const steps = buildSteps(liveState, signals, t, {
+    legacyPlus: Boolean(
+      "allowed" in legacyPlusGate && legacyPlusGate.allowed,
+    ),
+    betaMode: isBetaPlanModeActive(),
+  });
   const completedCount = steps.filter((s) => s.status === "done").length;
   const percent = Math.round((completedCount / Math.max(steps.length, 1)) * 100);
 

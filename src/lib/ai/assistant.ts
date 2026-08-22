@@ -709,6 +709,42 @@ async function handlePrivateVaultTurn(input: {
   t: TranslateFn;
   locale: AppLocale;
 }): Promise<AssistantUiResponse> {
+  const { resolveLegacyPlusGuidance } = await import(
+    "@/lib/plans/legacy-plus-guidance"
+  );
+  const kind =
+    input.intent.action === "add_legacy_contact" ||
+    input.intent.action === "draft_legacy_business" ||
+    input.intent.action === "review_legacy_checklist"
+      ? ("digital_legacy" as const)
+      : ("private_documents" as const);
+  const guidance = await resolveLegacyPlusGuidance(input.userId, kind);
+  if (!guidance.hasAccess) {
+    const message = [
+      guidance.upgradeNote,
+      "",
+      "I can still explain the idea — just know I can’t unlock it until you’re on Legacy+.",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    return reply(input.conversationId, input.userMessageId, input.userId, {
+      status: "completed",
+      message,
+      intent: input.intent,
+      result: {
+        type: "answer_help",
+        topicIds: [
+          kind === "digital_legacy" ? "digital_legacy" : "private_documents",
+        ],
+        links: [
+          { label: guidance.ctaLabel, href: guidance.href },
+          { label: "Compare plans", href: "/pricing" },
+        ],
+      },
+    });
+  }
+
   const questions = uniqueStrings([
     ...(input.intent.clarifying_questions ?? []),
     ...buildPrivateVaultClarifyingQuestions(input.intent),

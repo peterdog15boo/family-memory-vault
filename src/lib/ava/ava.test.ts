@@ -18,6 +18,7 @@ function emptySignals(partial: Partial<AvaSignals> = {}): AvaSignals {
     mediaCount: 0,
     pendingModerationCount: 0,
     cleanPhotoCount: 0,
+    cleanUsableMediaCount: 0,
     memoryCount: 0,
     peopleCount: 0,
     movieCount: 0,
@@ -93,6 +94,90 @@ describe("live profile identity", () => {
     expect(steps.find((s) => s.id === "screen_name")?.status).toBe("done");
     expect(steps.find((s) => s.id === "avatar")?.status).toBe("done");
     expect(steps.find((s) => s.id === "upload")?.status).toBe("available");
+  });
+
+  it("adds a Legacy+ upgrade note on documents step when plan lacks access", () => {
+    const state = normalizeOnboardingState({
+      eligible: true,
+      helperProgress: {
+        welcomeSeen: true,
+        peopleExplained: true,
+      },
+      welcomeSeenAt: new Date().toISOString(),
+    });
+    const signals = emptySignals({
+      displayName: "Jeff",
+      imageUrl: "https://img.clerk.com/avatar.png",
+      mediaCount: 2,
+      cleanPhotoCount: 2,
+      cleanUsableMediaCount: 2,
+      memoryCount: 1,
+      peopleCount: 1,
+    });
+    const steps = avaBuildSteps(state, signals, undefined, {
+      legacyPlus: false,
+      betaMode: true,
+    });
+    const docs = steps.find((s) => s.id === "documents_legacy");
+    expect(docs?.status).toBe("available");
+    expect(docs?.href).toBe("/billing");
+    expect(docs?.upgradeNote).toMatch(/Legacy\+/);
+    expect(docs?.ctaLabel).toMatch(/Legacy\+/);
+  });
+
+  it("locks create_movie until 5 clean/ready library media exist", () => {
+    const state = normalizeOnboardingState({
+      eligible: true,
+      helperProgress: { welcomeSeen: true },
+      welcomeSeenAt: new Date().toISOString(),
+    });
+    const base = {
+      displayName: "Jeff",
+      imageUrl: "https://img.clerk.com/avatar.png",
+      mediaCount: 4,
+      cleanPhotoCount: 4,
+      memoryCount: 1,
+    };
+
+    const locked = avaBuildSteps(
+      state,
+      emptySignals({ ...base, cleanUsableMediaCount: 4 }),
+    );
+    expect(locked.find((s) => s.id === "create_movie")?.status).toBe("locked");
+
+    const unlocked = avaBuildSteps(
+      state,
+      emptySignals({
+        ...base,
+        mediaCount: 5,
+        cleanPhotoCount: 5,
+        cleanUsableMediaCount: 5,
+      }),
+    );
+    expect(unlocked.find((s) => s.id === "create_movie")?.status).toBe(
+      "available",
+    );
+  });
+
+  it("marks create_movie done after a movie exists without re-prompting", () => {
+    const state = normalizeOnboardingState({
+      eligible: true,
+      helperProgress: { welcomeSeen: true },
+      welcomeSeenAt: new Date().toISOString(),
+    });
+    const steps = avaBuildSteps(
+      state,
+      emptySignals({
+        displayName: "Jeff",
+        imageUrl: "https://img.clerk.com/avatar.png",
+        mediaCount: 2,
+        cleanPhotoCount: 2,
+        cleanUsableMediaCount: 2,
+        memoryCount: 1,
+        movieCount: 1,
+      }),
+    );
+    expect(steps.find((s) => s.id === "create_movie")?.status).toBe("done");
   });
 
   it("keeps identity incomplete when avatar is missing", () => {

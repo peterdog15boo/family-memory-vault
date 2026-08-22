@@ -323,6 +323,20 @@
       "when": 1786320000000,
       "tag": "0056_beta_plan_source",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1786400000000,
+      "tag": "0057_family_chat",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1786480000000,
+      "tag": "0058_family_chat_threads",
+      "breakpoints": true
     }
   ]
 }

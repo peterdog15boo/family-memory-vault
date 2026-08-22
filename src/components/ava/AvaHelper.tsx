@@ -693,6 +693,15 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
                   {active?.description || t("ava.idleTip")}
                 </p>
 
+                {active?.upgradeNote ? (
+                  <p
+                    className="mx-auto mt-3 max-w-sm rounded-lg border border-amber-200/90 bg-amber-50/90 px-3 py-2 text-left text-sm leading-relaxed text-amber-950"
+                    role="note"
+                  >
+                    {active.upgradeNote}
+                  </p>
+                ) : null}
+
                 {active?.optional ? (
                   <p className="mt-2 text-xs text-ink-muted/80">
                     {t("ava.optional")}

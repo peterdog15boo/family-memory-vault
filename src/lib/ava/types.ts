@@ -32,12 +32,19 @@ export type AvaStep = {
   inline?: "screen_name" | "avatar" | "acknowledge";
   /** Friendly example prompts (e.g. Ask AI). */
   examples?: string[];
+  /** Upgrade note when pointing at Legacy+-only features. */
+  upgradeNote?: string | null;
 };
 
 export type AvaSignals = {
   mediaCount: number;
   pendingModerationCount: number;
   cleanPhotoCount: number;
+  /**
+   * Clean + ready library photos and videos (usable for movie creation).
+   * Ava’s create-movie tip stays locked until this is ≥ 5.
+   */
+  cleanUsableMediaCount: number;
   memoryCount: number;
   peopleCount: number;
   movieCount: number;
