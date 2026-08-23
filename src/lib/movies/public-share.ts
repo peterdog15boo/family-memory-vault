@@ -9,9 +9,67 @@ import { getDb } from "@/lib/db";
 import { movieShares, movies, type Movie, type MovieShare } from "@/lib/db/schema";
 import { getAppUrl } from "@/lib/env";
 import { MovieError } from "@/lib/movies/errors";
+import { logger } from "@/lib/observability/logger";
 import { serializeMovie, type SerializedMovie } from "@/lib/movies/serialize";
 
 const SHARE_TOKEN_BYTES = 21;
+const INSERT_ATTEMPTS = 3;
+
+let schemaEnsurePromise: Promise<void> | null = null;
+
+/**
+ * Idempotent safety net when migration 0059 was never applied.
+ * CREATE IF NOT EXISTS is cheap after the first call (cached per process).
+ */
+export async function ensureMovieSharesSchema(): Promise<void> {
+  if (!schemaEnsurePromise) {
+    schemaEnsurePromise = (async () => {
+      const db = getDb();
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "movie_shares" (
+          "id" text PRIMARY KEY NOT NULL,
+          "movie_id" text NOT NULL,
+          "user_id" text NOT NULL,
+          "token" text NOT NULL,
+          "revoked_at" timestamp with time zone,
+          "expires_at" timestamp with time zone,
+          "view_count" integer DEFAULT 0 NOT NULL,
+          "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+          "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+        )
+      `);
+      await db.execute(sql`
+        DO $$ BEGIN
+          ALTER TABLE "movie_shares" ADD CONSTRAINT "movie_shares_movie_id_movies_id_fk"
+            FOREIGN KEY ("movie_id") REFERENCES "public"."movies"("id")
+            ON DELETE cascade ON UPDATE no action;
+        EXCEPTION WHEN duplicate_object THEN null;
+        END $$
+      `);
+      await db.execute(sql`
+        DO $$ BEGIN
+          ALTER TABLE "movie_shares" ADD CONSTRAINT "movie_shares_user_id_users_id_fk"
+            FOREIGN KEY ("user_id") REFERENCES "public"."users"("id")
+            ON DELETE cascade ON UPDATE no action;
+        EXCEPTION WHEN duplicate_object THEN null;
+        END $$
+      `);
+      await db.execute(
+        sql`CREATE UNIQUE INDEX IF NOT EXISTS "movie_shares_token_uidx" ON "movie_shares" USING btree ("token")`,
+      );
+      await db.execute(
+        sql`CREATE INDEX IF NOT EXISTS "movie_shares_movie_id_idx" ON "movie_shares" USING btree ("movie_id")`,
+      );
+      await db.execute(
+        sql`CREATE INDEX IF NOT EXISTS "movie_shares_user_id_idx" ON "movie_shares" USING btree ("user_id")`,
+      );
+    })().catch((error) => {
+      schemaEnsurePromise = null;
+      throw error;
+    });
+  }
+  await schemaEnsurePromise;
+}
 
 export function buildMovieSharePageUrl(token: string): string {
   // Stable public page (opaque token — not the internal movie id).
@@ -34,6 +92,46 @@ function isShareActive(share: MovieShare, now = new Date()): boolean {
   return true;
 }
 
+function pgErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : undefined;
+}
+
+function mapShareDbError(error: unknown, context: string): never {
+  const message = error instanceof Error ? error.message : String(error);
+  const code = pgErrorCode(error);
+
+  logger.error("movies.share.db_error", {
+    context,
+    pgCode: code,
+    errorName: error instanceof Error ? error.name : "unknown",
+    errorMessage: message,
+  });
+
+  if (
+    code === "42P01" ||
+    /relation ["']?movie_shares["']? does not exist/i.test(message)
+  ) {
+    throw new MovieError(
+      "Share storage isn’t ready yet. Please try again in a moment.",
+      { retryable: true, code: "validation" },
+    );
+  }
+
+  if (code === "23503" || /foreign key/i.test(message)) {
+    throw new MovieError("Movie not found.", {
+      retryable: false,
+      code: "not_found",
+    });
+  }
+
+  throw new MovieError(
+    `Could not create share link: ${message.slice(0, 180)}`,
+    { retryable: false, code: "validation" },
+  );
+}
+
 /**
  * Create or reuse an active share link for a ready movie the user owns.
  */
@@ -49,6 +147,8 @@ export async function ensureMovieShareLink(input: {
       code: "validation",
     });
   }
+
+  await ensureMovieSharesSchema();
 
   const db = getDb();
   const [movie] = await db
@@ -70,17 +170,22 @@ export async function ensureMovieShareLink(input: {
     });
   }
 
-  const existing = await db
-    .select()
-    .from(movieShares)
-    .where(
-      and(
-        eq(movieShares.movieId, movieId),
-        eq(movieShares.userId, userId),
-        isNull(movieShares.revokedAt),
-      ),
-    )
-    .limit(8);
+  let existing: MovieShare[];
+  try {
+    existing = await db
+      .select()
+      .from(movieShares)
+      .where(
+        and(
+          eq(movieShares.movieId, movieId),
+          eq(movieShares.userId, userId),
+          isNull(movieShares.revokedAt),
+        ),
+      )
+      .limit(8);
+  } catch (error) {
+    mapShareDbError(error, "list_existing");
+  }
 
   const active = existing.find((row) => isShareActive(row));
   if (active) {
@@ -91,28 +196,82 @@ export async function ensureMovieShareLink(input: {
     };
   }
 
-  const now = new Date();
-  const [created] = await db
-    .insert(movieShares)
-    .values({
-      id: nanoid(),
-      movieId,
-      userId,
-      token: nanoid(SHARE_TOKEN_BYTES),
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning();
+  for (let attempt = 1; attempt <= INSERT_ATTEMPTS; attempt++) {
+    const now = new Date();
+    const id = nanoid();
+    const token = nanoid(SHARE_TOKEN_BYTES);
 
-  if (!created) {
-    throw new MovieError("Could not create a share link.");
+    try {
+      await db.insert(movieShares).values({
+        id,
+        movieId,
+        userId,
+        token,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const [created] = await db
+        .select()
+        .from(movieShares)
+        .where(eq(movieShares.id, id))
+        .limit(1);
+
+      if (!created) {
+        throw new MovieError("Could not create a share link.", {
+          retryable: true,
+          code: "validation",
+        });
+      }
+
+      return {
+        share: created,
+        shareUrl: buildMovieSharePageUrl(created.token),
+        created: true,
+      };
+    } catch (error) {
+      if (error instanceof MovieError) throw error;
+
+      const code = pgErrorCode(error);
+      // Unique token collision — rare; retry with a new token.
+      if (code === "23505" && attempt < INSERT_ATTEMPTS) {
+        logger.warn("movies.share.token_collision", { movieId, attempt });
+        continue;
+      }
+
+      // Another request may have created a link first — reuse it.
+      try {
+        const raced = await db
+          .select()
+          .from(movieShares)
+          .where(
+            and(
+              eq(movieShares.movieId, movieId),
+              eq(movieShares.userId, userId),
+              isNull(movieShares.revokedAt),
+            ),
+          )
+          .limit(8);
+        const racedActive = raced.find((row) => isShareActive(row));
+        if (racedActive) {
+          return {
+            share: racedActive,
+            shareUrl: buildMovieSharePageUrl(racedActive.token),
+            created: false,
+          };
+        }
+      } catch {
+        // fall through to mapShareDbError
+      }
+
+      mapShareDbError(error, "insert");
+    }
   }
 
-  return {
-    share: created,
-    shareUrl: buildMovieSharePageUrl(created.token),
-    created: true,
-  };
+  throw new MovieError("Could not create a share link.", {
+    retryable: true,
+    code: "validation",
+  });
 }
 
 export type PublicSharedMovie = {
@@ -139,6 +298,12 @@ export async function lookupPublicMovieShare(
 ): Promise<PublicShareRow | null> {
   const trimmed = token?.trim();
   if (!trimmed) return null;
+
+  try {
+    await ensureMovieSharesSchema();
+  } catch {
+    return null;
+  }
 
   const db = getDb();
   const [row] = await db
@@ -209,6 +374,12 @@ export async function getActiveShareUrlForMovie(
   movieId: string,
   userId: string,
 ): Promise<string | null> {
+  try {
+    await ensureMovieSharesSchema();
+  } catch {
+    return null;
+  }
+
   const db = getDb();
   const rows = await db
     .select()
