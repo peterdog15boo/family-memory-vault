@@ -15,7 +15,6 @@ import { announce } from "@/lib/a11y/announce";
 import type { SerializedMovie } from "@/lib/movies/serialize";
 import {
   buildSocialIntentUrl,
-  completeSocialShareIntent,
   copyTextToClipboard,
   downloadMovieFile,
   logMovieShare,
@@ -24,9 +23,10 @@ import {
   movieShareTokenFromUrl,
   movieShareUrl,
   movieSocialNetworkLabel,
-  navigateShareIntent,
-  openShareIntentPlaceholder,
+  normalizePublicSharePageUrl,
+  openSocialIntentWindow,
   shareMovieFile,
+  shareToSocialNetwork,
   type MovieSocialNetwork,
 } from "@/lib/movies/share";
 import { useOverlayA11y } from "@/hooks/useOverlayA11y";
@@ -84,27 +84,33 @@ const SOCIAL_OPTIONS: SocialOption[] = [
 ];
 
 /**
- * Movie share sheet — public /share/movies/{token} page + social intents.
+ * Reliability-first movie share sheet.
+ * Copy Link is the dependable core; social intents are best-effort with copy fallback.
  */
 export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
   const t = useTranslations();
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  /** Always-visible status inside the dialog (never silent). */
+  const [status, setStatus] = useState<string | null>(null);
   const [shareMovie, setShareMovie] = useState(movie);
   const [posterUrl, setPosterUrl] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(!movie.shareUrl);
   const dialogRef = useRef<HTMLDivElement>(null);
   const shareMovieRef = useRef(shareMovie);
   shareMovieRef.current = shareMovie;
-  const toastTimer = useRef<number | null>(null);
+  const publicUrlRef = useRef<string | null>(movie.shareUrl ?? null);
+  const posterUrlRef = useRef<string | null>(null);
   const ensuredIdRef = useRef<string | null>(null);
 
   const anyUrl = useMemo(() => movieShareUrl(shareMovie), [shareMovie]);
-  const publicUrl = useMemo(
-    () => moviePublicShareUrl(shareMovie),
-    [shareMovie],
-  );
+  const publicUrl = useMemo(() => {
+    const raw = moviePublicShareUrl(shareMovie);
+    return raw ? normalizePublicSharePageUrl(raw) : null;
+  }, [shareMovie]);
+  publicUrlRef.current = publicUrl;
+  posterUrlRef.current = posterUrl;
+
   const canSystemShare =
     typeof navigator !== "undefined" && typeof navigator.share === "function";
 
@@ -115,20 +121,12 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
     initialFocus: "container",
   });
 
-  function showToast(message: string) {
-    setToast(message);
+  function setVisibleStatus(message: string) {
+    setStatus(message);
     announce(message, { priority: "polite" });
-    if (toastTimer.current) window.clearTimeout(toastTimer.current);
-    toastTimer.current = window.setTimeout(() => setToast(null), 4200);
+    logMovieShare("ui:status", { message });
   }
 
-  useEffect(() => {
-    return () => {
-      if (toastTimer.current) window.clearTimeout(toastTimer.current);
-    };
-  }, []);
-
-  // Ensure durable public share page URL once (stable /share/movies/{token}).
   useEffect(() => {
     let cancelled = false;
     const movieId = movie.id;
@@ -136,14 +134,19 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
     async function ensureShare() {
       if (movie.shareUrl) {
         ensuredIdRef.current = movieId;
-        setShareMovie({ ...movie, shareUrl: movie.shareUrl });
-        const token = movieShareTokenFromUrl(movie.shareUrl);
+        const normalized = normalizePublicSharePageUrl(movie.shareUrl);
+        const next = { ...movie, shareUrl: normalized };
+        shareMovieRef.current = next;
+        setShareMovie(next);
+        publicUrlRef.current = normalized;
+        const token = movieShareTokenFromUrl(normalized);
         if (token && typeof window !== "undefined") {
-          setPosterUrl(
-            `${window.location.origin}/api/public/movies/${encodeURIComponent(token)}/poster`,
-          );
+          const poster = `${window.location.origin}/api/public/movies/${encodeURIComponent(token)}/poster`;
+          posterUrlRef.current = poster;
+          setPosterUrl(poster);
         }
         setPreparing(false);
+        logMovieShare("ensure:fromProp", { sharePageUrl: normalized });
         return;
       }
       if (ensuredIdRef.current === movieId && shareMovieRef.current.shareUrl) {
@@ -152,7 +155,7 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
       }
 
       setPreparing(true);
-      logMovieShare("dialog:ensureShare:start", { movieId });
+      logMovieShare("ensure:start", { movieId });
       try {
         const res = await fetch(`/api/movies/${movieId}/share`, {
           method: "POST",
@@ -165,25 +168,40 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
         };
         if (cancelled) return;
         if (!res.ok || !data.shareUrl) {
-          console.error("[movie.share] ensure failed", data);
-          showToast(data.error || t("movie.noteShareLinkFailed"));
+          console.error("[movie.share] ensure failed", {
+            status: res.status,
+            data,
+          });
+          setVisibleStatus(data.error || t("movie.noteShareLinkFailed"));
           setPreparing(false);
           return;
         }
         ensuredIdRef.current = movieId;
-        const next = { ...movie, shareUrl: data.shareUrl };
+        const normalized = normalizePublicSharePageUrl(data.shareUrl);
+        const next = { ...movie, shareUrl: normalized };
         shareMovieRef.current = next;
         setShareMovie(next);
-        setPosterUrl(
+        publicUrlRef.current = normalized;
+        const poster =
           data.posterUrl ||
-            (data.token && typeof window !== "undefined"
-              ? `${window.location.origin}/api/public/movies/${encodeURIComponent(data.token)}/poster`
-              : null),
-        );
-        logMovieShare("dialog:ensureShare:ok", { shareUrl: data.shareUrl });
+          (data.token && typeof window !== "undefined"
+            ? `${window.location.origin}/api/public/movies/${encodeURIComponent(data.token)}/poster`
+            : null);
+        if (poster) {
+          const normalizedPoster = normalizePublicSharePageUrl(poster);
+          posterUrlRef.current = normalizedPoster;
+          setPosterUrl(normalizedPoster);
+        }
+        logMovieShare("ensure:ok", {
+          sharePageUrl: normalized,
+          posterUrl: poster,
+          token: data.token,
+        });
       } catch (err) {
         console.error("[movie.share] ensure exception", err);
-        if (!cancelled) showToast(t("movie.noteShareLinkFailed"));
+        if (!cancelled) {
+          setVisibleStatus(t("movie.noteShareLinkFailed"));
+        }
       } finally {
         if (!cancelled) setPreparing(false);
       }
@@ -193,27 +211,12 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per movie id
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [movie.id, movie.shareUrl, t]);
 
-  async function fetchSharePage(): Promise<{
-    sharePageUrl: string;
-    posterUrl: string | null;
-    text: string;
-  }> {
-    const current = shareMovieRef.current;
-    if (moviePublicShareUrl(current)) {
-      const token = movieShareTokenFromUrl(current.shareUrl);
-      return {
-        sharePageUrl: current.shareUrl!,
-        posterUrl:
-          posterUrl ||
-          (token && typeof window !== "undefined"
-            ? `${window.location.origin}/api/public/movies/${encodeURIComponent(token)}/poster`
-            : null),
-        text: movieShareText(current),
-      };
-    }
+  async function resolveSharePageUrl(): Promise<string> {
+    const existing = publicUrlRef.current;
+    if (existing) return existing;
 
     const res = await fetch(`/api/movies/${movie.id}/share`, { method: "POST" });
     const data = (await res.json().catch(() => ({}))) as {
@@ -225,36 +228,40 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
     if (!res.ok || !data.shareUrl) {
       throw new Error(data.error || t("movie.noteShareLinkFailed"));
     }
-    const next = { ...current, shareUrl: data.shareUrl };
+    const normalized = normalizePublicSharePageUrl(data.shareUrl);
+    const next = { ...shareMovieRef.current, shareUrl: normalized };
     shareMovieRef.current = next;
     setShareMovie(next);
-    const nextPoster =
-      data.posterUrl ||
-      (data.token && typeof window !== "undefined"
-        ? `${window.location.origin}/api/public/movies/${encodeURIComponent(data.token)}/poster`
-        : null);
-    if (nextPoster) setPosterUrl(nextPoster);
-    return {
-      sharePageUrl: data.shareUrl,
-      posterUrl: nextPoster,
-      text: movieShareText(next),
-    };
+    publicUrlRef.current = normalized;
+    if (data.posterUrl) {
+      const p = normalizePublicSharePageUrl(data.posterUrl);
+      posterUrlRef.current = p;
+      setPosterUrl(p);
+    }
+    logMovieShare("resolveSharePageUrl", { sharePageUrl: normalized });
+    return normalized;
   }
 
+  /** Dependable core — always copies the public share page URL. */
   async function handleCopy() {
     setBusy("copy");
+    setStatus(null);
     try {
-      const ready = await fetchSharePage();
-      const ok = await copyTextToClipboard(ready.sharePageUrl);
+      const pageUrl = await resolveSharePageUrl();
+      logMovieShare("copy:start", { sharePageUrl: pageUrl });
+      const ok = await copyTextToClipboard(pageUrl);
       if (ok) {
         setCopied(true);
-        showToast(t("movie.noteCopied"));
+        setVisibleStatus(t("movie.linkCopiedToast"));
         window.setTimeout(() => setCopied(false), 2200);
       } else {
-        showToast(t("movie.noteCopyFailed"));
+        setVisibleStatus(t("movie.noteCopyFailed"));
       }
-    } catch {
-      showToast(t("movie.noteShareLinkFailed"));
+    } catch (err) {
+      console.error("[movie.share] copy failed", err);
+      setVisibleStatus(
+        err instanceof Error ? err.message : t("movie.noteShareLinkFailed"),
+      );
     } finally {
       setBusy(null);
     }
@@ -262,21 +269,30 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
 
   async function handleSystemShare() {
     setBusy("system");
+    setStatus(null);
     try {
-      const ready = await fetchSharePage();
+      const pageUrl = await resolveSharePageUrl();
+      const title = shareMovieRef.current.title;
+      const text = movieShareText(shareMovieRef.current);
+      logMovieShare("systemShare:start", { sharePageUrl: pageUrl });
       if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
         try {
-          await navigator.share({
-            title: shareMovieRef.current.title,
-            text: ready.text,
-            url: ready.sharePageUrl,
-          });
+          await navigator.share({ title, text, url: pageUrl });
+          setVisibleStatus(t("movie.noteSystemShareDone"));
           return;
-        } catch {
-          // fall through
+        } catch (err) {
+          // User cancel — don't treat as hard failure.
+          if (err instanceof Error && err.name === "AbortError") {
+            logMovieShare("systemShare:aborted");
+            return;
+          }
+          console.warn("[movie.share] navigator.share failed", err);
         }
       }
-      await shareMovieFile(shareMovieRef.current);
+      await shareMovieFile({ ...shareMovieRef.current, shareUrl: pageUrl });
+    } catch (err) {
+      console.error("[movie.share] system share failed", err);
+      setVisibleStatus(t("movie.noteSocialFailed"));
     } finally {
       setBusy(null);
     }
@@ -287,90 +303,92 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
     const ok = downloadMovieFile(shareMovieRef.current);
     setBusy(null);
     if (!ok) {
-      showToast(t("movie.noteDownloadUnavailable"));
+      setVisibleStatus(t("movie.noteDownloadUnavailable"));
       return;
     }
-    if (forNetwork === "instagram") showToast(t("movie.noteInstagram"));
-    else if (forNetwork === "tiktok") showToast(t("movie.noteTikTok"));
-    else showToast(t("movie.noteDownloadStarted"));
+    if (forNetwork === "instagram") setVisibleStatus(t("movie.noteInstagram"));
+    else if (forNetwork === "tiktok") setVisibleStatus(t("movie.noteTikTok"));
+    else setVisibleStatus(t("movie.noteDownloadStarted"));
   }
 
+  /**
+   * Facebook / X / Pinterest — direct window.open(intent) under the click.
+   * No about:blank hop. No setState/await before open when the URL is ready.
+   * If blocked → copy public page URL + visible status (never silent).
+   */
   async function handleLinkNetwork(
     network: "facebook" | "x" | "pinterest",
   ) {
-    logMovieShare("link:click", {
-      network,
-      hasPublic: Boolean(publicUrl),
-    });
+    const label = movieSocialNetworkLabel(network);
+    const readyUrl = publicUrlRef.current;
 
-    // 1) Capture gesture immediately.
-    const placeholder = openShareIntentPlaceholder();
-
-    // 2) If the public page URL is already ready, navigate in the same turn
-    //    (no await) so browsers keep the gesture-associated tab.
-    if (publicUrl) {
-      const href = buildSocialIntentUrl(network, {
-        sharePageUrl: publicUrl,
+    // Fast path: public URL ready — open BEFORE any await/setState.
+    if (readyUrl) {
+      const intentUrl = buildSocialIntentUrl(network, {
+        sharePageUrl: readyUrl,
         text: movieShareText(shareMovieRef.current),
-        posterUrl,
+        posterUrl: posterUrlRef.current,
       });
-      const nav = navigateShareIntent(href, placeholder);
-      if (nav.opened) {
-        showToast(
-          t("movie.noteSocialOpenedNamed", {
-            network: movieSocialNetworkLabel(network),
-          }),
-        );
+      logMovieShare("link:fastPath:open", {
+        network,
+        sharePageUrl: readyUrl,
+        intentUrl,
+      });
+      const open = openSocialIntentWindow(intentUrl);
+      if (open.opened) {
+        setVisibleStatus(t("movie.noteSocialOpenedNamed", { network: label }));
         return;
       }
-      if (placeholder && !placeholder.closed) {
-        try {
-          placeholder.close();
-        } catch {
-          // ignore
-        }
+      logMovieShare("link:fastPath:blocked", {
+        network,
+        windowOpenReturnedNull: open.windowOpenReturnedNull,
+      });
+      const copiedOk = await copyTextToClipboard(readyUrl);
+      if (copiedOk) {
+        setCopied(true);
+        setVisibleStatus(t("movie.noteSocialCopyNamed", { network: label }));
+        window.setTimeout(() => setCopied(false), 2800);
+      } else {
+        setVisibleStatus(t("movie.noteSocialFailed"));
       }
-      const copiedOk = await copyTextToClipboard(publicUrl);
-      showToast(
-        copiedOk
-          ? t("movie.noteSocialCopyNamed", {
-              network: movieSocialNetworkLabel(network),
-            })
-          : t("movie.noteSocialFailed"),
-      );
       return;
     }
 
-    // 3) Need to create the share page first — placeholder already open.
+    // Slow path: create share page first (await) — expect copy fallback.
     setBusy(network);
+    setStatus(null);
     try {
-      const result = await completeSocialShareIntent({
+      const pageUrl = await resolveSharePageUrl();
+      const result = await shareToSocialNetwork({
         network,
-        placeholder,
-        ensureSharePage: fetchSharePage,
+        sharePageUrl: pageUrl,
+        text: movieShareText(shareMovieRef.current),
+        posterUrl: posterUrlRef.current,
       });
-
+      logMovieShare("link:slowPath", {
+        network,
+        opened: result.opened,
+        windowOpenReturnedNull: result.windowOpenReturnedNull,
+        intentUrl: result.intentUrl,
+        sharePageUrl: result.sharePageUrl,
+        copied: result.copied,
+      });
       if (result.opened) {
-        showToast(
-          t("movie.noteSocialOpenedNamed", {
-            network: movieSocialNetworkLabel(network),
-          }),
-        );
+        setVisibleStatus(t("movie.noteSocialOpenedNamed", { network: label }));
         return;
       }
-
-      if (result.copied && result.sharePageUrl) {
+      if (result.copied) {
         setCopied(true);
-        showToast(
-          t("movie.noteSocialCopyNamed", {
-            network: movieSocialNetworkLabel(network),
-          }),
-        );
-        window.setTimeout(() => setCopied(false), 3200);
+        setVisibleStatus(t("movie.noteSocialCopyNamed", { network: label }));
+        window.setTimeout(() => setCopied(false), 2800);
         return;
       }
-
-      showToast(result.error || t("movie.noteSocialFailed"));
+      setVisibleStatus(t("movie.noteSocialFailed"));
+    } catch (err) {
+      console.error("[movie.share] link network failed", network, err);
+      setVisibleStatus(
+        err instanceof Error ? err.message : t("movie.noteSocialFailed"),
+      );
     } finally {
       setBusy(null);
     }
@@ -398,6 +416,11 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
             {t("movie.notReadyTitle")}
           </p>
           <p className="mt-2 text-sm text-ink-muted">{t("movie.notReadyBody")}</p>
+          {status ? (
+            <p role="alert" className="mt-3 text-sm text-red-700">
+              {status}
+            </p>
+          ) : null}
           <button type="button" onClick={onClose} className="ui-btn ui-btn-primary mt-5">
             {t("common.close")}
           </button>
@@ -408,175 +431,172 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
   }
 
   return createPortal(
-    <>
+    <div
+      ref={dialogRef}
+      className="movie-share-dialog fixed inset-0 z-[100] flex items-end justify-center bg-ink/50 p-0 backdrop-blur-sm sm:items-center sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="movie-share-title"
+      tabIndex={-1}
+      onClick={onClose}
+    >
       <div
-        ref={dialogRef}
-        className="movie-share-dialog fixed inset-0 z-[100] flex items-end justify-center bg-ink/50 p-0 backdrop-blur-sm sm:items-center sm:p-6"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="movie-share-title"
-        tabIndex={-1}
-        onClick={onClose}
+        className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl bg-canvas shadow-2xl sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
       >
-        <div
-          className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl bg-canvas shadow-2xl sm:rounded-2xl"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <header className="flex items-start justify-between gap-3 border-b border-ink/8 px-5 py-4">
-            <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent-deep">
-                {t("movie.shareEyebrow")}
-              </p>
-              <h2
-                id="movie-share-title"
-                className="mt-1 truncate font-display text-xl tracking-tight text-ink"
-              >
-                {shareMovie.title}
-              </h2>
-              <p className="mt-1 text-sm text-ink-muted">{t("movie.shareLead")}</p>
-            </div>
+        <header className="flex items-start justify-between gap-3 border-b border-ink/8 px-5 py-4">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent-deep">
+              {t("movie.shareEyebrow")}
+            </p>
+            <h2
+              id="movie-share-title"
+              className="mt-1 truncate font-display text-xl tracking-tight text-ink"
+            >
+              {shareMovie.title}
+            </h2>
+            <p className="mt-1 text-sm text-ink-muted">{t("movie.shareLead")}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-2 text-ink-muted transition hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            aria-label={t("movie.closeShare")}
+          >
+            <X className="size-5" aria-hidden />
+          </button>
+        </header>
+
+        <div className="overflow-y-auto px-5 py-4">
+          {preparing ? (
+            <p className="mb-3 flex items-center gap-2 text-xs text-ink-muted">
+              <Loader2 className="size-3.5 animate-spin" aria-hidden />
+              {t("movie.preparingShare")}
+            </p>
+          ) : null}
+
+          {/* 1) Copy Link — dependable core */}
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={() => void handleCopy()}
+            className="ui-btn ui-btn-primary mb-3 w-full justify-center"
+          >
+            {busy === "copy" ? (
+              <Loader2 className="size-4 animate-spin" aria-hidden />
+            ) : copied ? (
+              <Check className="size-4" aria-hidden />
+            ) : (
+              <Copy className="size-4" aria-hidden />
+            )}
+            {copied ? t("movie.linkCopied") : t("movie.copyLink")}
+          </button>
+
+          {canSystemShare ? (
             <button
               type="button"
-              onClick={onClose}
-              className="rounded-md p-2 text-ink-muted transition hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-              aria-label={t("movie.closeShare")}
+              disabled={busy !== null}
+              onClick={() => void handleSystemShare()}
+              className="ui-btn ui-btn-secondary mb-3 w-full justify-center"
             >
-              <X className="size-5" aria-hidden />
+              {busy === "system" ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden />
+              ) : (
+                <Share2 className="size-4" aria-hidden />
+              )}
+              {t("movie.share")}
             </button>
-          </header>
+          ) : null}
 
-          <div className="overflow-y-auto px-5 py-4">
-            {preparing ? (
-              <p className="mb-3 flex items-center gap-2 text-xs text-ink-muted">
-                <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                {t("movie.preparingShare")}
-              </p>
-            ) : null}
-
-            {publicUrl ? (
-              <p className="mb-3 truncate rounded-lg bg-ink/5 px-3 py-2 text-[11px] text-ink-muted">
-                {publicUrl}
-              </p>
-            ) : null}
-
-            <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {SOCIAL_OPTIONS.map((option) => {
-                const isLink =
-                  option.id === "facebook" ||
-                  option.id === "x" ||
-                  option.id === "pinterest";
-
-                return (
-                  <li key={option.id}>
-                    <button
-                      type="button"
-                      disabled={busy !== null || (isLink && preparing)}
-                      onClick={() => {
-                        if (
-                          option.id === "facebook" ||
-                          option.id === "x" ||
-                          option.id === "pinterest"
-                        ) {
-                          void handleLinkNetwork(option.id);
-                          return;
-                        }
-                        handleDownload(option.id);
-                      }}
-                      className="flex w-full items-center gap-3 rounded-xl border border-ink/10 bg-canvas px-3 py-3 text-left transition hover:border-accent/35 hover:bg-canvas-deep/40 disabled:opacity-60"
-                    >
-                      <span
-                        className={cn(
-                          "flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-bold",
-                          option.tone,
-                        )}
-                        aria-hidden
-                      >
-                        {busy === option.id ? (
-                          <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                          option.mark
-                        )}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block text-sm font-semibold text-ink">
-                          {t(option.labelKey)}
-                        </span>
-                        <span className="block text-xs text-ink-muted">
-                          {t(option.hintKey)}
-                        </span>
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-
-            <div className="mt-4 flex flex-col gap-2 border-t border-ink/8 pt-4">
-              <button
-                type="button"
-                disabled={busy !== null}
-                onClick={() => void handleCopy()}
-                className="ui-btn ui-btn-secondary w-full justify-center"
-              >
-                {busy === "copy" ? (
-                  <Loader2 className="size-4 animate-spin" aria-hidden />
-                ) : copied ? (
-                  <Check className="size-4" aria-hidden />
-                ) : (
-                  <Copy className="size-4" aria-hidden />
-                )}
-                {copied ? t("movie.linkCopied") : t("movie.copyLink")}
-              </button>
-
-              {canSystemShare ? (
-                <button
-                  type="button"
-                  disabled={busy !== null}
-                  onClick={() => void handleSystemShare()}
-                  className="ui-btn ui-btn-primary w-full justify-center"
-                >
-                  {busy === "system" ? (
-                    <Loader2 className="size-4 animate-spin" aria-hidden />
-                  ) : (
-                    <Share2 className="size-4" aria-hidden />
-                  )}
-                  {t("movie.share")}
-                </button>
-              ) : null}
-
-              {shareMovie.downloadUrl || shareMovie.playUrl ? (
-                <button
-                  type="button"
-                  disabled={busy !== null}
-                  onClick={() => handleDownload()}
-                  className="ui-btn ui-btn-ghost w-full justify-center"
-                >
-                  {busy === "download" ? (
-                    <Loader2 className="size-4 animate-spin" aria-hidden />
-                  ) : (
-                    <Download className="size-4" aria-hidden />
-                  )}
-                  {t("movie.downloadMp4")}
-                </button>
-              ) : null}
-            </div>
-
-            <p className="mt-4 text-center text-[11px] leading-relaxed text-ink-muted">
-              {t("movie.shareFootnote")}
+          {publicUrl ? (
+            <p className="mb-3 break-all rounded-lg bg-ink/5 px-3 py-2 text-[11px] leading-snug text-ink-muted">
+              {publicUrl}
             </p>
-          </div>
+          ) : null}
+
+          {status ? (
+            <p
+              role="status"
+              className="mb-3 rounded-lg border border-accent/25 bg-accent/10 px-3 py-2.5 text-center text-sm font-semibold leading-relaxed text-ink"
+            >
+              {status}
+            </p>
+          ) : null}
+
+          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {SOCIAL_OPTIONS.map((option) => {
+              const isLink =
+                option.id === "facebook" ||
+                option.id === "x" ||
+                option.id === "pinterest";
+
+              return (
+                <li key={option.id}>
+                  <button
+                    type="button"
+                    disabled={busy !== null || (isLink && preparing && !publicUrl)}
+                    onClick={() => {
+                      if (
+                        option.id === "facebook" ||
+                        option.id === "x" ||
+                        option.id === "pinterest"
+                      ) {
+                        void handleLinkNetwork(option.id);
+                        return;
+                      }
+                      handleDownload(option.id);
+                    }}
+                    className="flex w-full items-center gap-3 rounded-xl border border-ink/10 bg-canvas px-3 py-3 text-left transition hover:border-accent/35 hover:bg-canvas-deep/40 disabled:opacity-60"
+                  >
+                    <span
+                      className={cn(
+                        "flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-bold",
+                        option.tone,
+                      )}
+                      aria-hidden
+                    >
+                      {busy === option.id ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        option.mark
+                      )}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-ink">
+                        {t(option.labelKey)}
+                      </span>
+                      <span className="block text-xs text-ink-muted">
+                        {t(option.hintKey)}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+
+          {shareMovie.downloadUrl || shareMovie.playUrl ? (
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() => handleDownload()}
+              className="ui-btn ui-btn-ghost mt-4 w-full justify-center"
+            >
+              {busy === "download" ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden />
+              ) : (
+                <Download className="size-4" aria-hidden />
+              )}
+              {t("movie.downloadMp4")}
+            </button>
+          ) : null}
+
+          <p className="mt-4 text-center text-[11px] leading-relaxed text-ink-muted">
+            {t("movie.shareFootnote")}
+          </p>
         </div>
       </div>
-
-      {toast ? (
-        <div
-          className="journey-toast fixed bottom-6 left-1/2 z-[120] max-w-[min(92vw,28rem)] -translate-x-1/2"
-          role="status"
-        >
-          {toast}
-        </div>
-      ) : null}
-    </>,
+    </div>,
     document.body,
   );
 }
