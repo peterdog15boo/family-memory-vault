@@ -1,30 +1,51 @@
 /**
- * Memory video clips for movie exports — duration caps + ffmpeg normalize.
+ * Memory video clips for movie exports — duration resolution + ffmpeg normalize.
  *
- * Photos stay on the Ken Burns JPEG path; videos are trimmed/scaled to match
- * the movie output canvas, then concat'd with photo segments.
+ * Photos stay on the Ken Burns JPEG path; videos keep their natural playable
+ * length (safety-capped), then concat with photo segments.
  */
 
 import { join } from "node:path";
-import { guessVideoExtension } from "@/lib/media/ffmpeg";
+import {
+  guessVideoExtension,
+  parseFfmpegDurationSec,
+  runFfmpegCapture,
+} from "@/lib/media/ffmpeg";
 import type { MovieOutputSpec } from "@/lib/movies/output";
 import { buildEncodeVideoFilter, buildLibx264EncodeArgs } from "@/lib/movies/output";
 
-/** Cap long phone videos so one clip doesn't dominate the movie. */
-export const MAX_VIDEO_CLIP_MS = 20_000;
-export const MAX_VIDEO_CLIP_MS_FAST = 12_000;
+/**
+ * Safety ceiling only — home videos should play through.
+ * Fast/preview mode uses a shorter ceiling to keep draft renders quick.
+ */
+export const MAX_VIDEO_CLIP_MS = 10 * 60 * 1000; // 10 minutes
+export const MAX_VIDEO_CLIP_MS_FAST = 90_000; // 90 seconds
 export const MIN_VIDEO_CLIP_MS = 1_500;
 
 /**
  * How long a memory video plays in the export.
- * Prefer source duration when known; otherwise ~2× still pacing.
+ * Prefer source duration when known; otherwise ~2× still pacing as last resort.
+ * Does not force videos onto still-image duration.
+ *
+ * Optional `maxDurationMs` supports an Expert Mode trim (when provided).
  */
 export function resolveVideoClipDurationMs(input: {
   sourceDurationMs?: number | null;
   photoDurationMs: number;
   fast?: boolean;
+  /** Explicit Expert Mode trim from the start of the clip. */
+  maxDurationMs?: number | null;
 }): number {
-  const maxMs = input.fast ? MAX_VIDEO_CLIP_MS_FAST : MAX_VIDEO_CLIP_MS;
+  const safetyMax = input.fast ? MAX_VIDEO_CLIP_MS_FAST : MAX_VIDEO_CLIP_MS;
+  const userMax =
+    input.maxDurationMs != null &&
+    Number.isFinite(input.maxDurationMs) &&
+    input.maxDurationMs > 0
+      ? Math.round(input.maxDurationMs)
+      : null;
+  const maxMs =
+    userMax != null ? Math.min(safetyMax, userMax) : safetyMax;
+
   const fallback = Math.max(
     MIN_VIDEO_CLIP_MS,
     Math.round((input.photoDurationMs || 3200) * 2),
@@ -44,6 +65,69 @@ export function isMovieVideoMedia(row: {
     row.type === "video" ||
     Boolean(row.contentType?.toLowerCase().startsWith("video/"))
   );
+}
+
+/** Previous photo/video in album order (skips title cards). */
+export function findPrevMediaClip<T extends { kind: string }>(
+  clips: readonly T[],
+  clipIdx: number,
+): T | null {
+  for (let i = clipIdx - 1; i >= 0; i--) {
+    const c = clips[i]!;
+    if (c.kind === "photo" || c.kind === "video") return c;
+  }
+  return null;
+}
+
+/** Next photo/video in album order (skips title cards). */
+export function findNextMediaClip<T extends { kind: string }>(
+  clips: readonly T[],
+  clipIdx: number,
+): T | null {
+  for (let i = clipIdx + 1; i < clips.length; i++) {
+    const c = clips[i]!;
+    if (c.kind === "photo" || c.kind === "video") return c;
+  }
+  return null;
+}
+
+/**
+ * Photo↔photo dissolves only when the immediate neighbor is a photo.
+ * Videos hard-cut so the still before a video keeps its full hold.
+ */
+export function photoTransitionWindows(input: {
+  clips: ReadonlyArray<{ kind: string }>;
+  clipIdx: number;
+  transitionMs: number;
+}): { leadMs: number; trailMs: number; nextPhoto: boolean } {
+  const transitionMs = Math.max(0, input.transitionMs);
+  if (transitionMs <= 0) {
+    return { leadMs: 0, trailMs: 0, nextPhoto: false };
+  }
+  const prev = findPrevMediaClip(input.clips, input.clipIdx);
+  const next = findNextMediaClip(input.clips, input.clipIdx);
+  const leadMs = prev?.kind === "photo" ? transitionMs : 0;
+  const trailMs = next?.kind === "photo" ? transitionMs : 0;
+  return {
+    leadMs,
+    trailMs,
+    nextPhoto: next?.kind === "photo",
+  };
+}
+
+/** Probe a local media file with ffmpeg -i (Duration line). */
+export async function probeLocalVideoDurationMs(
+  ffmpegPath: string,
+  inputPath: string,
+): Promise<number | null> {
+  try {
+    const { stderr } = await runFfmpegCapture(ffmpegPath, ["-i", inputPath]);
+    const sec = parseFfmpegDurationSec(stderr);
+    if (sec == null || !(sec > 0)) return null;
+    return Math.max(1, Math.round(sec * 1000));
+  } catch {
+    return null;
+  }
 }
 
 /**

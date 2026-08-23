@@ -86,7 +86,10 @@ import {
 } from "@/lib/movies/transitions";
 import {
   buildNormalizeVideoClipArgs,
+  findNextMediaClip,
   isMovieVideoMedia,
+  photoTransitionWindows,
+  probeLocalVideoDurationMs,
   resolveVideoClipDurationMs,
   videoWorkFilenames,
 } from "@/lib/movies/video-clips";
@@ -1050,20 +1053,17 @@ export async function renderMovieAssets(
 
     // Extend Ken Burns across lead/trail crossfade windows so zoom never
     // freezes during a dissolve (outgoing finishes; incoming starts).
+    // Only dissolve into the *immediate* next photo — never look past a video,
+    // or the still before a video would dissolve toward a later photo.
     const transitionMs =
       plan.transition !== "none" && plan.transitionDurationMs > 0
         ? plan.transitionDurationMs
         : 0;
-    const hasNextPhoto = plan.clips
-      .slice(clipIdx + 1)
-      .some((c) => c.kind === "photo");
-    // Lead-in only when the previous media clip was also a photo (videos hard-cut).
-    const prevMedia = [...plan.clips.slice(0, clipIdx)]
-      .reverse()
-      .find((c) => c.kind === "photo" || c.kind === "video");
-    const leadMs =
-      prevMedia?.kind === "photo" && transitionMs > 0 ? transitionMs : 0;
-    const trailMs = hasNextPhoto && transitionMs > 0 ? transitionMs : 0;
+    const { leadMs, trailMs } = photoTransitionWindows({
+      clips: plan.clips,
+      clipIdx,
+      transitionMs,
+    });
     const motionDurationMs = kenBurnsMotionDurationMs({
       clipDurationMs: clip.durationMs,
       leadTransitionMs: leadMs,
@@ -1199,12 +1199,10 @@ export async function renderMovieAssets(
     }
     sampleBuffers.length = 0;
 
-    // Transition into the next photo clip — both sides keep zooming.
-    const nextClip = plan.clips
-      .slice(clipIdx + 1)
-      .find((c) => c.kind === "photo");
+    // Transition into the next photo only when it is the immediate neighbor.
+    const nextClip = findNextMediaClip(plan.clips, clipIdx);
     if (
-      nextClip &&
+      nextClip?.kind === "photo" &&
       trailMs > 0 &&
       plan.transition !== "none" &&
       plan.transitionDurationMs > 0
@@ -1447,11 +1445,23 @@ async function prepareVideoSegment(input: {
     clip.contentType,
   );
   await writeFile(rawPath, Buffer.from(body));
+
+  // Prefer probed source length so missing DB durationMs doesn't truncate
+  // home videos to ~2× still pacing (or an outdated short cap).
+  const plannedMs = clip.durationMs;
+  const probedMs = await probeLocalVideoDurationMs(ffmpegPath, rawPath);
+  const durationMs = resolveVideoClipDurationMs({
+    sourceDurationMs: probedMs ?? plannedMs,
+    photoDurationMs: plan.settings.photoDurationMs,
+    fast: plan.fast,
+  });
+  clip.durationMs = durationMs;
+
   const framing = clip.framing ?? centerFraming();
   const args = buildNormalizeVideoClipArgs({
     inputPath: rawPath,
     outputPath: segmentPath,
-    durationMs: clip.durationMs,
+    durationMs,
     width: plan.width,
     height: plan.height,
     fps: plan.output.fps,
@@ -1465,6 +1475,9 @@ async function prepareVideoSegment(input: {
     framingSource: framing.source,
     focalX: Number(framing.focalPointX.toFixed(4)),
     focalY: Number(framing.focalPointY.toFixed(4)),
+    plannedMs,
+    probedMs,
+    durationMs,
   });
   try {
     await runFfmpeg(ffmpegPath, args);
@@ -1479,7 +1492,7 @@ async function prepareVideoSegment(input: {
   return {
     mediaId: clip.mediaId,
     path: segmentPath,
-    durationMs: clip.durationMs,
+    durationMs,
   };
 }
 

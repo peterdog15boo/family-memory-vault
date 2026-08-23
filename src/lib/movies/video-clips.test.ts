@@ -1,29 +1,62 @@
 import { describe, expect, it } from "vitest";
 import {
   buildNormalizeVideoClipArgs,
+  findNextMediaClip,
+  findPrevMediaClip,
   isMovieVideoMedia,
+  photoTransitionWindows,
   resolveVideoClipDurationMs,
   MAX_VIDEO_CLIP_MS,
+  MAX_VIDEO_CLIP_MS_FAST,
   MIN_VIDEO_CLIP_MS,
 } from "@/lib/movies/video-clips";
 
 describe("resolveVideoClipDurationMs", () => {
-  it("uses source duration when under the cap", () => {
+  it("uses source duration when under the safety ceiling", () => {
     expect(
       resolveVideoClipDurationMs({
-        sourceDurationMs: 8500,
+        sourceDurationMs: 85_000,
         photoDurationMs: 3200,
       }),
-    ).toBe(8500);
+    ).toBe(85_000);
   });
 
-  it("caps long videos", () => {
+  it("allows multi-minute home videos (not still pacing)", () => {
     expect(
       resolveVideoClipDurationMs({
-        sourceDurationMs: 120_000,
+        sourceDurationMs: 180_000,
+        photoDurationMs: 3600,
+      }),
+    ).toBe(180_000);
+  });
+
+  it("applies a safety ceiling for pathological lengths", () => {
+    expect(
+      resolveVideoClipDurationMs({
+        sourceDurationMs: 60 * 60 * 1000,
         photoDurationMs: 3200,
       }),
     ).toBe(MAX_VIDEO_CLIP_MS);
+  });
+
+  it("uses a shorter ceiling in fast mode", () => {
+    expect(
+      resolveVideoClipDurationMs({
+        sourceDurationMs: 180_000,
+        photoDurationMs: 3200,
+        fast: true,
+      }),
+    ).toBe(MAX_VIDEO_CLIP_MS_FAST);
+  });
+
+  it("honors an explicit Expert Mode trim", () => {
+    expect(
+      resolveVideoClipDurationMs({
+        sourceDurationMs: 180_000,
+        photoDurationMs: 3200,
+        maxDurationMs: 12_000,
+      }),
+    ).toBe(12_000);
   });
 
   it("falls back when duration unknown", () => {
@@ -42,6 +75,59 @@ describe("resolveVideoClipDurationMs", () => {
         photoDurationMs: 3200,
       }),
     ).toBe(MIN_VIDEO_CLIP_MS);
+  });
+});
+
+describe("photoTransitionWindows", () => {
+  const clips = [
+    { kind: "title" as const },
+    { kind: "photo" as const },
+    { kind: "video" as const },
+    { kind: "photo" as const },
+  ];
+
+  it("does not trail-dissolve a photo into a later photo across a video", () => {
+    const windows = photoTransitionWindows({
+      clips,
+      clipIdx: 1,
+      transitionMs: 500,
+    });
+    expect(windows.leadMs).toBe(0);
+    expect(windows.trailMs).toBe(0);
+    expect(windows.nextPhoto).toBe(false);
+  });
+
+  it("dissolves photo→photo when they are immediate neighbors", () => {
+    const photoPhoto = [
+      { kind: "photo" as const },
+      { kind: "photo" as const },
+    ];
+    const first = photoTransitionWindows({
+      clips: photoPhoto,
+      clipIdx: 0,
+      transitionMs: 500,
+    });
+    expect(first.trailMs).toBe(500);
+    expect(first.nextPhoto).toBe(true);
+
+    const second = photoTransitionWindows({
+      clips: photoPhoto,
+      clipIdx: 1,
+      transitionMs: 500,
+    });
+    expect(second.leadMs).toBe(500);
+    expect(second.trailMs).toBe(0);
+  });
+
+  it("hard-cuts after a video into the next photo", () => {
+    const windows = photoTransitionWindows({
+      clips,
+      clipIdx: 3,
+      transitionMs: 500,
+    });
+    expect(windows.leadMs).toBe(0);
+    expect(findPrevMediaClip(clips, 3)?.kind).toBe("video");
+    expect(findNextMediaClip(clips, 1)?.kind).toBe("video");
   });
 });
 
