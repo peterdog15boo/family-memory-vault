@@ -1,10 +1,11 @@
 /**
- * Server-only R2 helpers that stream objects to/from the local filesystem.
+ * Node filesystem helpers for R2 (stream large objects to/from disk).
+ *
  * Kept separate from `@/lib/r2` so client bundles never see `node:` imports
  * (r2.ts is pulled into admin client components via label constants).
+ * Do not add `import "server-only"` — Railway workers load this via tsx
+ * outside the Next.js RSC graph and that package always throws there.
  */
-
-import "server-only";
 
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import {
