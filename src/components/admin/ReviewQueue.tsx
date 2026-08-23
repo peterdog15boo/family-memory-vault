@@ -7,7 +7,7 @@ import { Film, ImageIcon, ShieldAlert } from "lucide-react";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { confirmAdminAction } from "@/lib/admin/confirm";
 import { cn } from "@/lib/utils";
-import { hasProcessingFailedLabel } from "@/lib/moderation/processing-failed";
+import { hasProcessingFailedLabel, processingFailedDetail } from "@/lib/moderation/processing-failed";
 import type { HumanReviewAction, HumanReviewQueueItem } from "@/lib/moderation/review";
 
 type ReviewQueueProps = {
@@ -124,6 +124,7 @@ export function ReviewQueue({ items: initialItems }: ReviewQueueProps) {
         {items.map((item) => {
           const isRevealed = Boolean(revealed[item.id]);
           const busy = pendingId === item.id || isPending;
+          const scanFailDetail = processingFailedDetail(item.moderationLabels);
 
           return (
             <li
@@ -231,11 +232,18 @@ export function ReviewQueue({ items: initialItems }: ReviewQueueProps) {
                   </dl>
 
                   {hasProcessingFailedLabel(item.moderationLabels) ? (
-                    <p className="rounded-md border border-amber-800/20 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-                      Automated scan failed (timeout or vendor error) — not a
-                      policy hit. Approve as clean if the photo looks
-                      appropriate, or retry the job from Ops.
-                    </p>
+                    <div className="space-y-1 rounded-md border border-amber-800/20 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                      <p>
+                        Automated scan failed (timeout or vendor error) — not a
+                        policy hit. Approve as clean if the photo looks
+                        appropriate, or retry the job from Ops.
+                      </p>
+                      {scanFailDetail ? (
+                        <p className="break-words text-xs text-amber-900/80">
+                          Detail: {scanFailDetail}
+                        </p>
+                      ) : null}
+                    </div>
                   ) : item.moderationStatus === "adult" ||
                     item.moderationStatus === "rejected" ? (
                     <p className="rounded-md border border-amber-800/20 bg-amber-50 px-3 py-2 text-sm text-amber-950">

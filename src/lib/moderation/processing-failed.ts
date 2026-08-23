@@ -19,6 +19,24 @@ export function hasProcessingFailedLabel(labels: unknown): boolean {
   return false;
 }
 
+/** Best-effort vendor/timeout detail for admin review UI. */
+export function processingFailedDetail(labels: unknown): string | null {
+  if (!hasProcessingFailedLabel(labels) || !labels || typeof labels !== "object") {
+    return null;
+  }
+  const rec = labels as ModerationLabels & {
+    raw?: { lastError?: unknown };
+    notes?: unknown;
+  };
+  const rawError =
+    typeof rec.raw?.lastError === "string" ? rec.raw.lastError.trim() : "";
+  if (rawError) return rawError.slice(0, 400);
+  if (typeof rec.notes === "string" && rec.notes.trim()) {
+    return rec.notes.trim().slice(0, 400);
+  }
+  return null;
+}
+
 export function processingFailedModerationResult(input: {
   attempts: number;
   maxAttempts: number;

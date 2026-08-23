@@ -22,6 +22,7 @@ import {
   DetectModerationLabelsCommand,
   RekognitionClient,
 } from "@aws-sdk/client-rekognition";
+import sharp from "sharp";
 import { z } from "zod";
 import {
   getModerationMockScenario,
@@ -31,6 +32,9 @@ import type { ModerationLabels } from "@/lib/moderation/types";
 import { getObjectBytes } from "@/lib/r2";
 
 const LOG = "[moderation.ai]";
+
+/** Rekognition DetectModerationLabels max when sending Image.Bytes. */
+const REKOGNITION_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 export const AI_MODERATION_PROVIDERS = [
   "rekognition",
@@ -420,6 +424,55 @@ export function scoreFromRekognitionLabels(
   };
 }
 
+/**
+ * Shrink JPEG payload under Rekognition's 5MB Bytes limit.
+ * Phone photos routinely exceed this; without downscale, DetectModerationLabels
+ * fails and innocent uploads land in human review as processing_failed.
+ */
+export async function prepareRekognitionModerationBytes(
+  buffer: Buffer,
+): Promise<Buffer> {
+  if (buffer.byteLength <= REKOGNITION_MAX_IMAGE_BYTES) {
+    return buffer;
+  }
+
+  let quality = 85;
+  let width = 2400;
+  let out = buffer;
+
+  for (let attempt = 0; attempt < 6; attempt++) {
+    out = await sharp(buffer)
+      .rotate()
+      .resize({
+        width,
+        height: width,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .jpeg({ quality, mozjpeg: true })
+      .toBuffer();
+
+    console.info(`${LOG} downscaled for DetectModerationLabels`, {
+      originalBytes: buffer.byteLength,
+      resizedBytes: out.byteLength,
+      width,
+      quality,
+    });
+
+    if (out.byteLength <= REKOGNITION_MAX_IMAGE_BYTES) {
+      return out;
+    }
+
+    width = Math.max(800, Math.floor(width * 0.75));
+    quality = Math.max(50, quality - 10);
+  }
+
+  throw new AiModerationError(
+    "rekognition",
+    `Image is too large for Rekognition DetectModerationLabels after downscale (${out.byteLength} bytes).`,
+  );
+}
+
 async function moderateWithRekognition(
   buffer: Buffer,
 ): Promise<AiModerationProviderResult> {
@@ -452,16 +505,19 @@ async function moderateWithRekognition(
     process.env.REKOGNITION_MIN_CONFIDENCE ?? 50,
   );
 
+  const bytes = await prepareRekognitionModerationBytes(buffer);
+
   console.info(`${LOG} Rekognition DetectModerationLabels starting`, {
     region,
-    bytes: buffer.byteLength,
+    originalBytes: buffer.byteLength,
+    bytes: bytes.byteLength,
     minConfidence,
   });
 
   try {
     const response = await client.send(
       new DetectModerationLabelsCommand({
-        Image: { Bytes: buffer },
+        Image: { Bytes: bytes },
         MinConfidence: Number.isFinite(minConfidence) ? minConfidence : 50,
       }),
     );

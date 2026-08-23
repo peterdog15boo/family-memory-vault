@@ -37,6 +37,7 @@ export {
 } from "@/lib/moderation/review";
 export {
   hasProcessingFailedLabel,
+  processingFailedDetail,
   processingFailedModerationResult,
   PROCESSING_FAILED_LABEL,
 } from "@/lib/moderation/processing-failed";

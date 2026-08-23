@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { shouldSkipModerationRescan } from "@/lib/moderation/job-gate";
 import {
   hasProcessingFailedLabel,
+  processingFailedDetail,
   processingFailedModerationResult,
 } from "@/lib/moderation/processing-failed";
 
@@ -14,6 +15,19 @@ describe("processing_failed helpers", () => {
       false,
     );
     expect(hasProcessingFailedLabel(null)).toBe(false);
+  });
+
+  it("surfaces vendor lastError for admin review", () => {
+    expect(
+      processingFailedDetail({
+        labels: ["processing_failed"],
+        raw: {
+          lastError:
+            "[AI-Moderation:rekognition] Member must have length less than or equal to 5242880",
+        },
+      }),
+    ).toMatch(/5242880/);
+    expect(processingFailedDetail({ labels: ["Explicit Nudity"] })).toBeNull();
   });
 
   it("builds a review-bound result, not a policy reject payload", () => {
