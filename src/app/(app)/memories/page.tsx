@@ -1,5 +1,6 @@
+import { Plus, Shield } from "lucide-react";
 import Link from "next/link";
-import { Clapperboard, Plus, Shield } from "lucide-react";
+import { MakeMovieFromLibraryButton } from "@/components/memories/MakeMovieFromLibraryButton";
 import { PaginatedMemoryLibrary } from "@/components/memories/PaginatedMemoryLibrary";
 import { AppPageIntro } from "@/components/ui/AppPageIntro";
 import { auth } from "@clerk/nextjs/server";
@@ -17,12 +18,13 @@ import {
 } from "@/lib/gamification";
 
 type MemoriesPageProps = {
-  searchParams?: Promise<{ deleted?: string }>;
+  searchParams?: Promise<{ deleted?: string; createMovie?: string }>;
 };
 
 /**
  * Memories library — own albums plus family-shared albums.
  * First page is server-rendered; further pages load via /api/memories/library.
+ * Make Movie opens a picker (no silent default to the newest album).
  */
 export default async function MemoriesPage({ searchParams }: MemoriesPageProps) {
   const { userId, isAuthenticated } = await auth();
@@ -34,6 +36,7 @@ export default async function MemoriesPage({ searchParams }: MemoriesPageProps) 
   const params = searchParams ? await searchParams : {};
   const deletedNotice =
     params.deleted === "1" ? t("memories.deletedNotice") : null;
+  const openMakeMoviePicker = params.createMovie === "1";
 
   const journey = await getUserJourney(userId).catch(() => null);
   const memoriesJourney = journey
@@ -43,10 +46,6 @@ export default async function MemoriesPage({ searchParams }: MemoriesPageProps) 
   const library = await listMemoryLibrary(userId);
   const own = library.own.map(serializeMemoryListItem);
   const shared = library.shared.map(serializeMemoryListItem);
-  const makeMovieHref =
-    own.length > 0
-      ? `/memories/${own[0]!.id}?createMovie=1`
-      : "/memories/new?intent=movie";
 
   return (
     <>
@@ -57,10 +56,10 @@ export default async function MemoriesPage({ searchParams }: MemoriesPageProps) 
         description={t("memories.description")}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Link href={makeMovieHref} className="ui-btn ui-btn-secondary ui-btn-lg">
-              <Clapperboard className="size-4" aria-hidden />
-              {t("pages.moviesMake")}
-            </Link>
+            <MakeMovieFromLibraryButton
+              memories={own}
+              autoOpen={openMakeMoviePicker}
+            />
             <Link href="/memories/new" className="ui-btn ui-btn-primary ui-btn-lg">
               <Plus className="size-4" aria-hidden />
               {t("pages.createMemory")}

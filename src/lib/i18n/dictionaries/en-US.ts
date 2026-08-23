@@ -1043,6 +1043,14 @@ export const enUS = {
       "When shared, family members can open this album and its clean photos. Quarantined or pending media never appear.",
     sharedBadge: "Shared",
     privateBadge: "Private",
+    makeMoviePickTitle: "Choose a memory",
+    makeMoviePickDescription:
+      "Pick which album to turn into a short movie. We’ll open Simple Mode next — Expert Mode is still available.",
+    makeMovieNoEligible:
+      "None of your albums have enough clean, ready photos or videos yet. Add media to an album, then try again.",
+    makeMovieNeedMedia:
+      "Add at least one clean photo or video to this memory before making a movie.",
+    makeMovieMediaCount: "{count} ready photos or videos",
     stopSharingWithFamily: "Stop sharing with family",
     familyCan: "Family can",
     viewAndContribute: "View and contribute",

@@ -141,7 +141,13 @@ export function MemoryDetailView({
   const canMakeMovie = usableMovieMediaCount > 0;
   const makeMovieDisabledReason = canMakeMovie
     ? null
-    : "Add at least one clean photo or video to this memory to make a movie.";
+    : t("memories.makeMovieNeedMedia");
+
+  useEffect(() => {
+    if (!startCreateMovie || !canManageMedia) return;
+    if (initialMemory.media.length > 0) return;
+    setError(t("memories.makeMovieNeedMedia"));
+  }, [startCreateMovie, canManageMedia, initialMemory.media.length, t]);
 
   function openMakeMovie() {
     setError(null);
