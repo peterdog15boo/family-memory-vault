@@ -31,14 +31,17 @@ export default async function CreateMemoryPage({ searchParams }: PageProps) {
     .filter(Boolean)
     .slice(0, 40);
 
-  const needsSharedForPreselect = preselectedIds.length > 0;
+  // Same clean/ready own+family source as Photos — picker must include
+  // family-shared media the user is allowed to use in a Memory.
   const libraryBundle = await getSafeMediaLibrary(userId, {
     ownLimit: 120,
-    sharedLimit: needsSharedForPreselect ? 80 : 0,
+    sharedLimit: 80,
   });
-  let library = needsSharedForPreselect
-    ? [...libraryBundle.own, ...libraryBundle.shared]
-    : libraryBundle.own;
+  const seenIds = new Set(libraryBundle.own.map((item) => item.id));
+  let library = [
+    ...libraryBundle.own,
+    ...libraryBundle.shared.filter((item) => !seenIds.has(item.id)),
+  ];
   let initialTitle = "";
   let initialMediaIds: string[] = [];
   let initialCoverMediaId: string | null = null;

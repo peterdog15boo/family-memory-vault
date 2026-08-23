@@ -62,10 +62,18 @@ export default async function MemoryDetailPage({
   ]);
   const hasFamily = families.length > 0;
 
-  const library = isOwner
-    ? (
-        await getSafeMediaLibrary(userId, { ownLimit: 120, sharedLimit: 0 })
-      ).own.map(serializeSafeMediaItem)
+  const libraryBundle = isOwner
+    ? await getSafeMediaLibrary(userId, { ownLimit: 120, sharedLimit: 80 })
+    : null;
+  const library = libraryBundle
+    ? (() => {
+        const own = libraryBundle.own.map(serializeSafeMediaItem);
+        const seen = new Set(own.map((item) => item.id));
+        const shared = libraryBundle.shared
+          .map(serializeSafeMediaItem)
+          .filter((item) => !seen.has(item.id));
+        return [...own, ...shared];
+      })()
     : [];
 
   const movieRows = isOwner

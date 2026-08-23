@@ -43,7 +43,7 @@ import { cn } from "@/lib/utils";
 
 type MemoryDetailViewProps = {
   initialMemory: SerializedMemoryWithMedia;
-  /** Clean library items available to add (owner's clean media). */
+  /** Clean library items available to add (own + family-shared). */
   library: SerializedSafeMedia[];
   /** Movies generated from this memory (owner only). */
   initialMovies?: SerializedMovie[];
@@ -891,7 +891,7 @@ export function MemoryDetailView({
 
                     <div className="border-t border-ink/8 pt-4">
                       <p className="mb-3 text-xs font-medium uppercase tracking-wide text-ink-muted">
-                        Or choose from your library
+                        Or choose from your library (including family-shared)
                       </p>
                       {addableLibrary.length === 0 ? (
                         <p className="py-6 text-center text-sm text-ink-muted">

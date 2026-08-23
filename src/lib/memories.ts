@@ -238,8 +238,9 @@ async function touchMemory(memoryId: string): Promise<void> {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Create an album or story. Optional cover must be the owner's clean media;
- * when set, the cover is also linked into `memory_media` at sortOrder 0.
+ * Create an album or story. Optional cover must be clean/ready media the
+ * creator can access (owned or family-shared); when set, the cover is also
+ * linked into `memory_media` at sortOrder 0.
  */
 export async function createMemory(
   input: CreateMemoryInput,

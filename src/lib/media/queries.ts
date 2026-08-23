@@ -337,10 +337,16 @@ export async function getSafeMediaLibrary(
     Math.max(options?.ownLimit ?? MEDIA_PAGE_SIZE, 1),
     200,
   );
-  const sharedLimit = Math.min(
-    Math.max(options?.sharedLimit ?? MEDIA_PAGE_SIZE, 1),
-    200,
-  );
+  // `sharedLimit: 0` means skip the shared query (opt-out). Other values
+  // clamp to 1–200 like ownLimit.
+  const sharedLimitRequested = options?.sharedLimit;
+  const sharedLimit =
+    sharedLimitRequested === 0
+      ? 0
+      : Math.min(
+          Math.max(sharedLimitRequested ?? MEDIA_PAGE_SIZE, 1),
+          200,
+        );
   const ownOffset = Math.max(options?.ownOffset ?? 0, 0);
   const sharedOffset = Math.max(options?.sharedOffset ?? 0, 0);
   const db = getDb();
@@ -357,15 +363,16 @@ export async function getSafeMediaLibrary(
     .limit(ownLimit + 1)
     .offset(ownOffset);
 
-  const sharedPromise = hasFamilySharing
-    ? db
-        .select(mediaGalleryColumns)
-        .from(media)
-        .where(cleanReadyMediaOwnedByFilter(sharedOwnerIds))
-        .orderBy(desc(media.createdAt))
-        .limit(sharedLimit + 1)
-        .offset(sharedOffset)
-    : Promise.resolve([] as MediaGalleryRow[]);
+  const sharedPromise =
+    hasFamilySharing && sharedLimit > 0
+      ? db
+          .select(mediaGalleryColumns)
+          .from(media)
+          .where(cleanReadyMediaOwnedByFilter(sharedOwnerIds))
+          .orderBy(desc(media.createdAt))
+          .limit(sharedLimit + 1)
+          .offset(sharedOffset)
+      : Promise.resolve([] as MediaGalleryRow[]);
 
   const [ownRows, sharedRows] = await Promise.all([ownPromise, sharedPromise]);
 
@@ -387,7 +394,10 @@ export async function getSafeMediaLibrary(
     hasFamilySharing,
     ownHasMore,
     sharedHasMore,
-    pageSize: Math.min(ownLimit, sharedLimit, MEDIA_PAGE_SIZE),
+    pageSize:
+      sharedLimit > 0
+        ? Math.min(ownLimit, sharedLimit, MEDIA_PAGE_SIZE)
+        : Math.min(ownLimit, MEDIA_PAGE_SIZE),
   };
 }
 
