@@ -133,9 +133,11 @@ export {
 } from "@/lib/movies/output";
 export {
   shouldApplyMovieWatermark,
+  MOVIE_WATERMARK_LABEL,
+} from "@/lib/movies/watermark-policy";
+export {
   buildBrandWatermarkOverlay,
   buildBrandWatermarkFfmpegArgs,
-  MOVIE_WATERMARK_LABEL,
 } from "@/lib/movies/watermark";
 export { composeMoviePoster } from "@/lib/movies/poster";
 export {

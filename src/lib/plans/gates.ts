@@ -15,7 +15,7 @@ import {
   type PlanFeatures,
 } from "@/lib/db/schema";
 import type { PlanLimits } from "@/lib/plans";
-import { shouldApplyMovieWatermark } from "@/lib/movies/watermark";
+import { shouldApplyMovieWatermark } from "@/lib/movies/watermark-policy";
 
 export type PlanGateCode =
   | "movie_quota"

@@ -5,10 +5,12 @@ import { join } from "node:path";
 import sharp from "sharp";
 import type { PlanFeatures } from "@/lib/db/schema";
 import {
-  buildBrandWatermarkFfmpegArgs,
-  buildBrandWatermarkOverlay,
   MOVIE_WATERMARK_LABEL,
   shouldApplyMovieWatermark,
+} from "@/lib/movies/watermark-policy";
+import {
+  buildBrandWatermarkFfmpegArgs,
+  buildBrandWatermarkOverlay,
 } from "@/lib/movies/watermark";
 
 describe("shouldApplyMovieWatermark", () => {

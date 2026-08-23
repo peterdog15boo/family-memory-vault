@@ -3,34 +3,14 @@
  *
  * Uses sharp's text renderer (not SVG system fonts) so Linux workers still
  * produce readable “Created with Family Memory Vault” overlays.
+ *
+ * Plan policy lives in watermark-policy.ts so client UI / gates never import sharp.
  */
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import sharp from "sharp";
-import type { PlanFeatures } from "@/lib/db/schema";
-
-export const MOVIE_WATERMARK_LABEL = "Created with Family Memory Vault";
-
-/**
- * Free plan always shows the soft brand mark.
- * Paid catalogs set `removeMovieWatermark: true` (and known paid slugs
- * default off even if an older DB features blob omits the flag).
- */
-export function shouldApplyMovieWatermark(
-  planSlug: string | null | undefined,
-  features: PlanFeatures | null | undefined,
-): boolean {
-  const slug = String(planSlug ?? "");
-  if (slug === "free") return true;
-  const removeFlag = features?.removeMovieWatermark;
-  if (removeFlag === true) return false;
-  if (slug === "family" || slug === "family_plus" || slug === "legacy") {
-    return false;
-  }
-  // Unknown / custom plans: watermark unless explicitly removed.
-  return !removeFlag;
-}
+import { MOVIE_WATERMARK_LABEL } from "@/lib/movies/watermark-policy";
 
 export type BrandWatermarkOverlay = {
   path: string;
