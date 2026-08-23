@@ -27,7 +27,9 @@ import {
 } from "@/lib/movies/presets";
 import {
   buildSimpleModeSettings,
+  readLastSimpleModeMusicTrackId,
   readStoredMovieCreateMode,
+  storeLastSimpleModeMusicTrackId,
   storeMovieCreateMode,
   type MovieCreateMode,
 } from "@/lib/movies/simple-mode";
@@ -529,7 +531,9 @@ export function CreateMoviePanel({
       let body: Record<string, unknown>;
 
       if (isSimple) {
-        const simpleSettings = buildSimpleModeSettings();
+        const simpleSettings = buildSimpleModeSettings({
+          excludeTrackId: readLastSimpleModeMusicTrackId(),
+        });
         body = {
           autoTitle: true,
           style: "simple",
@@ -607,6 +611,11 @@ export function CreateMoviePanel({
         );
       }
       setMovie(data.movie);
+      if (isSimple) {
+        storeLastSimpleModeMusicTrackId(
+          data.movie.settings?.musicTrackId ?? null,
+        );
+      }
       setPhase("crafting");
       startPolling(data.movie.id);
     } catch (err) {

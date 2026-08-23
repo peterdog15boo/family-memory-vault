@@ -3,7 +3,7 @@
  * Split from the generator so workers can update records without circular imports.
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import { getDb } from "@/lib/db";
@@ -210,6 +210,63 @@ export async function createMovieJob(
   const normalized = normalizeMovieSettings(
     ensureFaceAwareMovieSettings(settingsOnly),
   );
+
+  // Simple Mode (autoTitle): pick a random on-disk library track and avoid
+  // immediately repeating the user's previous Simple Mode soundtrack.
+  if (input.autoTitle) {
+    const { MOVIE_LIBRARY_TRACKS } = await import(
+      "@/lib/movies/music/library"
+    );
+    const { libraryTrackAbsolutePath } = await import(
+      "@/lib/movies/music/resolve"
+    );
+    const { pickSimpleModeLibraryTrackId, SIMPLE_MODE_PRESET_ID } =
+      await import("@/lib/movies/simple-mode");
+    const { existsSync } = await import("node:fs");
+
+    let excludeTrackId: string | null = null;
+    try {
+      const recent = await db
+        .select({ settings: movies.settings })
+        .from(movies)
+        .where(eq(movies.userId, input.userId))
+        .orderBy(desc(movies.createdAt))
+        .limit(20);
+      for (const row of recent) {
+        const prev = row.settings;
+        if (
+          prev?.presetId === SIMPLE_MODE_PRESET_ID &&
+          prev.musicSource === "library" &&
+          prev.musicTrackId
+        ) {
+          excludeTrackId = prev.musicTrackId;
+          break;
+        }
+      }
+    } catch (err) {
+      console.warn("[movies] Failed to load prior Simple Mode music track", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    const availableIds = MOVIE_LIBRARY_TRACKS.filter((track) =>
+      existsSync(libraryTrackAbsolutePath(track)),
+    ).map((track) => track.id);
+    const picked = pickSimpleModeLibraryTrackId({
+      excludeTrackId,
+      candidates: availableIds,
+    });
+    if (picked) {
+      normalized.musicSource = "library";
+      normalized.musicTrackId = picked;
+      normalized.musicSuggestionId = picked;
+    } else {
+      // Soft fail: silent movie rather than blocking one-click create.
+      normalized.musicSource = "none";
+      normalized.musicTrackId = null;
+      normalized.musicSuggestionId = null;
+    }
+  }
 
   if (normalized.musicUploadKey) {
     const { isMovieMusicKeyForUser } = await import(
