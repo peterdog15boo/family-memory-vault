@@ -264,6 +264,21 @@ export function buildMediaDisplayKey(userId: string, mediaId: string): string {
   return `${R2_PREFIXES.processed}${userId}/${mediaId}-display.jpg`;
 }
 
+/**
+ * Web playback MP4 (≤1080p H.264) for gallery videos under processed/.
+ * Lightbox/slideshow should prefer this over multi‑GB 4K originals.
+ */
+export function buildMediaPlaybackKey(userId: string, mediaId: string): string {
+  if (!userId?.trim() || !mediaId?.trim()) {
+    throw new Error("buildMediaPlaybackKey requires userId and mediaId.");
+  }
+  return `${R2_PREFIXES.processed}${userId}/${mediaId}-playback.mp4`;
+}
+
+export function isMediaPlaybackKey(key: string | null | undefined): boolean {
+  return Boolean(key?.includes("-playback.mp4"));
+}
+
 export function isTempKey(key: string): boolean {
   return key.startsWith(R2_PREFIXES.temp);
 }
@@ -571,6 +586,94 @@ export async function getObjectBytes(key: string): Promise<{
     contentType: response.ContentType,
     contentLength: response.ContentLength,
   };
+}
+
+/**
+ * Stream an R2 object to a local file (large videos — avoid buffering in RAM).
+ */
+export async function downloadObjectToFile(
+  key: string,
+  destPath: string,
+): Promise<{ key: string; contentType?: string; contentLength?: number }> {
+  if (!key?.trim()) {
+    throw new Error("downloadObjectToFile requires a key.");
+  }
+  assertNotQuarantineKey(key);
+
+  const { createWriteStream } = await import("node:fs");
+  const { pipeline } = await import("node:stream/promises");
+  const { Readable } = await import("node:stream");
+
+  const response = await getR2Client().send(
+    new GetObjectCommand({
+      Bucket: getR2Bucket(),
+      Key: key,
+    }),
+  );
+
+  if (!response.Body) {
+    throw new Error(`R2 object has empty body: ${key}`);
+  }
+
+  const nodeStream =
+    typeof (response.Body as { transformToWebStream?: () => ReadableStream })
+      .transformToWebStream === "function"
+      ? Readable.fromWeb(
+          (response.Body as { transformToWebStream: () => ReadableStream })
+            .transformToWebStream() as import("node:stream/web").ReadableStream,
+        )
+      : (response.Body as NodeJS.ReadableStream);
+
+  await pipeline(nodeStream, createWriteStream(destPath));
+
+  return {
+    key,
+    contentType: response.ContentType,
+    contentLength: response.ContentLength,
+  };
+}
+
+/**
+ * Upload a local file into processed/ (or other non-temp prefixes) without
+ * loading the whole file into memory.
+ */
+export async function putObjectFromFile(
+  key: string,
+  filePath: string,
+  options?: {
+    contentType?: string;
+    cacheControl?: string;
+  },
+): Promise<{ key: string; byteSize: number }> {
+  if (!key?.trim()) {
+    throw new Error("putObjectFromFile requires a key.");
+  }
+  assertNotQuarantineKey(key);
+  if (isTempKey(key)) {
+    throw new Error(
+      `Refusing putObjectFromFile into temp/ ("${key}"). Use getUploadUrl for client uploads.`,
+    );
+  }
+
+  const { createReadStream } = await import("node:fs");
+  const { stat } = await import("node:fs/promises");
+  const meta = await stat(filePath);
+  if (!meta.isFile() || meta.size <= 0) {
+    throw new Error(`putObjectFromFile: empty or missing file ${filePath}`);
+  }
+
+  await getR2Client().send(
+    new PutObjectCommand({
+      Bucket: getR2Bucket(),
+      Key: key,
+      Body: createReadStream(filePath),
+      ContentLength: meta.size,
+      ContentType: options?.contentType ?? "application/octet-stream",
+      CacheControl: options?.cacheControl ?? "private, max-age=31536000",
+    }),
+  );
+
+  return { key, byteSize: meta.size };
 }
 
 /**

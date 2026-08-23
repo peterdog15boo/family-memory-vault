@@ -358,6 +358,17 @@ export async function processModerationJob(
       });
       // Non-blocking: face + scene work run on separate queues/workers.
       await maybeGenerateThumbnailForMedia(finalMedia);
+      if (
+        finalMedia.type === "video" ||
+        finalMedia.contentType?.startsWith("video/")
+      ) {
+        const { maybeGenerateVideoPlaybackProxy } = await import(
+          "@/lib/media/video-playback"
+        );
+        // Fire-and-forget: large 4K encodes can take minutes; playback falls
+        // back to the original until the ≤1080p proxy lands.
+        void maybeGenerateVideoPlaybackProxy(finalMedia);
+      }
       await maybeEnqueueFaceDetectionForMedia(finalMedia, {
         source: "worker.moderation.clean",
         fanOutFamilyViewers: true,

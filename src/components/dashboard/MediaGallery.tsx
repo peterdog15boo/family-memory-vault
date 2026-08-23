@@ -84,7 +84,11 @@ const VideoThumbnail = memo(function VideoThumbnail({
           const video = event.currentTarget;
           try {
             if (video.duration && Number.isFinite(video.duration)) {
-              video.currentTime = Math.min(0.35, video.duration * 0.08);
+              // Avoid black / fade-in intro frames (match server poster seek).
+              video.currentTime = Math.min(
+                Math.max(2, video.duration * 0.5),
+                Math.max(0.25, video.duration - 0.1),
+              );
             }
           } catch {
             // ignore

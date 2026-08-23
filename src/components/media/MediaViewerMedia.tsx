@@ -41,7 +41,8 @@ export function MediaViewerMedia({
   const { src, ready, error } = useMediaViewerSrc({
     mediaId,
     type,
-    purpose: isVideo ? "original" : "display",
+    // Videos prefer ≤1080p playback proxy when ready; photos use display JPEG.
+    purpose: "display",
   });
 
   if (error && !src) {

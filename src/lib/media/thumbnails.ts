@@ -1,8 +1,9 @@
 /**
  * Media image derivatives:
  * - thumbnail (480px) → grids
- * - display (2048px) → lightbox / slideshow
- * - original → download / archive / video playback
+ * - display (2048px) → lightbox / slideshow (photos)
+ * - playback MP4 (≤1080p) → lightbox / slideshow (videos) via processedKey
+ * - original → download / archive
  */
 
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -14,13 +15,17 @@ import { getDb } from "@/lib/db";
 import { media, type Media } from "@/lib/db/schema";
 import {
   guessVideoExtension,
+  parseFfmpegDurationSec,
   resolveFfmpegPath,
   runFfmpeg,
+  runFfmpegCapture,
 } from "@/lib/media/ffmpeg";
+import { pickVideoPosterSeekSec } from "@/lib/media/video-poster-seek";
 import { isSafeToServe } from "@/lib/moderation/types";
 import {
   buildMediaDisplayKey,
   buildMediaThumbnailKey,
+  downloadObjectToFile,
   getObjectBytes,
   putObjectBytes,
 } from "@/lib/r2";
@@ -104,21 +109,21 @@ export async function generateAndStoreThumbnail(
     };
   }
 
-  const { body } = await getObjectBytes(sourceKey);
-  if (!body?.byteLength) {
-    throw new Error(`Empty source object for media ${mediaId}`);
-  }
-
   const isVideo = row.type === "video" || row.contentType?.startsWith("video/");
   let jpeg: Buffer;
   let displayJpeg: Buffer | null = null;
 
   if (isVideo) {
-    jpeg = await extractVideoPoster(body, {
+    jpeg = await extractVideoPosterFromKey(sourceKey, {
       contentType: row.contentType,
       filename: row.originalFilename,
+      byteSize: row.byteSize,
     });
   } else {
+    const { body } = await getObjectBytes(sourceKey);
+    if (!body?.byteLength) {
+      throw new Error(`Empty source object for media ${mediaId}`);
+    }
     const { ensureJpegForProcessing } = await import("@/lib/media/decode-image");
     const decoded = await ensureJpegForProcessing(body, {
       contentType: row.contentType,
@@ -193,76 +198,120 @@ async function resizePhotoJpeg(
     .toBuffer();
 }
 
-async function extractVideoPoster(
-  source: Buffer,
-  options?: { contentType?: string | null; filename?: string | null },
+/** Stream large videos to disk; keep small clips in-memory for speed. */
+const VIDEO_POSTER_STREAM_THRESHOLD = 40 * 1024 * 1024;
+
+async function extractVideoPosterFromKey(
+  sourceKey: string,
+  options?: {
+    contentType?: string | null;
+    filename?: string | null;
+    byteSize?: number | null;
+  },
 ): Promise<Buffer> {
   const workDir = await mkdtemp(join(tmpdir(), "fmv-thumb-"));
   const ext = guessVideoExtension(options?.contentType, options?.filename);
   const inputPath = join(workDir, `input.${ext}`);
   const outputPath = join(workDir, "poster.jpg");
+
   try {
-    await writeFile(inputPath, source);
-    const ffmpeg = resolveFfmpegPath();
-    // iPhone MOV/HEVC: try accurate post-demux seek, then first frame, then input seek.
-    const attempts: string[][] = [
-      [
-        "-y",
-        "-i",
-        inputPath,
-        "-ss",
-        "0.1",
-        "-frames:v",
-        "1",
-        "-an",
-        "-q:v",
-        "3",
-        outputPath,
-      ],
-      [
-        "-y",
-        "-i",
-        inputPath,
-        "-frames:v",
-        "1",
-        "-an",
-        "-q:v",
-        "3",
-        outputPath,
-      ],
-      [
-        "-y",
-        "-ss",
-        "0.35",
-        "-i",
-        inputPath,
-        "-frames:v",
-        "1",
-        "-an",
-        "-q:v",
-        "4",
-        outputPath,
-      ],
-    ];
-
-    let lastError: Error | null = null;
-    for (const args of attempts) {
-      try {
-        await runFfmpeg(ffmpeg, args);
-        lastError = null;
-        break;
-      } catch (error) {
-        lastError =
-          error instanceof Error ? error : new Error(String(error));
+    const size = options?.byteSize ?? 0;
+    if (size > VIDEO_POSTER_STREAM_THRESHOLD) {
+      await downloadObjectToFile(sourceKey, inputPath);
+    } else {
+      const { body } = await getObjectBytes(sourceKey);
+      if (!body?.byteLength) {
+        throw new Error(`Empty source object for poster (${sourceKey})`);
       }
+      await writeFile(inputPath, body);
     }
-    if (lastError) throw lastError;
 
-    const frame = await readFile(outputPath);
-    return resizePhotoJpeg(frame, THUMBNAIL_MAX_EDGE, THUMBNAIL_JPEG_QUALITY);
+    return await extractVideoPosterFromFile(inputPath, outputPath);
   } finally {
     await rm(workDir, { recursive: true, force: true }).catch(() => undefined);
   }
+}
+
+async function extractVideoPosterFromFile(
+  inputPath: string,
+  outputPath: string,
+): Promise<Buffer> {
+  const ffmpeg = resolveFfmpegPath();
+
+  let durationSec: number | null = null;
+  try {
+    const probed = await runFfmpegCapture(ffmpeg, ["-i", inputPath]);
+    durationSec = parseFfmpegDurationSec(probed.stderr);
+  } catch {
+    durationSec = null;
+  }
+
+  const seekSec = pickVideoPosterSeekSec(durationSec);
+  const seek = seekSec.toFixed(2);
+
+  console.info(`${LOG} video poster seek`, {
+    seekSec: seek,
+    durationSec,
+  });
+
+  // Accurate post-demux seek first (better for HEVC/MOV), then input seek fallback.
+  const attempts: string[][] = [
+    [
+      "-y",
+      "-i",
+      inputPath,
+      "-ss",
+      seek,
+      "-frames:v",
+      "1",
+      "-an",
+      "-q:v",
+      "3",
+      outputPath,
+    ],
+    [
+      "-y",
+      "-ss",
+      seek,
+      "-i",
+      inputPath,
+      "-frames:v",
+      "1",
+      "-an",
+      "-q:v",
+      "4",
+      outputPath,
+    ],
+    // Last resort: slightly earlier than mid if mid fails on short files.
+    [
+      "-y",
+      "-ss",
+      "2",
+      "-i",
+      inputPath,
+      "-frames:v",
+      "1",
+      "-an",
+      "-q:v",
+      "4",
+      outputPath,
+    ],
+  ];
+
+  let lastError: Error | null = null;
+  for (const args of attempts) {
+    try {
+      await runFfmpeg(ffmpeg, args);
+      lastError = null;
+      break;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+  }
+  if (lastError) throw lastError;
+
+  const frame = await readFile(outputPath);
+  return resizePhotoJpeg(frame, THUMBNAIL_MAX_EDGE, THUMBNAIL_JPEG_QUALITY);
 }
 
 /** Best-effort — never throws into moderation/face pipelines. */

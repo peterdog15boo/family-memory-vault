@@ -7,9 +7,12 @@ import { getDb } from "@/lib/db";
 import { media, type Media } from "@/lib/db/schema";
 import { canViewMedia } from "@/lib/permissions";
 import { maybeGenerateDisplayForMedia } from "@/lib/media/thumbnails";
+import { maybeGenerateVideoPlaybackProxy } from "@/lib/media/video-playback";
 import {
   DEFAULT_DOWNLOAD_EXPIRES_IN_SECONDS,
+  MAX_SIGNED_URL_EXPIRES_IN_SECONDS,
   getDownloadUrl,
+  isMediaPlaybackKey,
 } from "@/lib/r2";
 
 export type MediaDownloadPurpose = "thumbnail" | "display" | "original";
@@ -31,8 +34,8 @@ function isVideoRow(row: Pick<Media, "type" | "contentType">): boolean {
 /**
  * Resolve which R2 key to sign for a viewer purpose.
  * - thumbnail → thumbnailKey (grid/list cards only — never lightbox/slideshow)
- * - display → processedKey (display JPEG) || originalKey; videos always original
- * - original → originalKey
+ * - display → photo: processed JPEG || original; video: playback MP4 || original
+ * - original → originalKey (download / archive)
  */
 export function resolveMediaObjectKey(
   row: Pick<
@@ -55,6 +58,12 @@ export function resolveMediaObjectKey(
 
   // display
   if (isVideoRow(row)) {
+    if (isMediaPlaybackKey(row.processedKey)) {
+      return {
+        key: row.processedKey!,
+        contentType: "video/mp4",
+      };
+    }
     return {
       key: row.originalKey,
       contentType: row.contentType || "video/mp4",
@@ -62,7 +71,7 @@ export function resolveMediaObjectKey(
     };
   }
 
-  if (row.processedKey?.trim()) {
+  if (row.processedKey?.trim() && !isMediaPlaybackKey(row.processedKey)) {
     return {
       key: row.processedKey,
       contentType: "image/jpeg",
@@ -115,8 +124,19 @@ export async function createMediaDownloadUrl(options: {
     void maybeGenerateDisplayForMedia(row);
   }
 
-  const expiresIn =
-    options.expiresInSeconds ?? DEFAULT_DOWNLOAD_EXPIRES_IN_SECONDS;
+  // Kick off ≤1080p playback proxy while falling back to the original.
+  if (
+    options.purpose === "display" &&
+    resolved.fallbackToOriginal &&
+    isVideoRow(row)
+  ) {
+    void maybeGenerateVideoPlaybackProxy(row);
+  }
+
+  const defaultExpires = isVideoRow(row)
+    ? Math.min(60 * 60, MAX_SIGNED_URL_EXPIRES_IN_SECONDS)
+    : DEFAULT_DOWNLOAD_EXPIRES_IN_SECONDS;
+  const expiresIn = options.expiresInSeconds ?? defaultExpires;
   const signed = await getDownloadUrl(resolved.key, expiresIn, {
     moderationStatus: "clean",
     mediaStatus: row.status,

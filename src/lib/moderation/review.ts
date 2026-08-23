@@ -294,6 +294,12 @@ export async function applyHumanReviewDecision(options: {
 
     // Non-blocking face + scene pipelines (separate workers).
     await maybeGenerateThumbnailForMedia(updated);
+    if (updated.type === "video" || updated.contentType?.startsWith("video/")) {
+      const { maybeGenerateVideoPlaybackProxy } = await import(
+        "@/lib/media/video-playback"
+      );
+      void maybeGenerateVideoPlaybackProxy(updated);
+    }
     await maybeEnqueueFaceDetectionForMedia(updated, {
       source: "moderation.human_review.clean",
       fanOutFamilyViewers: true,

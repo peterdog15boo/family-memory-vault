@@ -32,7 +32,21 @@ describe("resolveMediaObjectKey", () => {
     });
   });
 
-  it("always uses original for video display/playback", () => {
+  it("prefers ≤1080p playback proxy for video display when present", () => {
+    const video = {
+      type: "video" as const,
+      contentType: "video/mp4",
+      thumbnailKey: "thumbnails/u/v.jpg",
+      processedKey: "processed/u/v-playback.mp4",
+      originalKey: "originals/u/v.mp4",
+    };
+    expect(resolveMediaObjectKey(video, "display")).toEqual({
+      key: video.processedKey,
+      contentType: "video/mp4",
+    });
+  });
+
+  it("falls back to original for video display when proxy is missing", () => {
     const video = {
       type: "video" as const,
       contentType: "video/mp4",
@@ -44,6 +58,20 @@ describe("resolveMediaObjectKey", () => {
       key: video.originalKey,
       contentType: "video/mp4",
       fallbackToOriginal: true,
+    });
+  });
+
+  it("keeps downloads on the original video file", () => {
+    const video = {
+      type: "video" as const,
+      contentType: "video/mp4",
+      thumbnailKey: "thumbnails/u/v.jpg",
+      processedKey: "processed/u/v-playback.mp4",
+      originalKey: "originals/u/v.mp4",
+    };
+    expect(resolveMediaObjectKey(video, "original")).toEqual({
+      key: video.originalKey,
+      contentType: "video/mp4",
     });
   });
 

@@ -56,7 +56,8 @@ function viewerPurposeForType(
   purpose?: MediaViewerPurpose,
 ): MediaViewerPurpose {
   if (purpose) return purpose;
-  return type === "video" ? "original" : "display";
+  // Prefer web playback / display derivatives for both photos and videos.
+  return "display";
 }
 
 /**
