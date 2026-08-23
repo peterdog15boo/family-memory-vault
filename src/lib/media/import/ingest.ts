@@ -22,6 +22,7 @@ import {
   tempKeyToOriginalsKey,
 } from "@/lib/r2";
 import {
+  fileTooLargeMessage,
   maxBytesForContentType,
   mediaTypeFromContentType,
 } from "@/lib/upload/constants";
@@ -208,9 +209,7 @@ export async function finalizeUploadedMedia(
 
   const maxBytes = maxBytesForContentType(contentType);
   if (byteSize > maxBytes) {
-    const err = new Error(
-      `File is too large. Max size is ${Math.round(maxBytes / (1024 * 1024))} MB for this type.`,
-    );
+    const err = new Error(fileTooLargeMessage(contentType, maxBytes));
     (err as Error & { code?: string }).code = "file_too_large";
     throw err;
   }

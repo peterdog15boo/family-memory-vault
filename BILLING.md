@@ -33,7 +33,7 @@ All enforcement is **server-side**. UI banners and disabled buttons are helpers 
 | Action | When checked | Where |
 |--------|--------------|--------|
 | **Upload (presign)** | Before issuing R2 URL | `POST /api/upload-url` → `assertUploadWithinStorageQuota` |
-| **Upload (finalize)** | Before promote + DB insert | `POST /api/media/complete` — uses **R2 `ContentLength`**, not client-reported size; also enforces per-type max (25 MB images / 500 MB video) |
+| **Upload (finalize)** | Before promote + DB insert | `POST /api/media/complete` — uses **R2 `ContentLength`**, not client-reported size; also enforces per-type max (50 MB images / 2 GB video) |
 | **Create movie** | Before insert / enqueue / render | `createMovieJob` → monthly plan + daily burst + concurrent job + theme gates |
 | **Create family / invite** | Before writes | `canCreateFamily` / `canInviteMember` |
 | **Create person** | Before insert | `canCreatePerson` (and face grouping skips on `plan_limit`) |

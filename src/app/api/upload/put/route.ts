@@ -9,6 +9,10 @@ import { rejectUntrustedOrigin } from "@/lib/security/origin";
 import {
   isR2Configured,
   maxBytesForContentType,
+  fileTooLargeMessage,
+  canProxyUploadBytes,
+  MAX_PROXY_UPLOAD_BYTES,
+  formatUploadLimit,
   resolveUploadContentType,
 } from "@/lib/upload/constants";
 
@@ -94,11 +98,24 @@ export async function PUT(request: Request) {
 
   const maxBytes = maxBytesForContentType(contentType);
   const declaredLength = Number(request.headers.get("content-length") ?? NaN);
+  if (Number.isFinite(declaredLength) && !canProxyUploadBytes(declaredLength)) {
+    return NextResponse.json(
+      {
+        error:
+          `This file is too large for the backup upload path (max ${formatUploadLimit(MAX_PROXY_UPLOAD_BYTES)}). ` +
+          "Large videos must upload directly to storage — confirm R2 CORS allows your site origin for PUT, then try again.",
+        code: "proxy_too_large",
+        maxProxyBytes: MAX_PROXY_UPLOAD_BYTES,
+      },
+      { status: 413 },
+    );
+  }
   if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
     return NextResponse.json(
       {
-        error: `File is too large. Max size is ${Math.round(maxBytes / (1024 * 1024))} MB for this type.`,
+        error: fileTooLargeMessage(contentType, maxBytes),
         code: "file_too_large",
+        maxBytes,
       },
       { status: 400 },
     );
@@ -112,11 +129,24 @@ export async function PUT(request: Request) {
         { status: 400 },
       );
     }
+    if (!canProxyUploadBytes(body.byteLength)) {
+      return NextResponse.json(
+        {
+          error:
+            `This file is too large for the backup upload path (max ${formatUploadLimit(MAX_PROXY_UPLOAD_BYTES)}). ` +
+            "Large videos must upload directly to storage — confirm R2 CORS allows your site origin for PUT, then try again.",
+          code: "proxy_too_large",
+          maxProxyBytes: MAX_PROXY_UPLOAD_BYTES,
+        },
+        { status: 413 },
+      );
+    }
     if (body.byteLength > maxBytes) {
       return NextResponse.json(
         {
-          error: `File is too large. Max size is ${Math.round(maxBytes / (1024 * 1024))} MB for this type.`,
+          error: fileTooLargeMessage(contentType, maxBytes),
           code: "file_too_large",
+          maxBytes,
         },
         { status: 400 },
       );

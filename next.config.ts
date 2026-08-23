@@ -29,7 +29,8 @@ const nextConfig: NextConfig = {
   // Keep native/binary packages out of the webpack bundle so paths stay real.
   serverExternalPackages: ["ffmpeg-static", "sharp", "web-push"],
   // Same-origin video PUTs (/api/upload/put) exceed the 10MB default and
-  // Next then routes the request to /undefined (404) — videos never complete.
+  // Next then routes the request to /undefined (404). Keep at 512mb for the
+  // proxy fallback; home movies up to 2GB must use direct R2 presigned PUT.
   experimental: {
     middlewareClientMaxBodySize: "512mb",
   },

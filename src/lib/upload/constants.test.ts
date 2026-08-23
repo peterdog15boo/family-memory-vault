@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_IMAGE_BYTES,
+  MAX_VIDEO_BYTES,
+  canProxyUploadBytes,
+  fileTooLargeMessage,
+  formatUploadLimit,
+  maxBytesForContentType,
   normalizeUploadContentType,
   resolveUploadContentType,
+  uploadExpiresInForBytes,
 } from "@/lib/upload/constants";
 
 describe("resolveUploadContentType", () => {
@@ -52,5 +59,27 @@ describe("resolveUploadContentType", () => {
         contentType: "text/plain",
       }),
     ).toBeNull();
+  });
+});
+
+describe("upload size matrix", () => {
+  it("allows 50 MB photos and 2 GB videos", () => {
+    expect(MAX_IMAGE_BYTES).toBe(50 * 1024 * 1024);
+    expect(MAX_VIDEO_BYTES).toBe(2 * 1024 * 1024 * 1024);
+    expect(maxBytesForContentType("image/jpeg")).toBe(MAX_IMAGE_BYTES);
+    expect(maxBytesForContentType("video/mp4")).toBe(MAX_VIDEO_BYTES);
+  });
+
+  it("formats limits for UI and errors", () => {
+    expect(formatUploadLimit(MAX_IMAGE_BYTES)).toBe("50 MB");
+    expect(formatUploadLimit(MAX_VIDEO_BYTES)).toBe("2 GB");
+    expect(fileTooLargeMessage("image/png")).toMatch(/50 MB/);
+    expect(fileTooLargeMessage("video/webm")).toMatch(/2 GB/);
+  });
+
+  it("requires direct R2 for uploads above the proxy buffer cap", () => {
+    expect(canProxyUploadBytes(100 * 1024 * 1024)).toBe(true);
+    expect(canProxyUploadBytes(MAX_VIDEO_BYTES)).toBe(false);
+    expect(uploadExpiresInForBytes(MAX_VIDEO_BYTES)).toBe(60 * 60);
   });
 });

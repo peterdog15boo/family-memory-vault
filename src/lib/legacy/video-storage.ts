@@ -8,6 +8,7 @@ import {
   normalizeLegacyVideoContentType,
   type LegacyVideoAllowedContentType,
 } from "@/lib/legacy/video-constants";
+import { formatUploadLimit } from "@/lib/upload/constants";
 import { LogEvents } from "@/lib/observability/events";
 import { logger } from "@/lib/observability/logger";
 import {
@@ -255,7 +256,7 @@ export function assertAllowedLegacyVideoUpload(input: {
       input.sizeBytes > LEGACY_VIDEO_MAX_BYTES
     ) {
       throw new LegacyVideoStorageError(
-        `Video must be between 1 byte and ${LEGACY_VIDEO_MAX_BYTES} bytes.`,
+        `Video must be between 1 byte and ${formatUploadLimit(LEGACY_VIDEO_MAX_BYTES)}.`,
         "validation",
       );
     }
@@ -442,7 +443,7 @@ export async function promoteLegacyVideoTempToPermanent(input: {
   }
   if (meta.contentLength > LEGACY_VIDEO_MAX_BYTES) {
     throw new LegacyVideoStorageError(
-      "Uploaded video exceeds the maximum allowed size.",
+      `This video is too large. Videos can be up to ${formatUploadLimit(LEGACY_VIDEO_MAX_BYTES)}.`,
       "validation",
     );
   }

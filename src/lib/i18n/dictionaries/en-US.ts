@@ -355,6 +355,9 @@ export const enUS = {
     dropTitle: "Drop photos or videos here",
     dropBody:
       "We’ll keep them private and look them over before they show up for your family.",
+    dropSizeHint:
+      "Or tap to choose from your camera roll. JPEG, PNG, WebP, HEIC, MP4, MOV, WebM.",
+    limitsLine: "Photos up to {photoMax}. Videos up to {videoMax}.",
     chooseFiles: "Choose files",
     safetyNote:
       "Every upload stays private while it is scanned. Ready photos appear in Photos automatically.",
@@ -369,7 +372,7 @@ export const enUS = {
       "Got it — we’ll take a quick look, then it’ll appear in your photos.",
     statusError: "Something went wrong with this upload. Try again.",
     compactHint:
-      "Tap to choose from your camera roll. Multi-select works on phones and computers.",
+      "Tap to choose from your camera roll. Photos up to {photoMax}, videos up to {videoMax}. Multi-select works on phones and computers.",
   },
   mediaImport: {
     importPhotos: "Import photos",

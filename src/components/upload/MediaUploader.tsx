@@ -9,7 +9,13 @@ import {
   Shield,
   Upload,
 } from "lucide-react";
-import { ALLOWED_UPLOAD_TYPES } from "@/lib/upload/constants";
+import {
+  ALLOWED_UPLOAD_TYPES,
+  MAX_IMAGE_BYTES,
+  MAX_VIDEO_BYTES,
+  canProxyUploadBytes,
+  formatUploadLimit,
+} from "@/lib/upload/constants";
 import { prepareUploadFile } from "@/lib/upload/prepare-upload-file";
 import { sha256HexFromFile } from "@/lib/media/import/content-hash-client";
 import { UpgradePrompt } from "@/components/billing/UpgradePrompt";
@@ -40,7 +46,10 @@ type UploadItem = {
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 async function uploadWithProgress(
@@ -92,6 +101,12 @@ function uploadFailureMessage(error: unknown): string {
   }
   return error.message;
 }
+
+const DIRECT_UPLOAD_REQUIRED_MESSAGE =
+  "This video is too large for the backup upload path. " +
+  "Confirm R2 CORS allows your site origin for PUT, then try again so the " +
+  "browser can upload directly to storage (home movies up to " +
+  `${formatUploadLimit(MAX_VIDEO_BYTES)}).`;
 
 function isLikelyCorsOrNetworkUploadError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
@@ -250,7 +265,12 @@ export function MediaUploader({
           typeof urlBody.proxyPutUrl === "string" &&
           urlBody.proxyPutUrl.startsWith("/api/upload/put")
             ? urlBody.proxyPutUrl
-            : `/api/upload/put?key=${encodeURIComponent(urlBody.key)}`;
+            : canProxyUploadBytes(file.size)
+              ? `/api/upload/put?key=${encodeURIComponent(urlBody.key)}`
+              : null;
+        const requiresDirectUpload =
+          urlBody.requiresDirectUpload === true ||
+          !canProxyUploadBytes(file.size);
         const directUrl =
           typeof urlBody.uploadUrl === "string" &&
           /^https?:\/\//i.test(urlBody.uploadUrl)
@@ -268,9 +288,13 @@ export function MediaUploader({
             await uploadWithProgress(directUrl, file, contentType, onPct);
           } catch (directError) {
             // iPhone on LAN often fails here: R2 CORS only allows localhost.
-            // Fall back to same-origin proxy (no browser↔R2 CORS needed).
+            // Fall back to same-origin proxy (no browser↔R2 CORS needed) —
+            // but only for files small enough to buffer through Next.js.
             if (!isLikelyCorsOrNetworkUploadError(directError)) {
               throw directError;
+            }
+            if (requiresDirectUpload || !proxyPutUrl) {
+              throw new Error(DIRECT_UPLOAD_REQUIRED_MESSAGE);
             }
             console.warn(
               "[MediaUploader] Direct R2 PUT failed; retrying via same-origin proxy",
@@ -279,8 +303,10 @@ export function MediaUploader({
             updateItem(item.id, { progress: 5 });
             await uploadWithProgress(proxyPutUrl, file, contentType, onPct);
           }
-        } else {
+        } else if (proxyPutUrl) {
           await uploadWithProgress(proxyPutUrl, file, contentType, onPct);
+        } else {
+          throw new Error(DIRECT_UPLOAD_REQUIRED_MESSAGE);
         }
 
         updateItem(item.id, { status: "finalizing", progress: 97 });
@@ -450,9 +476,20 @@ export function MediaUploader({
           <p className="font-medium text-ink">{t("upload.dropTitle")}</p>
           <p className="mt-1 text-sm text-ink-muted">
             {compact
-              ? t("upload.compactHint")
-              : `Or tap to choose from your camera roll. JPEG, PNG, WebP, HEIC, MP4, MOV, WebM — up to ${formatBytes(25 * 1024 * 1024)} for photos.`}
+              ? t("upload.compactHint", {
+                  photoMax: formatUploadLimit(MAX_IMAGE_BYTES),
+                  videoMax: formatUploadLimit(MAX_VIDEO_BYTES),
+                })
+              : t("upload.dropSizeHint")}
           </p>
+          {!compact ? (
+            <p className="mt-2 text-xs text-ink-muted">
+              {t("upload.limitsLine", {
+                photoMax: formatUploadLimit(MAX_IMAGE_BYTES),
+                videoMax: formatUploadLimit(MAX_VIDEO_BYTES),
+              })}
+            </p>
+          ) : null}
         </div>
       </div>
 

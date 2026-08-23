@@ -15,6 +15,9 @@ import { logger } from "@/lib/observability/logger";
 import {
   isR2Configured,
   maxBytesForContentType,
+  fileTooLargeMessage,
+  canProxyUploadBytes,
+  uploadExpiresInForBytes,
   presignRequestSchema,
   resolveUploadContentType,
 } from "@/lib/upload/constants";
@@ -119,7 +122,9 @@ export async function POST(request: Request) {
   if (size > maxBytes) {
     return NextResponse.json(
       {
-        error: `File is too large. Max size is ${Math.round(maxBytes / (1024 * 1024))} MB for this type.`,
+        error: fileTooLargeMessage(contentType, maxBytes),
+        code: "file_too_large",
+        maxBytes,
       },
       { status: 400 },
     );
@@ -128,7 +133,9 @@ export async function POST(request: Request) {
   try {
     const quota = await assertUploadWithinStorageQuota(userId, size);
     const key = buildTempUploadKey(userId, filename);
-    const upload = await getUploadUrl(key, contentType);
+    const expiresIn = uploadExpiresInForBytes(size);
+    const upload = await getUploadUrl(key, contentType, expiresIn);
+    const proxyAllowed = canProxyUploadBytes(size);
 
     logger.info(LogEvents.uploadUrlIssued, {
       userId,
@@ -139,15 +146,20 @@ export async function POST(request: Request) {
       key,
       keyPrefix: key.split("/").slice(0, 2).join("/"),
       expiresIn: upload.expiresIn,
+      proxyAllowed,
     });
 
     return NextResponse.json({
       uploadUrl: upload.url,
       /** Same-origin fallback when R2 CORS blocks browser PUT (LAN / iPhone). */
-      proxyPutUrl: `/api/upload/put?key=${encodeURIComponent(key)}`,
+      proxyPutUrl: proxyAllowed
+        ? `/api/upload/put?key=${encodeURIComponent(key)}`
+        : null,
+      requiresDirectUpload: !proxyAllowed,
       key: upload.key,
       expiresAt: upload.expiresAt,
       expiresIn: upload.expiresIn,
+      maxBytes,
       storage: {
         usedBytes: quota.usedBytes,
         limitBytes: quota.limitBytes,

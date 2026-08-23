@@ -175,7 +175,7 @@ export function LegacyVideoUploader({
     }
     if (next.size > LEGACY_VIDEO_MAX_BYTES) {
       setError(
-        `That file is too large (max ${formatBytes(LEGACY_VIDEO_MAX_BYTES)}).`,
+        `That video is too large. Videos can be up to ${formatBytes(LEGACY_VIDEO_MAX_BYTES)}.`,
       );
       setFile(null);
       return;

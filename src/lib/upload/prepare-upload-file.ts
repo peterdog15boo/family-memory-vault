@@ -5,6 +5,7 @@
  */
 
 import {
+  fileTooLargeMessage,
   isHeicUploadType,
   maxBytesForContentType,
   resolveUploadContentType,
@@ -62,8 +63,7 @@ export function validatePreparedUpload(
 ): string | null {
   const max = maxBytesForContentType(contentType);
   if (size > max) {
-    const mb = Math.round(max / (1024 * 1024));
-    return `File is too large (max ${mb} MB).`;
+    return fileTooLargeMessage(contentType, max);
   }
   return null;
 }

@@ -57,9 +57,16 @@ npm run db:migrate
 npm run db:seed   # optional demo data
 ```
 
-### 4. R2 CORS (local uploads)
+### 4. R2 CORS (browser uploads)
 
-On the R2 bucket, allow origin `http://localhost:3000`, methods `PUT`/`GET`/`HEAD`, and content headers used by the browser upload.
+Direct-to-R2 uploads need bucket CORS for your app origins (`PUT`/`GET`/`HEAD`).
+
+```bash
+# Prefer a Cloudflare API token with Account → Workers R2 Storage → Edit
+npx tsx scripts/setup-r2-cors.ts
+```
+
+Production + localhost + LAN origins are included by default. Or paste `scripts/r2-cors-production.json` in the R2 dashboard → bucket → Settings → CORS Policy.
 
 ### 5. Run the app
 

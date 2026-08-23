@@ -21,8 +21,15 @@ export const ALLOWED_UPLOAD_TYPES = [
 
 export type AllowedUploadType = (typeof ALLOWED_UPLOAD_TYPES)[number];
 
-export const MAX_IMAGE_BYTES = 25 * 1024 * 1024; // 25 MB
-export const MAX_VIDEO_BYTES = 500 * 1024 * 1024; // 500 MB
+/** Per-file gallery limits (plan storage still caps total vault capacity). */
+export const MAX_IMAGE_BYTES = 50 * 1024 * 1024; // 50 MB
+export const MAX_VIDEO_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
+
+/**
+ * Same-origin `/api/upload/put` proxy buffers the body in memory and is capped
+ * by Next middleware (~512 MB). Large home movies must use direct R2 PUT.
+ */
+export const MAX_PROXY_UPLOAD_BYTES = 512 * 1024 * 1024;
 
 const ALLOWED_SET = new Set<string>(ALLOWED_UPLOAD_TYPES);
 
@@ -123,6 +130,44 @@ export function maxBytesForContentType(contentType: string): number {
   return mediaTypeFromContentType(contentType) === "video"
     ? MAX_VIDEO_BYTES
     : MAX_IMAGE_BYTES;
+}
+
+/** Human label for limits (e.g. "50 MB", "2 GB"). */
+export function formatUploadLimit(bytes: number): string {
+  const gb = 1024 ** 3;
+  const mb = 1024 ** 2;
+  if (bytes >= gb) {
+    const n = bytes / gb;
+    return Number.isInteger(n) ? `${n} GB` : `${n.toFixed(1)} GB`;
+  }
+  const n = bytes / mb;
+  return Number.isInteger(n) ? `${n} MB` : `${Math.round(n)} MB`;
+}
+
+/** Friendly client/API message when a file exceeds the per-type max. */
+export function fileTooLargeMessage(contentType: string, maxBytes?: number): string {
+  const kind = mediaTypeFromContentType(contentType);
+  const max = maxBytes ?? maxBytesForContentType(contentType);
+  const label = formatUploadLimit(max);
+  if (kind === "video") {
+    return `This video is too large. Videos can be up to ${label}.`;
+  }
+  return `This photo is too large. Photos can be up to ${label}.`;
+}
+
+/**
+ * Longer presigned PUT TTL for large home movies on slow links.
+ * Capped by R2 `MAX_SIGNED_URL_EXPIRES_IN_SECONDS` (1 hour).
+ */
+export function uploadExpiresInForBytes(size: number): number {
+  if (size >= 512 * 1024 * 1024) return 60 * 60; // 1 hour
+  if (size >= 100 * 1024 * 1024) return 60 * 30; // 30 minutes
+  return 60 * 10; // 10 minutes
+}
+
+/** Whether the same-origin proxy can safely carry this upload. */
+export function canProxyUploadBytes(size: number): boolean {
+  return Number.isFinite(size) && size > 0 && size <= MAX_PROXY_UPLOAD_BYTES;
 }
 
 export const presignRequestSchema = z.object({
