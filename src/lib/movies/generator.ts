@@ -1979,12 +1979,23 @@ async function finalizeEncodedMovie(input: {
   }
 
   if (plan.brandWatermark) {
+    console.info("[movies] Free-plan brand watermark — applying burn-in", {
+      movieId: plan.movieId,
+      width: plan.width,
+      height: plan.height,
+    });
     finalVideoPath = await applyBrandWatermark({
       ffmpegPath,
       videoPath: finalVideoPath,
       workDir,
       width: plan.width,
       height: plan.height,
+      x264Preset: plan.output.x264Preset,
+      crf: Math.min(18, plan.output.crf + 2),
+    });
+  } else {
+    console.info("[movies] Brand watermark skipped (paid / removeMovieWatermark)", {
+      movieId: plan.movieId,
     });
   }
 
@@ -2164,8 +2175,8 @@ function escapeConcatPath(filePath: string): string {
 }
 
 /**
- * Soft free-plan corner brand — logo (when present) + “Created with…” text.
- * Never blocks playback if overlay fails.
+ * Soft free-plan bottom brand — logo (when present) + “Created with…”.
+ * Required for Free renders: failure throws so we never ship an unmarked Free movie.
  */
 async function applyBrandWatermark(input: {
   ffmpegPath: string;
@@ -2173,113 +2184,52 @@ async function applyBrandWatermark(input: {
   workDir: string;
   width: number;
   height: number;
+  x264Preset?: string;
+  crf?: number;
 }): Promise<string> {
   const { ffmpegPath, videoPath, workDir, width, height } = input;
-  const label = "Created with Family Memory Vault";
-  const fontSize = Math.max(12, Math.round(height * 0.022));
-  const padX = Math.max(10, Math.round(width * 0.018));
-  const padY = Math.max(8, Math.round(height * 0.018));
-  const logoMaxH = Math.max(18, Math.round(height * 0.045));
-  const margin = Math.max(10, Math.round(height * 0.018));
+  const {
+    buildBrandWatermarkFfmpegArgs,
+    buildBrandWatermarkOverlay,
+  } = await import("@/lib/movies/watermark");
 
-  const logoCandidates = [
-    join(process.cwd(), "public", "brand", "logo.png"),
-    join(process.cwd(), "public", "brand", "logo-light.jpg"),
-  ];
-  const logoSrc = logoCandidates.find((p) => existsSync(p)) ?? null;
-
-  let logoW = 0;
-  let logoH = 0;
-  let logoPath: string | null = null;
-  if (logoSrc) {
-    try {
-      const prepared = join(workDir, "brand-logo-wm.png");
-      const meta = await sharp(logoSrc).metadata();
-      const srcH = meta.height || 64;
-      const srcW = meta.width || 64;
-      logoH = logoMaxH;
-      logoW = Math.max(1, Math.round((srcW / srcH) * logoH));
-      await sharp(logoSrc)
-        .resize(logoW, logoH, { fit: "inside" })
-        .ensureAlpha()
-        .png()
-        .toFile(prepared);
-      logoPath = prepared;
-    } catch (err) {
-      console.warn("[movies] Brand logo prepare failed — text-only watermark", {
-        error: err instanceof Error ? err.message : String(err),
-      });
-      logoPath = null;
-      logoW = 0;
-      logoH = 0;
-    }
-  }
-
-  const textWidth = Math.ceil(label.length * fontSize * 0.52);
-  const gap = logoPath ? Math.round(padX * 0.6) : 0;
-  const boxW = padX * 2 + logoW + gap + textWidth;
-  const boxH = Math.max(logoH, fontSize) + padY;
-  const textX = padX + logoW + gap + textWidth / 2;
-  const svg = `<svg width="${boxW}" height="${boxH}" xmlns="http://www.w3.org/2000/svg">
-  <rect width="100%" height="100%" rx="${Math.round(boxH / 2)}" fill="rgba(20,16,12,0.38)"/>
-  <text x="${textX}" y="54%" text-anchor="middle" dominant-baseline="middle"
-        font-family="Georgia, 'Times New Roman', serif" font-size="${fontSize}"
-        fill="rgba(255,250,245,0.9)">${escapeXml(label)}</text>
-</svg>`;
-
-  const watermarkPath = join(workDir, "brand-watermark.png");
+  const overlay = await buildBrandWatermarkOverlay({
+    workDir,
+    width,
+    height,
+  });
   const brandedPath = join(workDir, "output_branded.mp4");
-  await sharp(Buffer.from(svg)).png().toFile(watermarkPath);
-
-  let overlayPath = watermarkPath;
-  if (logoPath && logoW > 0) {
-    const combined = join(workDir, "brand-watermark-combined.png");
-    await sharp(watermarkPath)
-      .composite([
-        {
-          input: logoPath,
-          left: padX,
-          top: Math.max(0, Math.round((boxH - logoH) / 2)),
-        },
-      ])
-      .png()
-      .toFile(combined);
-    overlayPath = combined;
-  }
+  const args = buildBrandWatermarkFfmpegArgs({
+    videoPath,
+    overlayPath: overlay.path,
+    outputPath: brandedPath,
+    margin: overlay.margin,
+    x264Preset: input.x264Preset ?? "medium",
+    crf: input.crf ?? 16,
+  });
 
   try {
-    await runFfmpeg(ffmpegPath, [
-      "-y",
-      "-i",
-      videoPath,
-      "-i",
-      overlayPath,
-      "-filter_complex",
-      `[0:v][1:v]overlay=W-w-${margin}:H-h-${margin}:format=auto`,
-      "-c:v",
-      "libx264",
-      "-preset",
-      "veryfast",
-      "-crf",
-      "20",
-      "-c:a",
-      "copy",
-      "-movflags",
-      "+faststart",
-      brandedPath,
-    ]);
+    await runFfmpeg(ffmpegPath, args);
     console.info("[movies] Applied free-plan brand watermark", {
-      overlayPath,
+      overlayPath: overlay.path,
       brandedPath,
-      hasLogo: Boolean(logoPath),
+      hasLogo: overlay.hasLogo,
+      overlayWidth: overlay.width,
+      overlayHeight: overlay.height,
+      margin: overlay.margin,
     });
     return brandedPath;
   } catch (error) {
-    console.error("[movies] Brand watermark failed — continuing without it", {
+    console.error("[movies] Brand watermark failed", {
       error: error instanceof Error ? error.message : String(error),
     });
+    throw new MovieError(
+      `Free-plan watermark could not be applied to the movie export: ${
+        error instanceof Error ? error.message.slice(0, 400) : String(error)
+      }`,
+      { retryable: true },
+    );
   }
-  return videoPath;
 }
 
 function runFfmpeg(bin: string, args: string[]): Promise<void> {

@@ -131,6 +131,12 @@ export {
   type MovieOutputSpec,
   type EncodeFitMode,
 } from "@/lib/movies/output";
+export {
+  shouldApplyMovieWatermark,
+  buildBrandWatermarkOverlay,
+  buildBrandWatermarkFfmpegArgs,
+  MOVIE_WATERMARK_LABEL,
+} from "@/lib/movies/watermark";
 export { composeMoviePoster } from "@/lib/movies/poster";
 export {
   serializeMovie,

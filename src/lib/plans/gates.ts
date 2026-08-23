@@ -15,6 +15,7 @@ import {
   type PlanFeatures,
 } from "@/lib/db/schema";
 import type { PlanLimits } from "@/lib/plans";
+import { shouldApplyMovieWatermark } from "@/lib/movies/watermark";
 
 export type PlanGateCode =
   | "movie_quota"
@@ -582,7 +583,10 @@ export async function getPlanCapabilities(
     aiSoundtrack: featureFlag(limits.features, "aiSoundtrack"),
     aiSoundtracks,
     legacyPlus: hasLegacyPlusFeatures(limits.features),
-    movieWatermark: !featureFlag(limits.features, "removeMovieWatermark"),
+    movieWatermark: shouldApplyMovieWatermark(
+      String(limits.slug),
+      limits.features,
+    ),
   };
 }
 
