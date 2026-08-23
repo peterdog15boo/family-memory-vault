@@ -204,8 +204,10 @@ async function resolveCover(
   return toSafeMediaItem(row);
 }
 
-function memoryBaseFields(row: Memory) {
-  const familyAccess =
+function memoryBaseFields(
+  row: Memory,
+): Omit<MemoryWithMedia, "cover" | "media"> {
+  const familyAccess: MemoryFamilyAccess =
     row.familyAccess === "contribute" ? "contribute" : "view";
   return {
     id: row.id,
@@ -995,7 +997,7 @@ export function serializeSafeMediaItem(
 export function serializeMemoryWithMedia(
   memory: MemoryWithMedia,
 ): SerializedMemoryWithMedia {
-  const familyAccess =
+  const familyAccess: MemoryFamilyAccess =
     memory.familyAccess === "contribute" ? "contribute" : "view";
   return {
     id: memory.id,
