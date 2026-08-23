@@ -487,6 +487,10 @@ export const enUS = {
     noteFacebookCopyFallback: "Link copied. Paste it into Facebook.",
     noteSocialCopyFallback:
       "Link copied. Paste it into the app to share your movie.",
+    noteFacebookReadyRetry:
+      "Share link ready — tap Facebook again to open the share dialog.",
+    noteSocialReadyRetry:
+      "Share link ready — tap the network again to open it.",
     socialFacebook: "Facebook",
     socialFacebookHint: "Opens Facebook’s share dialog",
     socialInstagram: "Instagram",
