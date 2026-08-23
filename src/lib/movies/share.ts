@@ -102,9 +102,56 @@ export function movieSocialShareUrl(
   }
 }
 
+export type TryOpenExternalUrlResult = {
+  opened: boolean;
+  /** True when the browser blocked the new tab/window. */
+  blocked: boolean;
+};
+
 /**
- * Open a social share intent in a new tab/window.
- * Pass an already-ensured movie with `shareUrl` set for link networks.
+ * Open an external URL in a real new tab (no window-feature chrome).
+ * Sized popups are blocked far more often than plain `_blank` tabs.
+ *
+ * Returns opened=false when the browser blocks the open — callers must
+ * fall back (copy link + message). Never pretend success.
+ */
+export function tryOpenExternalUrl(
+  href: string,
+  targetWindow?: Window | null,
+): TryOpenExternalUrlResult {
+  if (!href || typeof window === "undefined") {
+    return { opened: false, blocked: true };
+  }
+
+  if (targetWindow && !targetWindow.closed) {
+    try {
+      targetWindow.location.assign(href);
+      targetWindow.focus();
+      return { opened: true, blocked: false };
+    } catch {
+      // Fall through to a fresh open.
+    }
+  }
+
+  // No width/height features — those force “popup” mode and get blocked.
+  const win = window.open(href, "_blank");
+  if (win) {
+    try {
+      // Reduce tabnabbing without using noopener in window.open features
+      // (which would make `win` null and hide success/failure).
+      win.opener = null;
+    } catch {
+      // ignore
+    }
+    return { opened: true, blocked: false };
+  }
+
+  return { opened: false, blocked: true };
+}
+
+/**
+ * @deprecated Prefer tryOpenExternalUrl — this always claimed success.
+ * Kept for any legacy callers; now returns accurate success.
  */
 export function openMovieSocialShare(
   network: MovieSocialNetwork,
@@ -112,82 +159,143 @@ export function openMovieSocialShare(
   options?: { targetWindow?: Window | null },
 ): boolean {
   const href = movieSocialShareUrl(network, movie);
-  if (!href || typeof window === "undefined") return false;
-
-  const existing = options?.targetWindow;
-  if (existing && !existing.closed) {
-    try {
-      existing.location.href = href;
-      existing.focus();
-      return true;
-    } catch {
-      // Cross-origin / closed — fall through to a fresh open.
-    }
-  }
-
-  const popup = window.open(href, "_blank", "width=720,height=720");
-  if (!popup) {
-    // Popup blocked — open via an anchor so the app page stays put.
-    const anchor = document.createElement("a");
-    anchor.href = href;
-    anchor.target = "_blank";
-    anchor.rel = "noopener noreferrer";
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-  }
-  return true;
+  if (!href) return false;
+  return tryOpenExternalUrl(href, options?.targetWindow).opened;
 }
+
+export type SocialShareEnsuredResult = {
+  ok: boolean;
+  opened: boolean;
+  blocked: boolean;
+  copied: boolean;
+  movie: SerializedMovie;
+  shareUrl: string | null;
+  error?: "no_share_url" | "copy_failed";
+};
 
 /**
  * Ensure a durable public share link exists, then open the network composer.
- * Opens a blank window synchronously when the share URL still needs creating,
+ * Opens a blank tab synchronously when the share URL still needs creating,
  * so popup blockers do not swallow the Facebook dialog after an await.
+ *
+ * If the new tab is blocked, copies the public link (when possible) so the
+ * UI can tell the user to paste it.
  */
 export async function openMovieSocialShareEnsured(
   network: MovieSocialNetwork,
   movie: SerializedMovie,
   ensureShareUrl: () => Promise<SerializedMovie>,
-): Promise<{ ok: boolean; movie: SerializedMovie }> {
+): Promise<SocialShareEnsuredResult> {
   if (network === "instagram" || network === "tiktok") {
-    return { ok: false, movie };
+    return {
+      ok: false,
+      opened: false,
+      blocked: false,
+      copied: false,
+      movie,
+      shareUrl: null,
+      error: "no_share_url",
+    };
   }
 
-  let target: Window | null = null;
-  // Do not use noopener on the placeholder — we need the Window to set location.
-  if (typeof window !== "undefined" && !moviePublicShareUrl(movie)) {
-    target = window.open("about:blank", "_blank", "width=720,height=720");
+  let placeholder: Window | null = null;
+  const alreadyPublic = Boolean(moviePublicShareUrl(movie));
+  // Reserve a tab under the user gesture before any await.
+  if (typeof window !== "undefined" && !alreadyPublic) {
+    placeholder = window.open("about:blank", "_blank");
   }
 
+  let ready = movie;
   try {
-    const ready = moviePublicShareUrl(movie)
-      ? movie
-      : await ensureShareUrl();
-    if (!moviePublicShareUrl(ready)) {
-      if (target && !target.closed) target.close();
-      return { ok: false, movie: ready };
+    if (!alreadyPublic) {
+      ready = await ensureShareUrl();
     }
-    const ok = openMovieSocialShare(network, ready, { targetWindow: target });
-    if (!ok && target && !target.closed) {
-      target.close();
-    }
-    return { ok, movie: ready };
   } catch {
-    if (target && !target.closed) target.close();
-    return { ok: false, movie };
+    if (placeholder && !placeholder.closed) placeholder.close();
+    return {
+      ok: false,
+      opened: false,
+      blocked: false,
+      copied: false,
+      movie,
+      shareUrl: null,
+      error: "no_share_url",
+    };
   }
+
+  const shareUrl = moviePublicShareUrl(ready);
+  const href = shareUrl ? movieSocialShareUrl(network, ready) : null;
+  if (!shareUrl || !href) {
+    if (placeholder && !placeholder.closed) placeholder.close();
+    return {
+      ok: false,
+      opened: false,
+      blocked: false,
+      copied: false,
+      movie: ready,
+      shareUrl: null,
+      error: "no_share_url",
+    };
+  }
+
+  const { opened, blocked } = tryOpenExternalUrl(href, placeholder);
+  if (opened) {
+    return {
+      ok: true,
+      opened: true,
+      blocked: false,
+      copied: false,
+      movie: ready,
+      shareUrl,
+    };
+  }
+
+  if (placeholder && !placeholder.closed) {
+    try {
+      placeholder.close();
+    } catch {
+      // ignore
+    }
+  }
+
+  const copied = await copyMovieShareLink(ready);
+  return {
+    ok: copied,
+    opened: false,
+    blocked,
+    copied,
+    movie: ready,
+    shareUrl,
+    error: copied ? undefined : "copy_failed",
+  };
 }
 
 export async function copyMovieShareLink(
   movie: SerializedMovie,
 ): Promise<boolean> {
   const url = moviePublicShareUrl(movie) || movieShareUrl(movie);
-  if (!url || typeof navigator === "undefined" || !navigator.clipboard) {
+  if (!url || typeof navigator === "undefined") {
     return false;
   }
   try {
-    await navigator.clipboard.writeText(url);
-    return true;
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url);
+      return true;
+    }
+  } catch {
+    // Fall through to execCommand fallback.
+  }
+  try {
+    const input = document.createElement("textarea");
+    input.value = url;
+    input.setAttribute("readonly", "");
+    input.style.position = "fixed";
+    input.style.left = "-9999px";
+    document.body.appendChild(input);
+    input.select();
+    const ok = document.execCommand("copy");
+    input.remove();
+    return ok;
   } catch {
     return false;
   }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi, afterEach } from "vitest";
 import {
   DEFAULT_PHOTO_REQUEST_MESSAGE,
   PHOTO_REQUEST_PRESETS,
@@ -9,6 +9,8 @@ import {
   movieShareUrl,
   movieSocialShareUrl,
   movieSocialUsesPublicLink,
+  openMovieSocialShare,
+  tryOpenExternalUrl,
 } from "@/lib/movies/share";
 import type { SerializedMovie } from "@/lib/movies/serialize";
 
@@ -36,6 +38,11 @@ function sampleMovie(
 }
 
 describe("movie share helpers", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
   it("prefers durable shareUrl over signed R2 URLs", () => {
     const movie = sampleMovie({
       shareUrl: "https://app.example/share/m/tok",
@@ -82,6 +89,36 @@ describe("movie share helpers", () => {
     expect(movieSocialShareUrl("instagram", movie)).toBeNull();
     expect(movieSocialShareUrl("tiktok", movie)).toBeNull();
     expect(movieSocialUsesPublicLink("instagram")).toBe(false);
+  });
+
+  it("reports blocked when window.open returns null", () => {
+    vi.stubGlobal("window", {
+      open: () => null,
+    });
+    expect(tryOpenExternalUrl("https://www.facebook.com/sharer/sharer.php?u=x")).toEqual(
+      { opened: false, blocked: true },
+    );
+  });
+
+  it("reports opened when window.open returns a window", () => {
+    const fakeWin = { opener: {} as Window | null, closed: false, focus: () => {} };
+    vi.stubGlobal("window", {
+      open: () => fakeWin,
+    });
+    expect(tryOpenExternalUrl("https://www.facebook.com/sharer/sharer.php?u=x")).toEqual(
+      { opened: true, blocked: false },
+    );
+    expect(fakeWin.opener).toBeNull();
+  });
+
+  it("openMovieSocialShare returns false when the tab is blocked", () => {
+    vi.stubGlobal("window", {
+      open: () => null,
+    });
+    const movie = sampleMovie({
+      shareUrl: "https://app.example/share/m/tok",
+    });
+    expect(openMovieSocialShare("facebook", movie)).toBe(false);
   });
 });
 

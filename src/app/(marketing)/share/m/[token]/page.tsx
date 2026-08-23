@@ -33,10 +33,8 @@ export async function generateMetadata({
 
   const title = row.movie.title?.trim() || "Family movie";
   const shareUrl = buildMovieSharePageUrl(row.share.token);
-  const hasPoster = Boolean(row.movie.thumbnailKey?.trim());
-  const posterUrl = hasPoster
-    ? buildMovieSharePosterUrl(row.share.token)
-    : undefined;
+  // Always a durable same-origin poster URL (JPEG poster or branded JPEG fallback).
+  const posterUrl = buildMovieSharePosterUrl(row.share.token);
 
   return {
     title,
@@ -49,22 +47,18 @@ export async function generateMetadata({
       url: shareUrl,
       type: "website",
       siteName: "Family Memory Vault",
-      ...(posterUrl
-        ? {
-            images: [
-              {
-                url: posterUrl,
-                alt: title,
-              },
-            ],
-          }
-        : {}),
+      images: [
+        {
+          url: posterUrl,
+          alt: title,
+        },
+      ],
     },
     twitter: {
-      card: posterUrl ? "summary_large_image" : "summary",
+      card: "summary_large_image",
       title,
       description: SHARE_DESCRIPTION,
-      ...(posterUrl ? { images: [posterUrl] } : {}),
+      images: [posterUrl],
     },
   };
 }

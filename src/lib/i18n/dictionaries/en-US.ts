@@ -482,6 +482,11 @@ export const enUS = {
     noteTikTok: "Video saved. Open TikTok and upload it from your device.",
     noteDownloadStarted: "Download started.",
     noteSocialFailed: "Couldn’t open that share page. Try Copy link or Download.",
+    noteFacebookOpened: "Facebook opened in a new tab with your movie link.",
+    noteSocialOpened: "Share page opened in a new tab.",
+    noteFacebookCopyFallback: "Link copied. Paste it into Facebook.",
+    noteSocialCopyFallback:
+      "Link copied. Paste it into the app to share your movie.",
     socialFacebook: "Facebook",
     socialFacebookHint: "Opens Facebook’s share dialog",
     socialInstagram: "Instagram",

@@ -17,8 +17,9 @@ import {
   downloadMovieFile,
   moviePublicShareUrl,
   movieShareUrl,
-  openMovieSocialShareEnsured,
+  movieSocialShareUrl,
   shareMovieFile,
+  tryOpenExternalUrl,
   type MovieSocialNetwork,
 } from "@/lib/movies/share";
 import { useOverlayA11y } from "@/hooks/useOverlayA11y";
@@ -213,30 +214,110 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
   }
 
   async function handleSocial(network: MovieSocialNetwork) {
-    setNote(null);
     if (network === "instagram" || network === "tiktok") {
+      setNote(null);
       handleDownload(network);
       return;
     }
 
-    setBusy(network);
-    try {
-      const { ok, movie: ready } = await openMovieSocialShareEnsured(
-        network,
-        shareMovie,
-        ensurePublicShareMovie,
-      );
-      if (ready.shareUrl && ready.shareUrl !== shareMovie.shareUrl) {
-        setShareMovie(ready);
-      }
-      if (!ok) {
+    // IMPORTANT: open the tab under the raw click gesture BEFORE any
+    // setState/await. React state updates can break popup permissions and
+    // make Facebook share look like a dead click.
+    const existingPublic = moviePublicShareUrl(shareMovie);
+    const readyHref = existingPublic
+      ? movieSocialShareUrl(network, shareMovie)
+      : null;
+
+    if (readyHref) {
+      const immediate = tryOpenExternalUrl(readyHref);
+      if (immediate.opened) {
         setNote(
-          moviePublicShareUrl(ready)
-            ? t("movie.noteSocialFailed")
-            : t("movie.noteShareLinkFailed"),
+          network === "facebook"
+            ? t("movie.noteFacebookOpened")
+            : t("movie.noteSocialOpened"),
         );
+        return;
       }
-    } catch {
+      // Blocked — copy fallback below (still keep the dialog open).
+      setBusy(network);
+      setNote(null);
+      try {
+        const copied = await copyMovieShareLink(shareMovie);
+        if (copied) {
+          setCopied(true);
+          setNote(
+            network === "facebook"
+              ? t("movie.noteFacebookCopyFallback")
+              : t("movie.noteSocialCopyFallback"),
+          );
+          window.setTimeout(() => setCopied(false), 2800);
+        } else {
+          setNote(t("movie.noteSocialFailed"));
+        }
+      } finally {
+        setBusy(null);
+      }
+      return;
+    }
+
+    // No public URL yet — reserve a blank tab under the click, then ensure.
+    const placeholder =
+      typeof window !== "undefined"
+        ? window.open("about:blank", "_blank")
+        : null;
+
+    setBusy(network);
+    setNote(null);
+    try {
+      const ready = await ensurePublicShareMovie();
+      const shareUrl = moviePublicShareUrl(ready);
+      const href = shareUrl ? movieSocialShareUrl(network, ready) : null;
+      if (!shareUrl || !href) {
+        if (placeholder && !placeholder.closed) placeholder.close();
+        setNote(t("movie.noteShareLinkFailed"));
+        return;
+      }
+
+      const opened = tryOpenExternalUrl(href, placeholder);
+      if (opened.opened) {
+        setNote(
+          network === "facebook"
+            ? t("movie.noteFacebookOpened")
+            : t("movie.noteSocialOpened"),
+        );
+        return;
+      }
+
+      if (placeholder && !placeholder.closed) {
+        try {
+          placeholder.close();
+        } catch {
+          // ignore
+        }
+      }
+
+      const copied = await copyMovieShareLink(ready);
+      if (copied) {
+        setCopied(true);
+        setNote(
+          network === "facebook"
+            ? t("movie.noteFacebookCopyFallback")
+            : t("movie.noteSocialCopyFallback"),
+        );
+        window.setTimeout(() => setCopied(false), 2800);
+        return;
+      }
+
+      setNote(t("movie.noteSocialFailed"));
+    } catch (err) {
+      if (placeholder && !placeholder.closed) {
+        try {
+          placeholder.close();
+        } catch {
+          // ignore
+        }
+      }
+      console.error("[movie.share] social share failed", network, err);
       setNote(t("movie.noteShareLinkFailed"));
     } finally {
       setBusy(null);
@@ -351,7 +432,7 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
                 <button
                   type="button"
                   disabled={busy !== null}
-                  onClick={() => handleSocial(option.id)}
+                  onClick={() => void handleSocial(option.id)}
                   className="flex w-full items-center gap-3 rounded-xl border border-ink/10 bg-canvas px-3 py-3 text-left transition hover:border-accent/35 hover:bg-canvas-deep/40 disabled:opacity-60"
                 >
                   <span
@@ -431,7 +512,10 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
           </div>
 
           {note ? (
-            <p className="mt-3 text-center text-xs leading-relaxed text-ink-muted">
+            <p
+              role="status"
+              className="mt-3 rounded-lg bg-accent/10 px-3 py-2 text-center text-sm leading-relaxed text-ink"
+            >
               {note}
             </p>
           ) : null}
