@@ -26,6 +26,12 @@ import {
   type MoviePresetId,
 } from "@/lib/movies/presets";
 import {
+  buildSimpleModeSettings,
+  readStoredMovieCreateMode,
+  storeMovieCreateMode,
+  type MovieCreateMode,
+} from "@/lib/movies/simple-mode";
+import {
   aspectRatioHint,
   resolveMovieOutputSpec,
 } from "@/lib/movies/output";
@@ -200,6 +206,11 @@ type CreateMoviePanelProps = {
   mediaCount: number;
   capabilities: PlanCapabilities;
   onClose: () => void;
+  /**
+   * Forced starting mode for this open (Make Movie → Simple).
+   * When omitted, last stored preference is used (default Simple for new users).
+   */
+  defaultCreateMode?: MovieCreateMode;
 };
 
 export function CreateMoviePanel({
@@ -208,31 +219,40 @@ export function CreateMoviePanel({
   mediaCount,
   capabilities,
   onClose,
+  defaultCreateMode,
 }: CreateMoviePanelProps) {
   const copy = useCopy();
   const t = useTranslations();
   const [themeId, setThemeId] = useState<MovieStyle>("simple");
   const [title, setTitle] = useState(memoryTitle);
-  const [includeTitles, setIncludeTitles] = useState(true);
+  const [includeTitles, setIncludeTitles] = useState(false);
   const [pacingId, setPacingId] = useState("medium");
-  const [transition, setTransition] = useState<MovieTransition>("crossfade");
+  const [transition, setTransition] = useState<MovieTransition>("soft_dissolve");
   const [transitionDurationId, setTransitionDurationId] = useState<
     "auto" | "short" | "medium" | "long"
-  >("auto");
+  >("medium");
   const [zoomIntensity, setZoomIntensity] =
     useState<ZoomIntensity>("medium");
   const [zoomDirection, setZoomDirection] =
     useState<"alternate" | "always-in" | "always-out">("alternate");
-  const [presetId, setPresetId] = useState<MoviePresetId | null>(null);
-  const [music, setMusic] = useState<MovieMusicSelection>(DEFAULT_MUSIC);
+  const [presetId, setPresetId] = useState<MoviePresetId | null>("simple_mode");
+  const [music, setMusic] = useState<MovieMusicSelection>({
+    ...DEFAULT_MUSIC,
+    musicSource: "library",
+    musicTrackId: "soft-piano",
+    musicSuggestionId: "soft-piano",
+  });
   const [aspectRatio, setAspectRatio] = useState<MovieAspectRatio>("16:9");
   const [qualityMode, setQualityMode] = useState<QualityMode>("standard");
-  const [colorFilter, setColorFilter] = useState<ColorFilterId>("clean");
+  const [colorFilter, setColorFilter] = useState<ColorFilterId>("warm_family");
   const [colorFilterIntensity, setColorFilterIntensity] =
-    useState<ColorFilterIntensity>("medium");
+    useState<ColorFilterIntensity>("subtle");
   /** null = use the filter's own grain/vignette amounts. */
-  const [filterGrain, setFilterGrain] = useState<boolean | null>(null);
-  const [filterVignette, setFilterVignette] = useState<boolean | null>(null);
+  const [filterGrain, setFilterGrain] = useState<boolean | null>(false);
+  const [filterVignette, setFilterVignette] = useState<boolean | null>(false);
+  const [createMode, setCreateMode] = useState<MovieCreateMode>(
+    () => defaultCreateMode ?? "simple",
+  );
   const [phase, setPhase] = useState<PanelPhase>("compose");
   const [movie, setMovie] = useState<SerializedMovie | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -243,6 +263,24 @@ export function CreateMoviePanel({
   const announcedPhaseRef = useRef<PanelPhase>("compose");
 
   useAnnounceStatus(error, { priority: "assertive" });
+
+  useEffect(() => {
+    // Prefer an explicit open mode (e.g. Make Movie → Simple); else remember last choice.
+    if (defaultCreateMode) {
+      setCreateMode(defaultCreateMode);
+      storeMovieCreateMode(defaultCreateMode);
+      return;
+    }
+    setCreateMode(readStoredMovieCreateMode());
+  }, [defaultCreateMode]);
+
+  function setMode(next: MovieCreateMode) {
+    setCreateMode(next);
+    storeMovieCreateMode(next);
+    if (next === "simple") {
+      applyPreset("simple_mode");
+    }
+  }
 
   useEffect(() => {
     if (phase === announcedPhaseRef.current) return;
@@ -468,13 +506,16 @@ export function CreateMoviePanel({
       );
       return;
     }
-    if (ADVANCED_STYLES.has(themeId) && !advancedThemes) {
+
+    const isSimple = createMode === "simple";
+
+    if (!isSimple && ADVANCED_STYLES.has(themeId) && !advancedThemes) {
       setUpgradeMessage(
         "Cinematic and Vintage themes require a Family plan or higher.",
       );
       return;
     }
-    if (qualityMode === "ultra" && !canUltra) {
+    if (!isSimple && qualityMode === "ultra" && !canUltra) {
       setUpgradeMessage(
         "Ultra 4K exports require Family Plus or higher.",
       );
@@ -484,26 +525,30 @@ export function CreateMoviePanel({
     setUpgradeMessage(null);
     setSubmitting(true);
 
-    const preset = presetId ? getMoviePreset(presetId) : null;
-
-    const durationOpt = TRANSITION_DURATION_OPTIONS.find(
-      (d) => d.id === transitionDurationId,
-    );
-    const transitionDurationMs =
-      transition === "none" ? null : (durationOpt?.ms ?? null);
-
-    const faceAwareMotion = ensureFaceAwareMovieSettings({
-      zoomIntensity,
-      zoomDirection,
-      qualityMode,
-      photoDurationMs: pacing.photoDurationMs,
-    });
-
     try {
-      const response = await fetch(`/api/memories/${memoryId}/movies`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      let body: Record<string, unknown>;
+
+      if (isSimple) {
+        const simpleSettings = buildSimpleModeSettings();
+        body = {
+          autoTitle: true,
+          style: "simple",
+          settings: simpleSettings,
+        };
+      } else {
+        const preset = presetId ? getMoviePreset(presetId) : null;
+        const durationOpt = TRANSITION_DURATION_OPTIONS.find(
+          (d) => d.id === transitionDurationId,
+        );
+        const transitionDurationMs =
+          transition === "none" ? null : (durationOpt?.ms ?? null);
+        const faceAwareMotion = ensureFaceAwareMovieSettings({
+          zoomIntensity,
+          zoomDirection,
+          qualityMode,
+          photoDurationMs: pacing.photoDurationMs,
+        });
+        body = {
           title: title.trim() || memoryTitle,
           style: themeId,
           settings: {
@@ -516,6 +561,7 @@ export function CreateMoviePanel({
             zoomIntensity: faceAwareMotion.zoomIntensity,
             zoomDirection: faceAwareMotion.zoomDirection,
             includeTitles,
+            posterStyle: includeTitles ? "titled" : "photo",
             aspectRatio,
             presetId,
             qualityMode: faceAwareMotion.qualityMode,
@@ -535,7 +581,13 @@ export function CreateMoviePanel({
             musicAiGenerated: music.musicAiGenerated,
             musicAiProvider: music.musicAiProvider,
           },
-        }),
+        };
+      }
+
+      const response = await fetch(`/api/memories/${memoryId}/movies`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
       });
       const data = (await response.json().catch(() => ({}))) as {
         movie?: SerializedMovie;
@@ -618,8 +670,10 @@ export function CreateMoviePanel({
                   ? copy.movie.craftingTitle
                   : phase === "failed"
                     ? copy.movie.failedTitle
-                    : t("pages.createMovie")}
-              {phase === "compose" ? (
+                    : createMode === "simple"
+                      ? t("movie.simpleModeTitle")
+                      : t("pages.createMovie")}
+              {phase === "compose" && createMode === "expert" ? (
                 <span className="ml-1.5 inline-flex align-middle">
                   <HintTooltip tip={copy.tips.createMovie} label={t("pages.aboutMovies")} />
                 </span>
@@ -683,8 +737,75 @@ export function CreateMoviePanel({
             </div>
           ) : null}
 
-          {phase === "compose" ? (
+          {phase === "compose" && createMode === "simple" ? (
+            <div className="space-y-5">
+              <div className="rounded-xl border border-ink/10 bg-ink/[0.03] px-4 py-4">
+                <p className="font-display text-lg tracking-tight text-ink">
+                  {t("movie.simpleModeLead")}
+                </p>
+                <ul className="mt-3 space-y-1.5 text-sm text-ink-muted">
+                  <li>{t("movie.simpleModeBulletSlideshow")}</li>
+                  <li>{t("movie.simpleModeBulletMedia", { count: mediaCount })}</li>
+                  <li>{t("movie.simpleModeBulletTitle")}</li>
+                </ul>
+              </div>
+
+              {capabilities.movieWatermark ? (
+                <p className="text-xs leading-relaxed text-ink-muted">
+                  {t("movie.simpleModeWatermarkHint")}
+                </p>
+              ) : null}
+
+              <p className="text-xs text-ink-muted">
+                {estimateMovieRenderTime({
+                  photoCount: mediaCount,
+                  qualityMode: "standard",
+                  hasMusic: true,
+                }).label}
+                .
+              </p>
+
+              <button
+                type="button"
+                disabled={submitting || mediaCount === 0 || !canCreate}
+                onClick={() => void handleCreate()}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-3.5 text-sm font-medium text-accent-foreground transition hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {submitting ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                ) : (
+                  <Sparkles className="size-4" aria-hidden />
+                )}
+                {submitting
+                  ? t("common.starting")
+                  : t("movie.createSimpleMovieCta")}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMode("expert")}
+                className="w-full text-center text-sm font-medium text-ink-muted underline-offset-4 transition hover:text-ink hover:underline"
+              >
+                {t("movie.expertModeLink")}
+              </button>
+            </div>
+          ) : null}
+
+          {phase === "compose" && createMode === "expert" ? (
             <div className="space-y-6">
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-ink/8 bg-ink/[0.02] px-3 py-2">
+                <p className="text-xs text-ink-muted">
+                  {t("movie.expertModeBadge")}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setMode("simple")}
+                  className="shrink-0 text-xs font-medium text-accent-deep underline-offset-2 hover:underline"
+                >
+                  {t("movie.simpleModeLink")}
+                </button>
+              </div>
+
               {/* 1. Presets */}
               <section>
                 <h3 className="text-sm font-medium text-ink">

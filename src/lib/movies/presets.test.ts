@@ -8,6 +8,7 @@ import {
 describe("movie presets", () => {
   it("ships the production preset set", () => {
     expect(MOVIE_PRESETS.map((p) => p.id)).toEqual([
+      "simple_mode",
       "classic_family",
       "holiday_card",
       "cinematic_tribute",
@@ -19,7 +20,16 @@ describe("movie presets", () => {
   it("resolves legacy preset aliases", () => {
     expect(resolveMoviePresetId("cinematic_story")).toBe("cinematic_tribute");
     expect(resolveMoviePresetId("fast_memories")).toBe("clean_slideshow");
+    expect(resolveMoviePresetId("simple")).toBe("simple_mode");
     expect(getMoviePreset("cinematic_story")?.label).toBe("Cinematic Tribute");
+  });
+
+  it("Simple Mode skips title cards and uses soft dissolve", () => {
+    expect(getMoviePreset("simple_mode")).toMatchObject({
+      includeTitles: false,
+      transition: "soft_dissolve",
+      qualityMode: "standard",
+    });
   });
 
   it("Social Story is vertical 9:16", () => {

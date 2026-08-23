@@ -21,6 +21,10 @@ type PageProps = {
 /**
  * Memory detail — owner, or family when explicitly shared.
  * Media shown here is always clean + ready.
+ *
+ * Action bar permissions are derived from ownership + canEditMemory, with
+ * safe fallbacks so legacy rows (missing optional fields) still show the
+ * same owner controls as newly created memories.
  */
 export default async function MemoryDetailPage({
   params,
@@ -39,7 +43,19 @@ export default async function MemoryDetailPage({
   }
 
   const isOwner = memory.userId === userId;
-  const canEdit = await canEditMemory(userId, id);
+
+  let canEdit = isOwner;
+  try {
+    canEdit = (await canEditMemory(userId, id)) || isOwner;
+  } catch (error) {
+    console.warn("[memories.detail] canEditMemory failed; using owner fallback", {
+      memoryId: id,
+      isOwner,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    canEdit = isOwner;
+  }
+
   const [families, planCapabilities] = await Promise.all([
     getUserFamilies(userId),
     getPlanCapabilities(userId),

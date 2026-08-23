@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
+import { useAuth } from "@clerk/nextjs";
 import {
   ArrowLeft,
   Check,
@@ -77,6 +78,7 @@ export function MemoryDetailView({
   startCreateMovie = false,
 }: MemoryDetailViewProps) {
   const router = useRouter();
+  const { userId: clerkUserId } = useAuth();
   const copy = useCopy();
   const t = useTranslations();
   const format = useFormat();
@@ -110,6 +112,19 @@ export function MemoryDetailView({
     setDescription(initialMemory.description ?? "");
   }, [initialMemory]);
 
+  /**
+   * Owner actions (Add photos / Make Movie / Delete) must work for every owned
+   * memory — including legacy rows — even if a server prop briefly disagrees.
+   * Edit stays available for owners and contribute family members.
+   */
+  const viewerIsOwner = Boolean(
+    canManageMedia ||
+      (clerkUserId != null && clerkUserId === memory.userId),
+  );
+  const allowEdit = Boolean(canEdit || viewerIsOwner);
+  const allowManageMedia = viewerIsOwner;
+  const allowManageSharing = viewerIsOwner;
+
   const inMemoryIds = useMemo(
     () => new Set(memory.media.map((item) => item.id)),
     [memory.media],
@@ -121,6 +136,22 @@ export function MemoryDetailView({
   );
 
   const lightbox = memory.media.find((item) => item.id === lightboxId) ?? null;
+  /** Memory detail only lists clean+ready media — same set the movie pipeline uses. */
+  const usableMovieMediaCount = memory.media.length;
+  const canMakeMovie = usableMovieMediaCount > 0;
+  const makeMovieDisabledReason = canMakeMovie
+    ? null
+    : "Add at least one clean photo or video to this memory to make a movie.";
+
+  function openMakeMovie() {
+    setError(null);
+    setNotice(null);
+    if (!canMakeMovie) {
+      setError(makeMovieDisabledReason);
+      return;
+    }
+    setMovieOpen(true);
+  }
   const [viewerMounted, setViewerMounted] = useState(false);
   const lightboxRef = useRef<HTMLDivElement>(null);
   const addSheetRef = useRef<HTMLDivElement>(null);
@@ -144,14 +175,14 @@ export function MemoryDetailView({
   });
 
   useOverlayA11y({
-    open: Boolean(addOpen && canManageMedia),
+    open: Boolean(addOpen && allowManageMedia),
     onClose: closeAddSheet,
     containerRef: addSheetRef,
     escapeEnabled: !pending,
   });
 
   useOverlayA11y({
-    open: Boolean(deleteOpen && canManageMedia),
+    open: Boolean(deleteOpen && allowManageMedia),
     onClose: dismissDeleteAlbum,
     containerRef: deleteConfirmRef,
     lockScroll: false,
@@ -230,7 +261,7 @@ export function MemoryDetailView({
   }
 
   function setCover(mediaId: string) {
-    if (!canManageMedia || mediaId === memory.coverMediaId) return;
+    if (!allowManageMedia || mediaId === memory.coverMediaId) return;
     setError(null);
     setBusyMediaId(mediaId);
     startTransition(async () => {
@@ -245,7 +276,7 @@ export function MemoryDetailView({
   }
 
   function removeMedia(mediaId: string) {
-    if (!canManageMedia) return;
+    if (!allowManageMedia) return;
     setError(null);
     setBusyMediaId(mediaId);
     startTransition(async () => {
@@ -273,7 +304,7 @@ export function MemoryDetailView({
   }
 
   function addSelectedMedia() {
-    if (!canManageMedia || pickedIds.length === 0) return;
+    if (!allowManageMedia || pickedIds.length === 0) return;
     setError(null);
     startTransition(async () => {
       try {
@@ -370,7 +401,7 @@ export function MemoryDetailView({
               {memory.type === "story" ? "Story" : "Family album"}
             </p>
 
-            {editing && canEdit ? (
+            {editing && allowEdit ? (
               <div className="mt-2 space-y-3">
                 <input
                   value={title}
@@ -423,7 +454,7 @@ export function MemoryDetailView({
                   <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-muted">
                     {memory.description}
                   </p>
-                ) : canEdit ? (
+                ) : allowEdit ? (
                   <p className="mt-3 text-sm italic text-ink/40">
                     No description yet
                   </p>
@@ -437,9 +468,10 @@ export function MemoryDetailView({
               </>
             )}
 
-            {(canEdit || canManageMedia) && !editing ? (
+            {/* Same action bar for every memory — never gated on age, cover, or edit mode. */}
+            {allowEdit || allowManageMedia ? (
               <div className="mt-5 flex flex-wrap gap-2">
-                {canEdit ? (
+                {allowEdit && !editing ? (
                   <button
                     type="button"
                     onClick={() => setEditing(true)}
@@ -449,7 +481,7 @@ export function MemoryDetailView({
                     Edit details
                   </button>
                 ) : null}
-                {canManageMedia ? (
+                {allowManageMedia ? (
                   <button
                     type="button"
                     onClick={() => {
@@ -462,24 +494,17 @@ export function MemoryDetailView({
                     Add photos
                   </button>
                 ) : null}
-                {canManageMedia ? (
+                {allowManageMedia ? (
                   <button
                     type="button"
-                    onClick={() => {
-                      setError(null);
-                      setNotice(null);
-                      if (memory.media.length === 0) {
-                        setError(
-                          "Add a few photos to this memory before making a movie.",
-                        );
-                        return;
-                      }
-                      setMovieOpen(true);
-                    }}
+                    onClick={openMakeMovie}
+                    disabled={!canMakeMovie}
+                    title={makeMovieDisabledReason ?? undefined}
+                    aria-disabled={!canMakeMovie}
                     className="ui-btn ui-btn-primary"
                   >
                     <Film className="size-3.5" aria-hidden />
-                    Make a movie
+                    {t("pages.moviesMake")}
                   </button>
                 ) : null}
                 <button
@@ -498,7 +523,7 @@ export function MemoryDetailView({
                   <Clapperboard className="size-3.5" aria-hidden />
                   Play slideshow
                 </button>
-                {canManageMedia ? (
+                {allowManageMedia ? (
                   <button
                     type="button"
                     onClick={() => {
@@ -513,9 +538,7 @@ export function MemoryDetailView({
                   </button>
                 ) : null}
               </div>
-            ) : null}
-
-            {!canEdit && !canManageMedia ? (
+            ) : (
               <div className="mt-5">
                 <button
                   type="button"
@@ -534,7 +557,7 @@ export function MemoryDetailView({
                   Play slideshow
                 </button>
               </div>
-            ) : null}
+            )}
           </div>
         </div>
       </section>
@@ -542,14 +565,14 @@ export function MemoryDetailView({
       <div className="mt-4">
         <MemoryFamilyShareControls
           memory={memory}
-          canManage={canManageSharing}
+          canManage={allowManageSharing}
           hasFamily={hasFamily}
           onUpdated={refreshFromPayload}
           onError={setError}
         />
       </div>
 
-      {deleteOpen && canManageMedia ? (
+      {deleteOpen && allowManageMedia ? (
         <div
           ref={deleteConfirmRef}
           className="mt-6 rounded-xl border border-red-200 bg-red-50/60 px-4 py-4 sm:px-5"
@@ -622,7 +645,20 @@ export function MemoryDetailView({
               Hover an item to set the cover or remove it.
             </p>
           </div>
-          <div className="inline-flex rounded-md border border-ink/10 bg-canvas p-0.5 text-xs">
+          <div className="flex flex-wrap items-center gap-2">
+            {allowManageMedia ? (
+              <button
+                type="button"
+                onClick={openMakeMovie}
+                disabled={!canMakeMovie}
+                title={makeMovieDisabledReason ?? undefined}
+                className="ui-btn ui-btn-primary ui-btn-sm"
+              >
+                <Film className="size-3.5" aria-hidden />
+                {t("pages.moviesMake")}
+              </button>
+            ) : null}
+            <div className="inline-flex rounded-md border border-ink/10 bg-canvas p-0.5 text-xs">
             <button
               type="button"
               onClick={() => setViewMode("grid")}
@@ -647,6 +683,7 @@ export function MemoryDetailView({
             >
               Timeline
             </button>
+            </div>
           </div>
         </div>
 
@@ -661,7 +698,7 @@ export function MemoryDetailView({
             <p className="ui-empty-copy mx-auto mt-2 max-w-sm text-sm text-ink-muted">
               Add a few photos, then you can play a slideshow or make a movie.
             </p>
-            {canManageMedia ? (
+            {allowManageMedia ? (
               <button
                 type="button"
                 onClick={() => setAddOpen(true)}
@@ -678,7 +715,7 @@ export function MemoryDetailView({
                 key={item.id}
                 item={item}
                 isCover={item.id === memory.coverMediaId}
-                canEdit={canManageMedia}
+                canEdit={allowManageMedia}
                 busy={pending && busyMediaId === item.id}
                 onOpen={() => setLightboxId(item.id)}
                 onSetCover={() => setCover(item.id)}
@@ -716,7 +753,7 @@ export function MemoryDetailView({
                     {" · "}
                     Added {format.date(item.addedAt, { month: "short", day: "numeric" })}
                   </p>
-                  {canManageMedia ? (
+                  {allowManageMedia ? (
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button
                         type="button"
@@ -759,7 +796,7 @@ export function MemoryDetailView({
         you&apos;re ready.
       </p>
 
-      {canManageMedia ? (
+      {allowManageMedia ? (
         <section className="mt-12">
           <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
             <div>
@@ -772,20 +809,13 @@ export function MemoryDetailView({
             </div>
             <button
               type="button"
-              onClick={() => {
-                setError(null);
-                if (memory.media.length === 0) {
-                  setError(
-                    "Add a few photos to this memory before making a movie.",
-                  );
-                  return;
-                }
-                setMovieOpen(true);
-              }}
+              onClick={openMakeMovie}
+              disabled={!canMakeMovie}
+              title={makeMovieDisabledReason ?? undefined}
               className="ui-btn ui-btn-secondary"
             >
               <Film className="size-3.5" aria-hidden />
-              Make a movie
+              {t("pages.moviesMake")}
             </button>
           </div>
           <MovieLibrary
@@ -801,7 +831,7 @@ export function MemoryDetailView({
       ) : null}
 
       {/* Add photos sheet */}
-      {addOpen && canManageMedia ? (
+      {addOpen && allowManageMedia ? (
         <div
           ref={addSheetRef}
           className="fixed inset-0 z-50 flex items-end justify-center bg-ink/50 p-4 backdrop-blur-sm sm:items-center"
@@ -1015,18 +1045,19 @@ export function MemoryDetailView({
       {slideshowOpen ? (
         <SlideshowPlayer
           memory={memory}
-          canEdit={canEdit}
+          canEdit={allowEdit}
           onClose={() => setSlideshowOpen(false)}
           onSettingsSaved={(next) => refreshFromPayload(next)}
         />
       ) : null}
 
-      {movieOpen && canManageMedia ? (
+      {movieOpen && allowManageMedia ? (
         <CreateMoviePanel
           memoryId={memory.id}
           memoryTitle={memory.title}
-          mediaCount={memory.media.length}
+          mediaCount={usableMovieMediaCount}
           capabilities={planCapabilities}
+          defaultCreateMode="simple"
           onClose={() => {
             setMovieOpen(false);
             setMoviesRefreshKey((key) => key + 1);

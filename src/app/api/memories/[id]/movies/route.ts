@@ -24,6 +24,8 @@ type RouteContext = {
 const createBodySchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
   style: z.enum(MOVIE_STYLE_OPTIONS).optional(),
+  /** Simple Mode — server allocates Movie 001, 002, … */
+  autoTitle: z.boolean().optional(),
   settings: z
     .object({
       targetDurationSeconds: z.number().min(5).max(600).optional(),
@@ -37,6 +39,7 @@ const createBodySchema = z.object({
         .nullable()
         .optional(),
       includeTitles: z.boolean().optional(),
+      posterStyle: z.enum(["photo", "titled"]).optional(),
       aspectRatio: z.enum(["16:9", "9:16", "1:1"]).optional(),
       zoomIntensity: z.enum(["off", "subtle", "medium", "strong"]).optional(),
       zoomDirection: z
@@ -132,6 +135,7 @@ export async function POST(request: Request, context: RouteContext) {
       title: parsed.data.title,
       style: parsed.data.style,
       settings: parsed.data.settings,
+      autoTitle: parsed.data.autoTitle === true,
     });
 
     // Dev convenience only — never drain the global movie queue from a user request in production.

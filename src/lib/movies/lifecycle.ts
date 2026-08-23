@@ -35,10 +35,12 @@ import { enqueueJob } from "@/lib/queue";
 export type CreateMovieJobInput = {
   memoryId: string;
   userId: string;
-  /** Optional override title; defaults to memory title. */
+  /** Optional override title; defaults to memory title (or Movie NNN when autoTitle). */
   title?: string;
   style?: MovieStyle;
   settings?: MovieSettings;
+  /** Allocate sequential "Movie 001" titles (Simple Mode). */
+  autoTitle?: boolean;
 };
 
 export type UpdateMovieStatusData = {
@@ -182,11 +184,17 @@ export async function createMovieJob(
   }
 
   const style: MovieStyle = requestedStyle;
-  const title =
-    parsedExtras.data.title?.trim() ||
-    input.title?.trim() ||
-    memory.title ||
-    "Family movie";
+  let title: string;
+  if (input.autoTitle) {
+    const { allocateNextMovieTitle } = await import("@/lib/movies/auto-title");
+    title = await allocateNextMovieTitle(input.userId);
+  } else {
+    title =
+      parsedExtras.data.title?.trim() ||
+      input.title?.trim() ||
+      memory.title ||
+      "Family movie";
+  }
 
   const {
     style: _ignoredStyle,
@@ -199,7 +207,7 @@ export async function createMovieJob(
   // Always keep face-aware Ken Burns enabled for Memories + Ask AI creates —
   // quality/filter/transition upgrades must not land as zoom-off / center stills.
   const { ensureFaceAwareMovieSettings } = await import("@/lib/movies/settings");
-  const normalized = normalizeMovieSettings(
+  let normalized = normalizeMovieSettings(
     ensureFaceAwareMovieSettings(settingsOnly),
   );
 
@@ -239,17 +247,31 @@ export async function createMovieJob(
       "soft-piano";
     const track = getLibraryTrack(trackId);
     if (!track) {
-      throw new MovieError(`Unknown library music track: ${trackId}`, {
-        retryable: false,
-        code: "validation",
-      });
-    }
-    const abs = libraryTrackAbsolutePath(track);
-    if (!existsSync(abs)) {
-      throw new MovieError(
-        `Library music file missing on server: ${track.filename}. Deploy public/music/library before creating movies with soundtracks.`,
-        { retryable: false, code: "not_found" },
-      );
+      if (input.autoTitle || normalized.presetId === "simple_mode") {
+        normalized.musicSource = "none";
+        normalized.musicTrackId = null;
+        normalized.musicSuggestionId = null;
+      } else {
+        throw new MovieError(`Unknown library music track: ${trackId}`, {
+          retryable: false,
+          code: "validation",
+        });
+      }
+    } else {
+      const abs = libraryTrackAbsolutePath(track);
+      if (!existsSync(abs)) {
+        if (input.autoTitle || normalized.presetId === "simple_mode") {
+          // Simple Mode prefers a silent export over failing create.
+          normalized.musicSource = "none";
+          normalized.musicTrackId = null;
+          normalized.musicSuggestionId = null;
+        } else {
+          throw new MovieError(
+            `Library music file missing on server: ${track.filename}. Deploy public/music/library before creating movies with soundtracks.`,
+            { retryable: false, code: "not_found" },
+          );
+        }
+      }
     }
   }
 

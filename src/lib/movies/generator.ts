@@ -2137,7 +2137,8 @@ function escapeConcatPath(filePath: string): string {
 }
 
 /**
- * Soft free-plan corner brand — SVG → PNG overlay, never blocks playback.
+ * Soft free-plan corner brand — logo (when present) + “Created with…” text.
+ * Never blocks playback if overlay fails.
  */
 async function applyBrandWatermark(input: {
   ffmpegPath: string;
@@ -2147,33 +2148,85 @@ async function applyBrandWatermark(input: {
   height: number;
 }): Promise<string> {
   const { ffmpegPath, videoPath, workDir, width, height } = input;
-  const fontSize = Math.max(13, Math.round(height * 0.026));
-  const padX = Math.max(14, Math.round(width * 0.028));
-  const padY = Math.max(12, Math.round(height * 0.03));
-  const label = "Made with Family Memory Vault";
-  // Approximate text width for a compact pill.
+  const label = "Created with Family Memory Vault";
+  const fontSize = Math.max(12, Math.round(height * 0.022));
+  const padX = Math.max(10, Math.round(width * 0.018));
+  const padY = Math.max(8, Math.round(height * 0.018));
+  const logoMaxH = Math.max(18, Math.round(height * 0.045));
+  const margin = Math.max(10, Math.round(height * 0.018));
+
+  const logoCandidates = [
+    join(process.cwd(), "public", "brand", "logo.png"),
+    join(process.cwd(), "public", "brand", "logo-light.jpg"),
+  ];
+  const logoSrc = logoCandidates.find((p) => existsSync(p)) ?? null;
+
+  let logoW = 0;
+  let logoH = 0;
+  let logoPath: string | null = null;
+  if (logoSrc) {
+    try {
+      const prepared = join(workDir, "brand-logo-wm.png");
+      const meta = await sharp(logoSrc).metadata();
+      const srcH = meta.height || 64;
+      const srcW = meta.width || 64;
+      logoH = logoMaxH;
+      logoW = Math.max(1, Math.round((srcW / srcH) * logoH));
+      await sharp(logoSrc)
+        .resize(logoW, logoH, { fit: "inside" })
+        .ensureAlpha()
+        .png()
+        .toFile(prepared);
+      logoPath = prepared;
+    } catch (err) {
+      console.warn("[movies] Brand logo prepare failed — text-only watermark", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      logoPath = null;
+      logoW = 0;
+      logoH = 0;
+    }
+  }
+
   const textWidth = Math.ceil(label.length * fontSize * 0.52);
-  const boxW = textWidth + padX * 2;
-  const boxH = fontSize + padY;
+  const gap = logoPath ? Math.round(padX * 0.6) : 0;
+  const boxW = padX * 2 + logoW + gap + textWidth;
+  const boxH = Math.max(logoH, fontSize) + padY;
+  const textX = padX + logoW + gap + textWidth / 2;
   const svg = `<svg width="${boxW}" height="${boxH}" xmlns="http://www.w3.org/2000/svg">
-  <rect width="100%" height="100%" rx="${Math.round(boxH / 2)}" fill="rgba(20,16,12,0.42)"/>
-  <text x="50%" y="54%" text-anchor="middle" dominant-baseline="middle"
+  <rect width="100%" height="100%" rx="${Math.round(boxH / 2)}" fill="rgba(20,16,12,0.38)"/>
+  <text x="${textX}" y="54%" text-anchor="middle" dominant-baseline="middle"
         font-family="Georgia, 'Times New Roman', serif" font-size="${fontSize}"
-        fill="rgba(255,250,245,0.88)">${escapeXml(label)}</text>
+        fill="rgba(255,250,245,0.9)">${escapeXml(label)}</text>
 </svg>`;
 
   const watermarkPath = join(workDir, "brand-watermark.png");
   const brandedPath = join(workDir, "output_branded.mp4");
   await sharp(Buffer.from(svg)).png().toFile(watermarkPath);
 
-  const margin = Math.max(10, Math.round(height * 0.02));
+  let overlayPath = watermarkPath;
+  if (logoPath && logoW > 0) {
+    const combined = join(workDir, "brand-watermark-combined.png");
+    await sharp(watermarkPath)
+      .composite([
+        {
+          input: logoPath,
+          left: padX,
+          top: Math.max(0, Math.round((boxH - logoH) / 2)),
+        },
+      ])
+      .png()
+      .toFile(combined);
+    overlayPath = combined;
+  }
+
   try {
     await runFfmpeg(ffmpegPath, [
       "-y",
       "-i",
       videoPath,
       "-i",
-      watermarkPath,
+      overlayPath,
       "-filter_complex",
       `[0:v][1:v]overlay=W-w-${margin}:H-h-${margin}:format=auto`,
       "-c:v",
@@ -2189,16 +2242,17 @@ async function applyBrandWatermark(input: {
       brandedPath,
     ]);
     console.info("[movies] Applied free-plan brand watermark", {
-      watermarkPath,
+      overlayPath,
       brandedPath,
+      hasLogo: Boolean(logoPath),
     });
     return brandedPath;
   } catch (error) {
     console.error("[movies] Brand watermark failed — continuing without it", {
       error: error instanceof Error ? error.message : String(error),
     });
-    return videoPath;
   }
+  return videoPath;
 }
 
 function runFfmpeg(bin: string, args: string[]): Promise<void> {

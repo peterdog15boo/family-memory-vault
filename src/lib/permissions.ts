@@ -355,6 +355,7 @@ export async function canEditMemory(
 
   if (!row) return false;
   if (row.userId === userId) return true;
+  // Legacy / partial rows: missing familyAccess must not throw — treat as view-only.
   if (!row.sharedWithFamily || row.familyAccess !== "contribute") return false;
   return canContributeOwnedBy(userId, row.userId);
 }

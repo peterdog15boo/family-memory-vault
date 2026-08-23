@@ -16,6 +16,7 @@ import type {
 } from "@/lib/movies/settings";
 
 export type MoviePresetId =
+  | "simple_mode"
   | "classic_family"
   | "holiday_card"
   | "cinematic_tribute"
@@ -26,6 +27,8 @@ export type MoviePresetId =
 const PRESET_ALIASES: Record<string, MoviePresetId> = {
   cinematic_story: "cinematic_tribute",
   fast_memories: "clean_slideshow",
+  /** Older clean slideshow id used as one-click default before simple_mode. */
+  simple: "simple_mode",
 };
 
 export type MoviePreset = {
@@ -52,6 +55,26 @@ export type MoviePreset = {
 };
 
 export const MOVIE_PRESETS: readonly MoviePreset[] = [
+  {
+    id: "simple_mode",
+    label: "Simple",
+    blurb: "1080p slideshow · soft dissolve · no title card",
+    style: "simple",
+    aspectRatio: "16:9",
+    targetDurationSeconds: 45,
+    photoDurationMs: 3200,
+    transition: "soft_dissolve",
+    zoomIntensity: "medium",
+    zoomDirection: "alternate",
+    includeTitles: false,
+    qualityMode: "standard",
+    colorFilter: "warm_family",
+    colorFilterIntensity: "subtle",
+    filterGrain: false,
+    filterVignette: false,
+    musicSource: "library",
+    musicTrackId: "soft-piano",
+  },
   {
     id: "classic_family",
     label: "Classic Family",

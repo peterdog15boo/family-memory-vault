@@ -1,0 +1,49 @@
+import { describe, expect, it } from "vitest";
+import {
+  buildSimpleModeSettings,
+  formatMovieAutoTitle,
+  parseMovieAutoTitleSequence,
+  parseMovieCreateMode,
+  SIMPLE_MODE_PRESET_ID,
+} from "@/lib/movies/simple-mode";
+import { getMoviePreset } from "@/lib/movies/presets";
+
+describe("movie auto-title helpers", () => {
+  it("formats Movie 001 style titles", () => {
+    expect(formatMovieAutoTitle(1)).toBe("Movie 001");
+    expect(formatMovieAutoTitle(12)).toBe("Movie 012");
+    expect(formatMovieAutoTitle(100)).toBe("Movie 100");
+  });
+
+  it("parses Movie NNN sequences", () => {
+    expect(parseMovieAutoTitleSequence("Movie 001")).toBe(1);
+    expect(parseMovieAutoTitleSequence("movie 42")).toBe(42);
+    expect(parseMovieAutoTitleSequence("Family movie")).toBeNull();
+  });
+
+  it("defaults create mode to simple", () => {
+    expect(parseMovieCreateMode(null)).toBe("simple");
+    expect(parseMovieCreateMode("expert")).toBe("expert");
+    expect(parseMovieCreateMode("nope")).toBe("simple");
+  });
+});
+
+describe("simple mode preset", () => {
+  it("exists and disables title cards", () => {
+    const preset = getMoviePreset(SIMPLE_MODE_PRESET_ID);
+    expect(preset).not.toBeNull();
+    expect(preset!.includeTitles).toBe(false);
+    expect(preset!.transition).toBe("soft_dissolve");
+    expect(preset!.qualityMode).toBe("standard");
+  });
+
+  it("builds face-aware settings without titles", () => {
+    const settings = buildSimpleModeSettings();
+    expect(settings.includeTitles).toBe(false);
+    expect(settings.posterStyle).toBe("photo");
+    expect(settings.presetId).toBe(SIMPLE_MODE_PRESET_ID);
+    expect(settings.transition).toBe("soft_dissolve");
+    expect(settings.zoomIntensity).not.toBe("off");
+    expect(settings.qualityMode).toBe("standard");
+  });
+});

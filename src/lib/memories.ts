@@ -205,16 +205,19 @@ async function resolveCover(
 }
 
 function memoryBaseFields(row: Memory) {
+  const familyAccess =
+    row.familyAccess === "contribute" ? "contribute" : "view";
   return {
     id: row.id,
     userId: row.userId,
-    type: row.type,
+    type: row.type === "story" ? ("story" as const) : ("album" as const),
     title: row.title,
-    description: row.description,
-    coverMediaId: row.coverMediaId,
+    description: row.description ?? null,
+    coverMediaId: row.coverMediaId ?? null,
+    // Legacy rows may lack jsonb defaults after older migrations — never hide UI.
     settings: (row.settings ?? {}) as MemorySettings,
-    sharedWithFamily: row.sharedWithFamily,
-    familyAccess: row.familyAccess,
+    sharedWithFamily: Boolean(row.sharedWithFamily),
+    familyAccess,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -992,15 +995,37 @@ export function serializeSafeMediaItem(
 export function serializeMemoryWithMedia(
   memory: MemoryWithMedia,
 ): SerializedMemoryWithMedia {
+  const familyAccess =
+    memory.familyAccess === "contribute" ? "contribute" : "view";
   return {
-    ...memory,
-    createdAt: memory.createdAt.toISOString(),
-    updatedAt: memory.updatedAt.toISOString(),
+    id: memory.id,
+    userId: memory.userId,
+    type: memory.type === "story" ? "story" : "album",
+    title: memory.title,
+    description: memory.description ?? null,
+    coverMediaId: memory.coverMediaId ?? null,
+    settings: memory.settings ?? {},
+    sharedWithFamily: Boolean(memory.sharedWithFamily),
+    familyAccess,
+    createdAt:
+      memory.createdAt instanceof Date
+        ? memory.createdAt.toISOString()
+        : String(memory.createdAt),
+    updatedAt:
+      memory.updatedAt instanceof Date
+        ? memory.updatedAt.toISOString()
+        : String(memory.updatedAt),
     cover: memory.cover ? serializeSafeMedia(memory.cover) : null,
     media: memory.media.map((item) => ({
       ...item,
-      createdAt: item.createdAt.toISOString(),
-      addedAt: item.addedAt.toISOString(),
+      createdAt:
+        item.createdAt instanceof Date
+          ? item.createdAt.toISOString()
+          : String(item.createdAt),
+      addedAt:
+        item.addedAt instanceof Date
+          ? item.addedAt.toISOString()
+          : String(item.addedAt),
     })),
   };
 }

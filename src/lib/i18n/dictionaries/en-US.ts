@@ -541,6 +541,18 @@ export const enUS = {
     errorUploadFailed: "Upload failed.",
     queued: "Queued…",
     createMovieCta: "Create movie",
+    createSimpleMovieCta: "Create movie",
+    simpleModeTitle: "Create a movie",
+    simpleModeLead: "One tap for a polished slideshow from this memory.",
+    simpleModeBulletSlideshow:
+      "High-resolution slideshow with smooth transitions",
+    simpleModeBulletMedia: "Includes your {count} photos and videos",
+    simpleModeBulletTitle: "Auto-titled Movie 001, 002… — no intro title card",
+    simpleModeWatermarkHint:
+      "Free plan movies include a small “Created with Family Memory Vault” watermark. Family and Legacy+ remove it.",
+    simpleModeLink: "Simple mode",
+    expertModeLink: "Expert mode",
+    expertModeBadge: "Expert mode — full controls",
     production: "Production",
     presets: "Presets",
     presetsLead: "One tap to set look, pacing, motion, and music.",

@@ -68,6 +68,7 @@ export function MemoryFamilyShareControls({
 
   if (!canManage) {
     if (!shared) return null;
+    const access = memory.familyAccess === "contribute" ? "contribute" : "view";
     return (
       <div
         className={cn(
@@ -79,7 +80,7 @@ export function MemoryFamilyShareControls({
         {t("memories.sharedWithFamilyBadge")}
         <span className="text-accent-deep/70">
           ·{" "}
-          {memory.familyAccess === "contribute"
+          {access === "contribute"
             ? t("memories.canContribute")
             : t("memories.viewOnly")}
         </span>
@@ -186,7 +187,9 @@ export function MemoryFamilyShareControls({
           </label>
           <select
             id={`family-access-${memory.id}`}
-            value={memory.familyAccess}
+            value={
+              memory.familyAccess === "contribute" ? "contribute" : "view"
+            }
             disabled={pending}
             onChange={(event) =>
               save({

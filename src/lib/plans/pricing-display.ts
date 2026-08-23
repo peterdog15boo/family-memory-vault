@@ -98,6 +98,11 @@ export function planFeatureBullets(plan: PlanSeed): string[] {
   } else {
     bullets.push("Simple movie themes");
   }
+  if (plan.features.removeMovieWatermark) {
+    bullets.push("Movies without watermark");
+  } else {
+    bullets.push("Movies include a small watermark");
+  }
   if (plan.features.priorityRender) {
     bullets.push("Priority movie rendering");
   }
