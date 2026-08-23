@@ -830,11 +830,11 @@ export function MemoryDetailView({
         </section>
       ) : null}
 
-      {/* Add photos sheet */}
+      {/* Add photos sheet — flex column + sticky footer so Save stays reachable */}
       {addOpen && allowManageMedia ? (
         <div
           ref={addSheetRef}
-          className="fixed inset-0 z-50 flex items-end justify-center bg-ink/50 p-4 backdrop-blur-sm sm:items-center"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-ink/50 p-3 backdrop-blur-sm sm:items-center sm:p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="add-photos-memory-title"
@@ -842,10 +842,10 @@ export function MemoryDetailView({
           onClick={() => !pending && setAddOpen(false)}
         >
           <div
-            className="max-h-[85vh] w-full max-w-2xl overflow-hidden rounded-xl border border-ink/10 bg-canvas shadow-xl"
+            className="flex max-h-[min(92dvh,85vh)] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-ink/10 bg-canvas shadow-xl"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-ink/8 px-4 py-3">
+            <div className="flex shrink-0 items-center justify-between border-b border-ink/8 px-4 py-3">
               <div>
                 <h3
                   id="add-photos-memory-title"
@@ -867,7 +867,7 @@ export function MemoryDetailView({
               </button>
             </div>
 
-            <div className="max-h-[55vh] overflow-y-auto p-4 space-y-4">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4">
               <MediaIntakePanel
                 memoryId={memory.id}
                 defaultAttachToMemory
@@ -881,69 +881,79 @@ export function MemoryDetailView({
                 <p className="mb-3 text-xs font-medium uppercase tracking-wide text-ink-muted">
                   Or choose from your library
                 </p>
-              {addableLibrary.length === 0 ? (
-                <p className="py-6 text-center text-sm text-ink-muted">
-                  No more ready photos to add right now. Upload above and they
-                  will appear here after the safety check.
-                </p>
-              ) : (
-                <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                  {addableLibrary.map((item) => {
-                    const selected = pickedIds.includes(item.id);
-                    return (
-                      <li key={item.id}>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setPickedIds((prev) =>
-                              prev.includes(item.id)
-                                ? prev.filter((id) => id !== item.id)
-                                : [...prev, item.id],
-                            )
-                          }
-                          aria-pressed={selected}
-                          className={cn(
-                            "relative aspect-square w-full overflow-hidden rounded-lg border",
-                            selected
-                              ? "border-accent ring-2 ring-accent/35"
-                              : "border-ink/10",
-                          )}
-                        >
-                          <MediaThumb item={item} />
-                          <span
+                {addableLibrary.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-ink-muted">
+                    No more ready photos to add right now. Upload above and they
+                    will appear here after the safety check.
+                  </p>
+                ) : (
+                  <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                    {addableLibrary.map((item) => {
+                      const selected = pickedIds.includes(item.id);
+                      return (
+                        <li key={item.id}>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPickedIds((prev) =>
+                                prev.includes(item.id)
+                                  ? prev.filter((id) => id !== item.id)
+                                  : [...prev, item.id],
+                              )
+                            }
+                            aria-pressed={selected}
                             className={cn(
-                              "absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-full border",
+                              "relative aspect-square w-full overflow-hidden rounded-lg border",
                               selected
-                                ? "border-accent bg-accent text-accent-foreground"
-                                : "border-ink/20 bg-canvas/80 text-transparent",
+                                ? "border-accent ring-2 ring-accent/35"
+                                : "border-ink/10",
                             )}
                           >
-                            <Check className="size-3" aria-hidden />
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+                            <MediaThumb item={item} />
+                            <span
+                              className={cn(
+                                "absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-full border",
+                                selected
+                                  ? "border-accent bg-accent text-accent-foreground"
+                                  : "border-ink/20 bg-canvas/80 text-transparent",
+                              )}
+                            >
+                              <Check className="size-3" aria-hidden />
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-3 border-t border-ink/8 px-4 py-3">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-t border-ink/8 bg-canvas px-4 py-3">
               <p className="text-xs text-ink-muted">
                 {pickedIds.length} selected
               </p>
-              <button
-                type="button"
-                disabled={pending || pickedIds.length === 0}
-                onClick={addSelectedMedia}
-                className="inline-flex items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-foreground hover:bg-accent-deep disabled:opacity-60"
-              >
-                {pending ? (
-                  <Loader2 className="size-4 animate-spin" aria-hidden />
-                ) : null}
-                Add to memory
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => setAddOpen(false)}
+                  className="rounded-md px-3 py-2 text-sm font-medium text-ink-muted transition hover:bg-ink/5 hover:text-ink disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={pending || pickedIds.length === 0}
+                  onClick={addSelectedMedia}
+                  className="inline-flex items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-foreground hover:bg-accent-deep disabled:opacity-60"
+                >
+                  {pending ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden />
+                  ) : null}
+                  Add to memory
+                </button>
+              </div>
             </div>
           </div>
         </div>
