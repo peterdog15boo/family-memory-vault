@@ -115,13 +115,18 @@ export type PublicSharedMovie = {
   urlsExpireAt: string | null;
 };
 
+type PublicShareRow = {
+  share: MovieShare;
+  movie: Movie;
+};
+
 /**
- * Resolve a public share token to a single ready movie payload.
- * Increments view count. Never returns other library items.
+ * Look up an active public share without incrementing view count.
+ * Used for OG metadata and poster crawls.
  */
-export async function resolvePublicMovieShare(
+export async function lookupPublicMovieShare(
   token: string,
-): Promise<{ movie: PublicSharedMovie; shareUrl: string } | null> {
+): Promise<PublicShareRow | null> {
   const trimmed = token?.trim();
   if (!trimmed) return null;
 
@@ -138,9 +143,31 @@ export async function resolvePublicMovieShare(
 
   if (!row || !isShareActive(row.share)) return null;
   if (row.movie.status !== "ready" || !row.movie.outputKey?.trim()) return null;
-  // Owner must still match share row (defense in depth).
   if (row.movie.userId !== row.share.userId) return null;
 
+  return { share: row.share, movie: row.movie as Movie };
+}
+
+/** Absolute OG/poster URL Facebook and other crawlers can fetch. */
+export function buildMovieSharePosterUrl(token: string): string {
+  const url = new URL(
+    `/api/public/movies/${encodeURIComponent(token)}/poster`,
+    getAppUrl(),
+  );
+  return url.toString();
+}
+
+/**
+ * Resolve a public share token to a single ready movie payload.
+ * Increments view count. Never returns other library items.
+ */
+export async function resolvePublicMovieShare(
+  token: string,
+): Promise<{ movie: PublicSharedMovie; shareUrl: string } | null> {
+  const row = await lookupPublicMovieShare(token);
+  if (!row) return null;
+
+  const db = getDb();
   void db
     .update(movieShares)
     .set({
@@ -150,7 +177,7 @@ export async function resolvePublicMovieShare(
     .where(eq(movieShares.id, row.share.id))
     .catch(() => undefined);
 
-  const serialized = await serializeMovie(row.movie as Movie, {
+  const serialized = await serializeMovie(row.movie, {
     includeUrls: true,
   });
 

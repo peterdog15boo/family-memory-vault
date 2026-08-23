@@ -483,7 +483,7 @@ export const enUS = {
     noteDownloadStarted: "Download started.",
     noteSocialFailed: "Couldn’t open that share page. Try Copy link or Download.",
     socialFacebook: "Facebook",
-    socialFacebookHint: "Share a link",
+    socialFacebookHint: "Opens Facebook’s share dialog",
     socialInstagram: "Instagram",
     socialInstagramHint: "Download, then post",
     socialTiktok: "TikTok",

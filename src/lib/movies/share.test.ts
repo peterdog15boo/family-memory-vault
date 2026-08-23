@@ -3,7 +3,13 @@ import {
   DEFAULT_PHOTO_REQUEST_MESSAGE,
   PHOTO_REQUEST_PRESETS,
 } from "@/lib/photo-requests/copy";
-import { movieShareText, movieShareUrl } from "@/lib/movies/share";
+import {
+  moviePublicShareUrl,
+  movieShareText,
+  movieShareUrl,
+  movieSocialShareUrl,
+  movieSocialUsesPublicLink,
+} from "@/lib/movies/share";
 import type { SerializedMovie } from "@/lib/movies/serialize";
 
 function sampleMovie(
@@ -41,8 +47,41 @@ describe("movie share helpers", () => {
     expect(movieShareUrl(sampleMovie())).toContain("cdn.example");
   });
 
+  it("exposes public share URL separately from CDN fallbacks", () => {
+    expect(moviePublicShareUrl(sampleMovie())).toBeNull();
+    expect(
+      moviePublicShareUrl(
+        sampleMovie({ shareUrl: "https://app.example/share/m/tok" }),
+      ),
+    ).toBe("https://app.example/share/m/tok");
+  });
+
   it("includes product name in share text", () => {
     expect(movieShareText(sampleMovie())).toMatch(/Family Memory Vault/);
+  });
+
+  it("builds Facebook sharer.php with the public share page URL", () => {
+    const movie = sampleMovie({
+      shareUrl: "https://app.example/share/m/tok123",
+    });
+    const href = movieSocialShareUrl("facebook", movie);
+    expect(href).toBe(
+      "https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fapp.example%2Fshare%2Fm%2Ftok123",
+    );
+    expect(movieSocialUsesPublicLink("facebook")).toBe(true);
+  });
+
+  it("refuses Facebook share when only a CDN MP4 URL exists", () => {
+    expect(movieSocialShareUrl("facebook", sampleMovie())).toBeNull();
+  });
+
+  it("keeps Instagram and TikTok as non-link networks", () => {
+    const movie = sampleMovie({
+      shareUrl: "https://app.example/share/m/tok",
+    });
+    expect(movieSocialShareUrl("instagram", movie)).toBeNull();
+    expect(movieSocialShareUrl("tiktok", movie)).toBeNull();
+    expect(movieSocialUsesPublicLink("instagram")).toBe(false);
   });
 });
 

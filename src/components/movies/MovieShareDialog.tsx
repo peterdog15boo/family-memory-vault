@@ -15,8 +15,9 @@ import type { SerializedMovie } from "@/lib/movies/serialize";
 import {
   copyMovieShareLink,
   downloadMovieFile,
+  moviePublicShareUrl,
   movieShareUrl,
-  openMovieSocialShare,
+  openMovieSocialShareEnsured,
   shareMovieFile,
   type MovieSocialNetwork,
 } from "@/lib/movies/share";
@@ -194,15 +195,51 @@ export function MovieShareDialog({ movie, onClose }: MovieShareDialogProps) {
     }
   }
 
-  function handleSocial(network: MovieSocialNetwork) {
+  async function ensurePublicShareMovie(): Promise<SerializedMovie> {
+    if (moviePublicShareUrl(shareMovie)) return shareMovie;
+    const res = await fetch(`/api/movies/${movie.id}/share`, {
+      method: "POST",
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      shareUrl?: string;
+      error?: string;
+    };
+    if (!res.ok || !data.shareUrl) {
+      throw new Error(data.error || t("movie.noteShareLinkFailed"));
+    }
+    const next = { ...shareMovie, shareUrl: data.shareUrl };
+    setShareMovie(next);
+    return next;
+  }
+
+  async function handleSocial(network: MovieSocialNetwork) {
     setNote(null);
     if (network === "instagram" || network === "tiktok") {
       handleDownload(network);
       return;
     }
-    const ok = openMovieSocialShare(network, shareMovie);
-    if (!ok) {
-      setNote(t("movie.noteSocialFailed"));
+
+    setBusy(network);
+    try {
+      const { ok, movie: ready } = await openMovieSocialShareEnsured(
+        network,
+        shareMovie,
+        ensurePublicShareMovie,
+      );
+      if (ready.shareUrl && ready.shareUrl !== shareMovie.shareUrl) {
+        setShareMovie(ready);
+      }
+      if (!ok) {
+        setNote(
+          moviePublicShareUrl(ready)
+            ? t("movie.noteSocialFailed")
+            : t("movie.noteShareLinkFailed"),
+        );
+      }
+    } catch {
+      setNote(t("movie.noteShareLinkFailed"));
+    } finally {
+      setBusy(null);
     }
   }
 

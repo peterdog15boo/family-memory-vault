@@ -1,11 +1,73 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SharedMovieView } from "@/components/movies/SharedMovieView";
-import { resolvePublicMovieShare } from "@/lib/movies/public-share";
+import {
+  buildMovieSharePageUrl,
+  buildMovieSharePosterUrl,
+  lookupPublicMovieShare,
+  resolvePublicMovieShare,
+} from "@/lib/movies/public-share";
 
 type PageProps = {
   params: Promise<{ token: string }>;
 };
+
+const SHARE_DESCRIPTION =
+  "A short film made from family moments — shared with care on Family Memory Vault.";
+
+/**
+ * Strong Open Graph / Twitter cards so Facebook’s share dialog shows a real preview.
+ */
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
+  const { token } = await params;
+  const row = await lookupPublicMovieShare(token);
+  if (!row) {
+    return {
+      title: "Shared movie",
+      robots: { index: false, follow: false },
+    };
+  }
+
+  const title = row.movie.title?.trim() || "Family movie";
+  const shareUrl = buildMovieSharePageUrl(row.share.token);
+  const hasPoster = Boolean(row.movie.thumbnailKey?.trim());
+  const posterUrl = hasPoster
+    ? buildMovieSharePosterUrl(row.share.token)
+    : undefined;
+
+  return {
+    title,
+    description: SHARE_DESCRIPTION,
+    robots: { index: false, follow: false },
+    alternates: { canonical: shareUrl },
+    openGraph: {
+      title,
+      description: SHARE_DESCRIPTION,
+      url: shareUrl,
+      type: "website",
+      siteName: "Family Memory Vault",
+      ...(posterUrl
+        ? {
+            images: [
+              {
+                url: posterUrl,
+                alt: title,
+              },
+            ],
+          }
+        : {}),
+    },
+    twitter: {
+      card: posterUrl ? "summary_large_image" : "summary",
+      title,
+      description: SHARE_DESCRIPTION,
+      ...(posterUrl ? { images: [posterUrl] } : {}),
+    },
+  };
+}
 
 /**
  * Public shared movie page — emotional, simple, signup CTA.
@@ -26,7 +88,7 @@ export default async function SharedMoviePage({ params }: PageProps) {
       />
       <div className="relative mx-auto flex min-h-dvh w-full max-w-3xl flex-col px-4 py-8 sm:px-6 sm:py-12">
         <header className="mb-8 text-center sm:mb-10">
-          <p className="font-display text-sm tracking-[0.18em] text-[#e8c9a4]/uppercase">
+          <p className="font-display text-sm tracking-[0.18em] text-[#e8c9a4] uppercase">
             Family Memory Vault
           </p>
           <h1 className="mt-3 font-display text-3xl leading-tight tracking-tight sm:text-4xl">
