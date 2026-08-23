@@ -1,10 +1,8 @@
 /**
  * Free-plan movie brand watermark — burned into the final MP4.
  *
- * Uses sharp's text renderer (not SVG system fonts) so Linux workers still
- * produce readable “Created with Family Memory Vault” overlays.
- *
- * Plan policy lives in watermark-policy.ts so client UI / gates never import sharp.
+ * Text is rendered with a bundled font file (not system “sans”) so Linux
+ * workers never show tofu □□□ boxes. Plan policy stays in watermark-policy.ts.
  */
 
 import { existsSync } from "node:fs";
@@ -21,9 +19,24 @@ export type BrandWatermarkOverlay = {
   hasLogo: boolean;
 };
 
+/** Bundled URW Nimbus Sans — ships with the app so Railway/Vercel always have glyphs. */
+export function resolveWatermarkFontPath(): string | null {
+  const candidates = [
+    join(process.cwd(), "assets", "fonts", "NimbusSans-Regular.otf"),
+    join(__dirname, "..", "..", "..", "assets", "fonts", "NimbusSans-Regular.otf"),
+  ];
+  for (const p of candidates) {
+    try {
+      if (existsSync(p)) return p;
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+}
+
 /**
- * Build a bottom-safe overlay PNG: soft pill + optional logo + label.
- * Sized for the export canvas so it stays small and professional.
+ * Build a bottom-safe overlay PNG: soft pill + larger logo + readable label.
  */
 export async function buildBrandWatermarkOverlay(input: {
   workDir: string;
@@ -31,12 +44,13 @@ export async function buildBrandWatermarkOverlay(input: {
   height: number;
 }): Promise<BrandWatermarkOverlay> {
   const { workDir, width, height } = input;
-  const margin = Math.max(14, Math.round(height * 0.028));
-  const fontPx = Math.max(15, Math.round(height * 0.024));
-  const logoMaxH = Math.max(18, Math.round(height * 0.038));
-  const padX = Math.max(12, Math.round(width * 0.012));
-  const padY = Math.max(8, Math.round(height * 0.01));
-  const gap = Math.max(8, Math.round(padX * 0.55));
+  const margin = Math.max(16, Math.round(height * 0.03));
+  // ~3% of frame height for type; ~7.5% for the logo lockup.
+  const fontPx = Math.max(18, Math.round(height * 0.03));
+  const logoMaxH = Math.max(40, Math.round(height * 0.075));
+  const padX = Math.max(14, Math.round(width * 0.014));
+  const padY = Math.max(10, Math.round(height * 0.012));
+  const gap = Math.max(10, Math.round(padX * 0.65));
 
   const logoCandidates = [
     join(process.cwd(), "public", "brand", "logo.png"),
@@ -58,8 +72,8 @@ export async function buildBrandWatermarkOverlay(input: {
       logoBuf = await sharp(logoSrc)
         .resize(logoW, logoH, { fit: "inside", kernel: "lanczos3" })
         .ensureAlpha()
-        .modulate({ brightness: 1.45, saturation: 0.85 })
-        .linear(1.05, 18)
+        .modulate({ brightness: 1.5, saturation: 0.8 })
+        .linear(1.08, 22)
         .png()
         .toBuffer();
       const sized = await sharp(logoBuf).metadata();
@@ -72,25 +86,19 @@ export async function buildBrandWatermarkOverlay(input: {
     }
   }
 
-  // Sharp text → black glyphs on transparent; negate to warm white.
-  const textBlack = await sharp({
-    text: {
-      text: MOVIE_WATERMARK_LABEL,
-      font: "sans",
-      dpi: Math.max(120, Math.round(fontPx * 7.2)),
-      rgba: true,
-    },
-  })
+  const textBlack = await renderWatermarkLabel(fontPx);
+  const textMeta = await sharp(textBlack).metadata();
+  const textW =
+    textMeta.width ?? Math.ceil(MOVIE_WATERMARK_LABEL.length * fontPx * 0.55);
+  const textH = textMeta.height ?? fontPx;
+  const textWhite = await sharp(textBlack)
+    .negate({ alpha: false })
     .png()
     .toBuffer();
-  const textMeta = await sharp(textBlack).metadata();
-  const textW = textMeta.width ?? Math.ceil(MOVIE_WATERMARK_LABEL.length * fontPx * 0.55);
-  const textH = textMeta.height ?? fontPx;
-  const textWhite = await sharp(textBlack).negate({ alpha: false }).png().toBuffer();
   // Soft dark halo so light footage still reads the label.
   const textHalo = await sharp(textBlack)
-    .blur(1.1)
-    .ensureAlpha(0.55)
+    .blur(1.2)
+    .ensureAlpha(0.6)
     .png()
     .toBuffer();
 
@@ -101,7 +109,7 @@ export async function buildBrandWatermarkOverlay(input: {
   const pillSvg = Buffer.from(
     `<svg width="${boxW}" height="${boxH}" xmlns="http://www.w3.org/2000/svg">
   <rect width="100%" height="100%" rx="${radius}" ry="${radius}"
-        fill="rgba(10,8,6,0.48)"/>
+        fill="rgba(10,8,6,0.5)"/>
 </svg>`,
   );
   const pill = await sharp(pillSvg).png().toBuffer();
@@ -138,6 +146,79 @@ export async function buildBrandWatermarkOverlay(input: {
     margin,
     hasLogo: Boolean(logoBuf),
   };
+}
+
+/**
+ * Render the watermark sentence with the bundled font whenever possible.
+ * Falls back to SVG + embedded @font-face (same file) if sharp text fails.
+ */
+async function renderWatermarkLabel(fontPx: number): Promise<Buffer> {
+  const fontfile = resolveWatermarkFontPath();
+  const dpi = Math.max(160, Math.round(fontPx * 8));
+
+  if (fontfile) {
+    try {
+      return await sharp({
+        text: {
+          text: MOVIE_WATERMARK_LABEL,
+          fontfile,
+          dpi,
+          rgba: true,
+        },
+      })
+        .png()
+        .toBuffer();
+    } catch (err) {
+      console.warn("[movies] sharp text+fontfile failed — trying SVG embed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  } else {
+    console.warn(
+      "[movies] Watermark font missing at assets/fonts/NimbusSans-Regular.otf",
+    );
+  }
+
+  // SVG path: embed the OTF as a data URI so glyphs don’t depend on OS fonts.
+  if (fontfile) {
+    const { readFileSync } = await import("node:fs");
+    const b64 = readFileSync(fontfile).toString("base64");
+    const approxW = Math.ceil(MOVIE_WATERMARK_LABEL.length * fontPx * 0.58);
+    const h = Math.ceil(fontPx * 1.45);
+    const svg = `<svg width="${approxW}" height="${h}" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style type="text/css"><![CDATA[
+      @font-face {
+        font-family: 'WMSans';
+        src: url('data:font/otf;base64,${b64}') format('opentype');
+      }
+    ]]></style>
+  </defs>
+  <text x="0" y="${Math.round(fontPx * 1.05)}"
+        font-family="WMSans, Arial, Helvetica, sans-serif"
+        font-size="${fontPx}" fill="#000">${escapeXml(MOVIE_WATERMARK_LABEL)}</text>
+</svg>`;
+    return sharp(Buffer.from(svg)).png().toBuffer();
+  }
+
+  // Last resort — may tofu on locked-down images; better than crashing.
+  const approxW = Math.ceil(MOVIE_WATERMARK_LABEL.length * fontPx * 0.58);
+  const h = Math.ceil(fontPx * 1.45);
+  const svg = `<svg width="${approxW}" height="${h}" xmlns="http://www.w3.org/2000/svg">
+  <text x="0" y="${Math.round(fontPx * 1.05)}"
+        font-family="Arial, Helvetica, DejaVu Sans, sans-serif"
+        font-size="${fontPx}" fill="#000">${escapeXml(MOVIE_WATERMARK_LABEL)}</text>
+</svg>`;
+  return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 }
 
 /**

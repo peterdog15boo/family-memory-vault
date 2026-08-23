@@ -11,6 +11,7 @@ import {
 import {
   buildBrandWatermarkFfmpegArgs,
   buildBrandWatermarkOverlay,
+  resolveWatermarkFontPath,
 } from "@/lib/movies/watermark";
 
 describe("shouldApplyMovieWatermark", () => {
@@ -52,17 +53,21 @@ describe("shouldApplyMovieWatermark", () => {
 });
 
 describe("buildBrandWatermarkOverlay", () => {
-  it("renders a bottom overlay with readable pixels", async () => {
+  it("renders a bottom overlay with readable pixels and a larger logo band", async () => {
     const workDir = mkdtempSync(join(tmpdir(), "fmv-wm-unit-"));
+    expect(resolveWatermarkFontPath()).toBeTruthy();
+
     const overlay = await buildBrandWatermarkOverlay({
       workDir,
       width: 1920,
       height: 1080,
     });
     expect(overlay.path).toContain("brand-watermark.png");
-    expect(overlay.width).toBeGreaterThan(200);
-    expect(overlay.height).toBeGreaterThan(20);
+    // Logo ~7.5% of 1080 ≈ 81px + padding → pill taller than the old ~34px band.
+    expect(overlay.height).toBeGreaterThanOrEqual(70);
+    expect(overlay.width).toBeGreaterThan(400);
     expect(overlay.margin).toBeGreaterThan(10);
+    expect(overlay.hasLogo).toBe(true);
 
     const meta = await sharp(overlay.path).metadata();
     expect(meta.width).toBe(overlay.width);
