@@ -96,6 +96,7 @@ import {
   type Rgb,
 } from "@/lib/movies/themes";
 import {
+  appendVideoEdgeFades,
   buildEncodeVideoFilter,
   buildLibx264EncodeArgs,
   resolveMovieOutputSpec,
@@ -1801,8 +1802,11 @@ async function assembleTimelineMp4(input: {
 }): Promise<void> {
   const { plan, assets, workDir, ffmpegPath, outputPath } = input;
   const { fps } = plan.output;
+  const durationSeconds = timelineDurationSeconds(assets);
   // Ken Burns JPEGs are already WxH — exact scale avoids pad/letterbox artifacts.
-  const vf = buildEncodeVideoFilter(plan.width, plan.height, fps, "exact");
+  const baseVf = buildEncodeVideoFilter(plan.width, plan.height, fps, "exact");
+  // Open/close visual fades only on the final delivery encode (not mid segments).
+  const finalVf = appendVideoEdgeFades(baseVf, durationSeconds);
 
   const onlyFrames =
     assets.items.length === 1 && assets.items[0]!.kind === "frames";
@@ -1823,10 +1827,15 @@ async function assembleTimelineMp4(input: {
       "-i",
       concatPath,
       "-vf",
-      vf,
+      finalVf,
       ...buildLibx264EncodeArgs(plan.output),
       outputPath,
     ]);
+    console.info("[movies] Applied open/close visual fades", {
+      movieId: plan.movieId,
+      durationSeconds,
+      vf: finalVf.includes("fade=t=in"),
+    });
     return;
   }
 
@@ -1857,7 +1866,7 @@ async function assembleTimelineMp4(input: {
       "-i",
       concatPath,
       "-vf",
-      vf,
+      baseVf,
       ...buildLibx264EncodeArgs(plan.output),
       segPath,
     ]);
@@ -1867,37 +1876,45 @@ async function assembleTimelineMp4(input: {
   if (segmentPaths.length === 0) {
     throw new MovieError("Movie timeline produced no video segments.");
   }
+
+  // Single or multi segment: always re-encode the delivery file with edge fades.
   if (segmentPaths.length === 1) {
     await runFfmpeg(ffmpegPath, [
       "-y",
       "-i",
       segmentPaths[0]!,
-      "-c",
-      "copy",
+      "-vf",
+      finalVf,
+      ...buildLibx264EncodeArgs(plan.output),
       outputPath,
     ]);
-    return;
+  } else {
+    const listPath = join(workDir, "segments_concat.txt");
+    const lines = ["ffconcat version 1.0"];
+    for (const p of segmentPaths) {
+      lines.push(`file '${escapeConcatPath(p)}'`);
+    }
+    await writeFile(listPath, `${lines.join("\n")}\n`, "utf8");
+    await runFfmpeg(ffmpegPath, [
+      "-y",
+      "-f",
+      "concat",
+      "-safe",
+      "0",
+      "-i",
+      listPath,
+      "-vf",
+      finalVf,
+      ...buildLibx264EncodeArgs(plan.output),
+      outputPath,
+    ]);
   }
 
-  const listPath = join(workDir, "segments_concat.txt");
-  const lines = ["ffconcat version 1.0"];
-  for (const p of segmentPaths) {
-    lines.push(`file '${escapeConcatPath(p)}'`);
-  }
-  await writeFile(listPath, `${lines.join("\n")}\n`, "utf8");
-  await runFfmpeg(ffmpegPath, [
-    "-y",
-    "-f",
-    "concat",
-    "-safe",
-    "0",
-    "-i",
-    listPath,
-    "-vf",
-    vf,
-    ...buildLibx264EncodeArgs(plan.output),
-    outputPath,
-  ]);
+  console.info("[movies] Applied open/close visual fades", {
+    movieId: plan.movieId,
+    durationSeconds,
+    segments: segmentPaths.length,
+  });
 }
 
 async function finalizeEncodedMovie(input: {

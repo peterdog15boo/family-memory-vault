@@ -128,6 +128,9 @@ export {
   scaleThemeFontSize,
   buildEncodeVideoFilter,
   buildLibx264EncodeArgs,
+  appendVideoEdgeFades,
+  MOVIE_OPEN_FADE_MS,
+  MOVIE_CLOSE_FADE_MS,
   type MovieOutputSpec,
   type EncodeFitMode,
 } from "@/lib/movies/output";

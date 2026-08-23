@@ -48,5 +48,7 @@ describe("simple mode preset", () => {
     expect(settings.zoomIntensity).not.toBe("off");
     expect(settings.qualityMode).toBe("standard");
     expect(settings.photoDurationMs).toBe(3600);
+    expect(settings.musicFadeInMs).toBe(800);
+    expect(settings.musicFadeOutMs).toBe(1200);
   });
 });

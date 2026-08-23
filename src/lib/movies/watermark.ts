@@ -71,15 +71,31 @@ export async function buildBrandWatermarkOverlay(input: {
       const srcW = Math.max(1, meta.width || 64);
       logoH = logoMaxH;
       logoW = Math.max(1, Math.round((srcW / srcH) * logoH));
-      // Light, slightly translucent mark — matches a soft brand treatment.
-      logoBuf = await sharp(logoSrc)
+      // Flatten to warm-white using the logo alpha, then ghost to match text (~42%).
+      const resized = await sharp(logoSrc)
         .resize(logoW, logoH, { fit: "inside", kernel: "lanczos3" })
         .ensureAlpha()
-        .modulate({ brightness: 1.55, saturation: 0.75 })
-        .linear(1.1, 24)
+        .png()
+        .toBuffer();
+      const sized = await sharp(resized).metadata();
+      logoW = sized.width ?? logoW;
+      logoH = sized.height ?? logoH;
+      const alpha = await sharp(resized).extractChannel("alpha").toBuffer();
+      const whiteLockup = await sharp({
+        create: {
+          width: logoW,
+          height: logoH,
+          channels: 3,
+          background: { r: 255, g: 250, b: 245 },
+        },
+      })
+        .joinChannel(alpha)
+        .png()
+        .toBuffer();
+      logoBuf = await sharp(whiteLockup)
         .composite([
           {
-            input: Buffer.from([255, 255, 255, Math.round(255 * 0.78)]),
+            input: Buffer.from([255, 255, 255, Math.round(255 * 0.45)]),
             raw: { width: 1, height: 1, channels: 4 },
             tile: true,
             blend: "dest-in",
@@ -87,9 +103,6 @@ export async function buildBrandWatermarkOverlay(input: {
         ])
         .png()
         .toBuffer();
-      const sized = await sharp(logoBuf).metadata();
-      logoW = sized.width ?? logoW;
-      logoH = sized.height ?? logoH;
     } catch {
       logoBuf = null;
       logoW = 0;

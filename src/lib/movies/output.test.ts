@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  appendVideoEdgeFades,
   buildEncodeVideoFilter,
   buildLibx264EncodeArgs,
   resolveMovieOutputSpec,
@@ -122,6 +123,23 @@ describe("buildEncodeVideoFilter", () => {
     });
     expect(vf).toContain("0.3500");
     expect(vf).toContain("0.4000");
+  });
+});
+
+describe("appendVideoEdgeFades", () => {
+  it("adds short open and close fades for the full timeline", () => {
+    const base = buildEncodeVideoFilter(1920, 1080, 30, "exact");
+    const vf = appendVideoEdgeFades(base, 40);
+    expect(vf).toContain("fade=t=in:st=0:d=0.700");
+    expect(vf).toContain("fade=t=out:st=39.100:d=0.900");
+  });
+
+  it("clamps fades on very short movies", () => {
+    const vf = appendVideoEdgeFades("format=yuv420p", 1.2);
+    expect(vf).toContain("fade=t=in");
+    expect(vf).toContain("fade=t=out");
+    // Each fade ≤ duration/3 (=0.4s)
+    expect(vf).toMatch(/fade=t=in:st=0:d=0\.400/);
   });
 });
 

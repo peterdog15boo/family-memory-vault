@@ -230,6 +230,41 @@ export function buildEncodeVideoFilter(
   return base;
 }
 
+/** Short professional open/close visual fades (not a title card). */
+export const MOVIE_OPEN_FADE_MS = 700;
+export const MOVIE_CLOSE_FADE_MS = 900;
+
+/**
+ * Append fade-in at t=0 and fade-out at the end of the timeline.
+ * Keeps fades short; clamps so they never dominate a brief movie.
+ */
+export function appendVideoEdgeFades(
+  vf: string,
+  durationSeconds: number,
+  options?: { fadeInMs?: number; fadeOutMs?: number },
+): string {
+  const dur = Math.max(0.5, durationSeconds);
+  const fadeIn = Math.min(
+    (options?.fadeInMs ?? MOVIE_OPEN_FADE_MS) / 1000,
+    dur / 3,
+  );
+  const fadeOut = Math.min(
+    (options?.fadeOutMs ?? MOVIE_CLOSE_FADE_MS) / 1000,
+    dur / 3,
+  );
+  const fadeOutStart = Math.max(0, dur - fadeOut);
+  const parts = [vf];
+  if (fadeIn > 0.05) {
+    parts.push(`fade=t=in:st=0:d=${fadeIn.toFixed(3)}`);
+  }
+  if (fadeOut > 0.05) {
+    parts.push(
+      `fade=t=out:st=${fadeOutStart.toFixed(3)}:d=${fadeOut.toFixed(3)}`,
+    );
+  }
+  return parts.join(",");
+}
+
 /**
  * libx264 + Rec.709 tagging + VBV ceiling for social-friendly MP4s.
  */
