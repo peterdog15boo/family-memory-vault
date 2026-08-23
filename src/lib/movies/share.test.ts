@@ -9,6 +9,8 @@ import {
   movieShareUrl,
   movieSocialShareUrl,
   movieSocialUsesPublicLink,
+  navigateShareTab,
+  openBlankShareTab,
   openMovieSocialShare,
   tryOpenExternalUrl,
 } from "@/lib/movies/share";
@@ -95,20 +97,43 @@ describe("movie share helpers", () => {
     vi.stubGlobal("window", {
       open: () => null,
     });
-    expect(tryOpenExternalUrl("https://www.facebook.com/sharer/sharer.php?u=x")).toEqual(
-      { opened: false, blocked: true },
-    );
+    expect(
+      navigateShareTab("https://www.facebook.com/sharer/sharer.php?u=x"),
+    ).toEqual({ opened: false, blocked: true });
+    expect(
+      tryOpenExternalUrl("https://www.facebook.com/sharer/sharer.php?u=x"),
+    ).toEqual({ opened: false, blocked: true });
   });
 
-  it("reports opened when window.open returns a window", () => {
-    const fakeWin = { opener: {} as Window | null, closed: false, focus: () => {} };
+  it("navigates a pre-opened blank tab", () => {
+    const fakeWin = {
+      closed: false,
+      focus: vi.fn(),
+      location: { href: "about:blank", assign: vi.fn() },
+      opener: {} as Window | null,
+    };
+    vi.stubGlobal("window", {
+      open: () => null,
+    });
+    // Prefer assign when present.
+    fakeWin.location.assign = vi.fn((url: string) => {
+      fakeWin.location.href = url;
+    });
+    const result = navigateShareTab(
+      "https://www.facebook.com/sharer/sharer.php?u=x",
+      fakeWin as unknown as Window,
+    );
+    expect(result).toEqual({ opened: true, blocked: false });
+    expect(fakeWin.location.assign).toHaveBeenCalled();
+    expect(fakeWin.location.href).toContain("facebook.com/sharer");
+  });
+
+  it("openBlankShareTab returns the window from window.open", () => {
+    const fakeWin = { closed: false };
     vi.stubGlobal("window", {
       open: () => fakeWin,
     });
-    expect(tryOpenExternalUrl("https://www.facebook.com/sharer/sharer.php?u=x")).toEqual(
-      { opened: true, blocked: false },
-    );
-    expect(fakeWin.opener).toBeNull();
+    expect(openBlankShareTab()).toBe(fakeWin);
   });
 
   it("openMovieSocialShare returns false when the tab is blocked", () => {

@@ -108,14 +108,43 @@ export type TryOpenExternalUrlResult = {
   blocked: boolean;
 };
 
+const SHARE_LOG = "[movie.share]";
+
+export function logMovieShare(
+  message: string,
+  details?: Record<string, unknown>,
+): void {
+  if (details) {
+    console.info(SHARE_LOG, message, details);
+  } else {
+    console.info(SHARE_LOG, message);
+  }
+}
+
 /**
- * Open an external URL in a real new tab (no window-feature chrome).
- * Sized popups are blocked far more often than plain `_blank` tabs.
- *
- * Returns opened=false when the browser blocks the open — callers must
- * fall back (copy link + message). Never pretend success.
+ * Open a blank tab under the current user gesture.
+ * Must be called synchronously from a click handler (before await/setState).
  */
-export function tryOpenExternalUrl(
+export function openBlankShareTab(): Window | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const win = window.open("about:blank", "_blank");
+    logMovieShare("openBlankShareTab", {
+      opened: Boolean(win),
+      closed: win?.closed ?? null,
+    });
+    return win;
+  } catch (err) {
+    console.error(SHARE_LOG, "openBlankShareTab failed", err);
+    return null;
+  }
+}
+
+/**
+ * Navigate a previously opened tab (or open a fresh tab) to href.
+ * Prefer navigating a gesture-captured blank tab — that survives async work.
+ */
+export function navigateShareTab(
   href: string,
   targetWindow?: Window | null,
 ): TryOpenExternalUrlResult {
@@ -125,33 +154,54 @@ export function tryOpenExternalUrl(
 
   if (targetWindow && !targetWindow.closed) {
     try {
-      targetWindow.location.assign(href);
+      const loc = targetWindow.location as Location & {
+        assign?: (url: string) => void;
+      };
+      if (typeof loc.assign === "function") {
+        loc.assign(href);
+      } else {
+        loc.href = href;
+      }
       targetWindow.focus();
+      logMovieShare("navigateShareTab via placeholder", { href });
       return { opened: true, blocked: false };
-    } catch {
-      // Fall through to a fresh open.
+    } catch (err) {
+      console.error(SHARE_LOG, "navigateShareTab placeholder failed", err);
     }
   }
 
-  // No width/height features — those force “popup” mode and get blocked.
-  const win = window.open(href, "_blank");
-  if (win) {
-    try {
-      // Reduce tabnabbing without using noopener in window.open features
-      // (which would make `win` null and hide success/failure).
-      win.opener = null;
-    } catch {
-      // ignore
+  // Plain _blank tab (no size features) — less likely treated as a blocked popup.
+  try {
+    const win = window.open(href, "_blank");
+    if (win) {
+      try {
+        win.opener = null;
+      } catch {
+        // ignore
+      }
+      logMovieShare("navigateShareTab via window.open", { href });
+      return { opened: true, blocked: false };
     }
-    return { opened: true, blocked: false };
+  } catch (err) {
+    console.error(SHARE_LOG, "window.open failed", err);
   }
 
+  logMovieShare("navigateShareTab blocked", { href });
   return { opened: false, blocked: true };
 }
 
 /**
- * @deprecated Prefer tryOpenExternalUrl — this always claimed success.
- * Kept for any legacy callers; now returns accurate success.
+ * @deprecated Prefer navigateShareTab / openBlankShareTab.
+ */
+export function tryOpenExternalUrl(
+  href: string,
+  targetWindow?: Window | null,
+): TryOpenExternalUrlResult {
+  return navigateShareTab(href, targetWindow);
+}
+
+/**
+ * @deprecated Prefer navigateShareTab.
  */
 export function openMovieSocialShare(
   network: MovieSocialNetwork,
@@ -160,7 +210,7 @@ export function openMovieSocialShare(
 ): boolean {
   const href = movieSocialShareUrl(network, movie);
   if (!href) return false;
-  return tryOpenExternalUrl(href, options?.targetWindow).opened;
+  return navigateShareTab(href, options?.targetWindow).opened;
 }
 
 export type SocialShareEnsuredResult = {
@@ -175,16 +225,13 @@ export type SocialShareEnsuredResult = {
 
 /**
  * Ensure a durable public share link exists, then open the network composer.
- * Opens a blank tab synchronously when the share URL still needs creating,
- * so popup blockers do not swallow the Facebook dialog after an await.
- *
- * If the new tab is blocked, copies the public link (when possible) so the
- * UI can tell the user to paste it.
+ * Caller should pass a blank Window opened synchronously on click when possible.
  */
 export async function openMovieSocialShareEnsured(
   network: MovieSocialNetwork,
   movie: SerializedMovie,
   ensureShareUrl: () => Promise<SerializedMovie>,
+  preOpenedTab?: Window | null,
 ): Promise<SocialShareEnsuredResult> {
   if (network === "instagram" || network === "tiktok") {
     return {
@@ -198,11 +245,10 @@ export async function openMovieSocialShareEnsured(
     };
   }
 
-  let placeholder: Window | null = null;
+  let placeholder = preOpenedTab ?? null;
   const alreadyPublic = Boolean(moviePublicShareUrl(movie));
-  // Reserve a tab under the user gesture before any await.
-  if (typeof window !== "undefined" && !alreadyPublic) {
-    placeholder = window.open("about:blank", "_blank");
+  if (typeof window !== "undefined" && !placeholder) {
+    placeholder = openBlankShareTab();
   }
 
   let ready = movie;
@@ -210,7 +256,8 @@ export async function openMovieSocialShareEnsured(
     if (!alreadyPublic) {
       ready = await ensureShareUrl();
     }
-  } catch {
+  } catch (err) {
+    console.error(SHARE_LOG, "ensureShareUrl failed", err);
     if (placeholder && !placeholder.closed) placeholder.close();
     return {
       ok: false,
@@ -238,7 +285,7 @@ export async function openMovieSocialShareEnsured(
     };
   }
 
-  const { opened, blocked } = tryOpenExternalUrl(href, placeholder);
+  const { opened, blocked } = navigateShareTab(href, placeholder);
   if (opened) {
     return {
       ok: true,
