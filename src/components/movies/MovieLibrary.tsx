@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Film, Images } from "lucide-react";
 import { MovieCard } from "@/components/movies/MovieCard";
 import { MoviePlayer } from "@/components/movies/MoviePlayer";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useCopy, useTranslations } from "@/components/i18n/LocaleProvider";
+import { announce } from "@/lib/a11y/announce";
 import type { SerializedMovie } from "@/lib/movies/serialize";
 import { beginCriticalWork } from "@/lib/session/critical-activity";
 
@@ -17,6 +19,8 @@ type MovieLibraryProps = {
   refreshKey?: number;
   /** Optional filter — when set, only fetch/list for this memory. */
   memoryId?: string;
+  /** Auto-open this movie (e.g. from `/movies?movieId=` notification deep link). */
+  initialPlayMovieId?: string | null;
   emptyTitle?: string;
   emptyDescription?: string;
   /** Default CTA goes to memories list unless overridden. */
@@ -30,6 +34,7 @@ export function MovieLibrary({
   showMemoryLink = false,
   refreshKey = 0,
   memoryId,
+  initialPlayMovieId = null,
   emptyTitle,
   emptyDescription,
   emptyActionHref = "/memories",
@@ -38,6 +43,7 @@ export function MovieLibrary({
 }: MovieLibraryProps) {
   const copy = useCopy();
   const t = useTranslations();
+  const router = useRouter();
   const resolvedEmptyTitle = emptyTitle ?? copy.empty.movies.title;
   const resolvedEmptyDescription =
     emptyDescription ?? copy.empty.movies.description;
@@ -47,6 +53,7 @@ export function MovieLibrary({
   const [playing, setPlaying] = useState<SerializedMovie | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const deepLinkHandledRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     const url = memoryId
@@ -111,6 +118,83 @@ export function MovieLibrary({
     [],
   );
 
+  const handlePlay = useCallback(async (movie: SerializedMovie) => {
+    try {
+      const response = await fetch(`/api/movies/${movie.id}`);
+      const data = (await response.json().catch(() => ({}))) as {
+        movie?: SerializedMovie;
+      };
+      setPlaying(data.movie?.playUrl ? data.movie : movie);
+    } catch {
+      setPlaying(movie);
+    }
+  }, []);
+
+  // Notification / deep-link: open the requested movie once.
+  useEffect(() => {
+    const targetId = initialPlayMovieId?.trim() || null;
+    if (!targetId) return;
+    if (deepLinkHandledRef.current === targetId) return;
+
+    let cancelled = false;
+
+    async function openFromDeepLink() {
+      const fromList = movies.find((m) => m.id === targetId);
+      if (fromList?.status === "ready" && fromList.playUrl) {
+        deepLinkHandledRef.current = targetId;
+        await handlePlay(fromList);
+        router.replace("/movies", { scroll: false });
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `/api/movies/${encodeURIComponent(targetId!)}`,
+        );
+        if (cancelled) return;
+        if (!response.ok) {
+          deepLinkHandledRef.current = targetId;
+          const message = t("notifications.ui.movieMissing");
+          setError(message);
+          announce(message, { priority: "polite" });
+          router.replace("/movies", { scroll: false });
+          return;
+        }
+        const data = (await response.json().catch(() => ({}))) as {
+          movie?: SerializedMovie;
+        };
+        if (cancelled) return;
+        deepLinkHandledRef.current = targetId;
+        if (data.movie?.playUrl) {
+          setPlaying(data.movie);
+        } else if (data.movie) {
+          setMovies((prev) =>
+            prev.some((m) => m.id === data.movie!.id)
+              ? prev
+              : [data.movie!, ...prev],
+          );
+        } else {
+          const message = t("notifications.ui.movieMissing");
+          setError(message);
+          announce(message, { priority: "polite" });
+        }
+        router.replace("/movies", { scroll: false });
+      } catch {
+        if (cancelled) return;
+        deepLinkHandledRef.current = targetId;
+        const message = t("notifications.ui.movieMissing");
+        setError(message);
+        announce(message, { priority: "polite" });
+        router.replace("/movies", { scroll: false });
+      }
+    }
+
+    void openFromDeepLink();
+    return () => {
+      cancelled = true;
+    };
+  }, [initialPlayMovieId, movies, router, t, handlePlay]);
+
   async function handleDelete(movie: SerializedMovie) {
     const ok = window.confirm(
       `Delete “${movie.title}”? This cannot be undone.`,
@@ -135,19 +219,6 @@ export function MovieLibrary({
       setError(err instanceof Error ? err.message : "Could not delete movie.");
     } finally {
       setBusyId(null);
-    }
-  }
-
-  async function handlePlay(movie: SerializedMovie) {
-    // Refresh signed URL in case the list URL expired.
-    try {
-      const response = await fetch(`/api/movies/${movie.id}`);
-      const data = (await response.json().catch(() => ({}))) as {
-        movie?: SerializedMovie;
-      };
-      setPlaying(data.movie?.playUrl ? data.movie : movie);
-    } catch {
-      setPlaying(movie);
     }
   }
 

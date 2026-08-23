@@ -8,16 +8,23 @@ import { getTranslations } from "@/lib/i18n/server";
 import { listUserMoviesWithMemory } from "@/lib/movies/list";
 import { serializeMovie } from "@/lib/movies/serialize";
 
+type MoviesPageProps = {
+  searchParams?: Promise<{ movieId?: string }>;
+};
+
 /**
  * Library of movies the user has generated from their memories.
+ * `?movieId=` opens that movie’s player (notification deep link).
  */
-export default async function MoviesPage() {
+export default async function MoviesPage({ searchParams }: MoviesPageProps) {
   const { userId, isAuthenticated } = await auth();
   if (!isAuthenticated || !userId) {
     redirect("/");
   }
 
   const t = await getTranslations();
+  const params = searchParams ? await searchParams : {};
+  const playMovieId = params.movieId?.trim() || null;
 
   const rows = await listUserMoviesWithMemory(userId, { limit: 48 });
   const movies = await Promise.all(
@@ -42,6 +49,7 @@ export default async function MoviesPage() {
       <div className="app-page app-page--movies app-stack mx-auto max-w-6xl">
         <MovieLibrary
           initialMovies={movies}
+          initialPlayMovieId={playMovieId}
           showMemoryLink
           emptyTitle={t("empty.moviesTitle")}
           emptyDescription={t("empty.moviesDescription")}

@@ -19,6 +19,11 @@ import { translatorForUserId } from "@/lib/i18n/user-locale";
 
 export { NOTIFICATION_TYPES };
 export type { Notification, NotificationType };
+export {
+  resolveNotificationHref,
+  sanitizeInternalPath,
+  parseMovieIdFromHref,
+} from "@/lib/notifications/links";
 
 /* -------------------------------------------------------------------------- */
 /* Typed notification payloads                                                 */
@@ -195,7 +200,12 @@ export async function notifyMovieReady(
   data: NotificationData["movie_ready"],
 ): Promise<Notification | null> {
   const { t } = await translatorForUserId(userId);
-  const movieLink = data.link ?? (data.movieId ? `/movies` : "/movies");
+  const { resolveNotificationHref } = await import("@/lib/notifications/links");
+  const movieLink = resolveNotificationHref({
+    type: "movie_ready",
+    link: data.link,
+    metadata: { movieId: data.movieId, memoryId: data.memoryId },
+  });
   return createNotification({
     userId,
     type: "movie_ready",

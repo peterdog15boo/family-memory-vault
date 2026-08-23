@@ -138,11 +138,7 @@ export async function buildWeeklyDigestForUser(
       kind: "movie",
       id: movie.id,
       title: movie.title || "A movie",
-      href: appPath(
-        movie.memoryId
-          ? `/memories/${movie.memoryId}`
-          : `/movies`,
-      ),
+      href: appPath(`/movies?movieId=${encodeURIComponent(movie.id)}`),
     });
   }
 

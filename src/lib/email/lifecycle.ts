@@ -197,9 +197,14 @@ export async function sendMovieReadyLifecycle(input: {
 }): Promise<void> {
   const { userAllowsEmail } = await import("@/lib/account-preferences");
   const contact = await getUserContact(input.userId);
-  const appPath = input.memoryId
-    ? `/memories/${input.memoryId}`
-    : "/movies";
+  const { resolveNotificationHref } = await import("@/lib/notifications/links");
+  const appPath = resolveNotificationHref({
+    type: "movie_ready",
+    metadata: {
+      movieId: input.movieId,
+      memoryId: input.memoryId ?? undefined,
+    },
+  });
 
   try {
     const row = await notifyMovieReady(input.userId, {

@@ -2103,6 +2103,8 @@ export const enUS = {
         "{count} unread notifications",
       caughtUp: "You're all caught up.",
       justNow: "just now",
+      movieMissing:
+        "That movie is no longer available. Showing your Movies library instead.",
       minutesAgo: "{count}m ago",
       hoursAgo: "{count}h ago",
       daysAgo: "{count}d ago",

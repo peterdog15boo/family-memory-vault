@@ -25,12 +25,9 @@ import {
   Users,
   X,
 } from "lucide-react";
-import {
-  dispatchOpenFamilyChat,
-  parseFamilyChatOpenFromLink,
-} from "@/components/family-chat/FamilyChatContext";
 import { cn } from "@/lib/utils";
 import { playNotificationDing } from "@/lib/notifications/client-attention";
+import { openNotificationDestination } from "@/lib/notifications/open";
 import {
   useLocale,
   useTranslations,
@@ -370,42 +367,15 @@ export function NotificationBell({
   function handleClickNotification(item: NotificationItem) {
     if (!item.readAt) void handleMarkRead(item.id);
     setOpen(false);
-
-    const metaThreadId =
-      typeof item.metadata?.threadId === "string"
-        ? item.metadata.threadId
-        : null;
-    const metaFamilyId =
-      typeof item.metadata?.familyId === "string"
-        ? item.metadata.familyId
-        : null;
-    const fromLink = parseFamilyChatOpenFromLink(item.link);
-    const threadId =
-      item.type === "family_chat"
-        ? metaThreadId || fromLink.threadId
-        : fromLink.threadId;
-    const familyId =
-      item.type === "family_chat"
-        ? metaFamilyId || fromLink.familyId
-        : fromLink.familyId;
-
-    if (threadId) {
-      dispatchOpenFamilyChat(threadId, familyId);
-      return;
-    }
-
-    if (!item.link) return;
-    // Prefer in-app paths; ignore absolute URLs that would break the router.
-    if (item.link.startsWith("http://") || item.link.startsWith("https://")) {
-      try {
-        const url = new URL(item.link);
-        startTransition(() => router.push(`${url.pathname}${url.search}`));
-      } catch {
-        window.location.href = item.link;
-      }
-      return;
-    }
-    startTransition(() => router.push(item.link!));
+    void openNotificationDestination(
+      { ...item, readAt: item.readAt ?? new Date().toISOString() },
+      {
+        missingMovieMessage: t("notifications.ui.movieMissing"),
+        push: (href) => {
+          startTransition(() => router.push(href));
+        },
+      },
+    );
   }
 
   const hasUnread = unreadCount > 0;
