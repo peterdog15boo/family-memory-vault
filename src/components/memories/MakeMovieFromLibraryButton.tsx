@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Clapperboard, Images, Loader2, X } from "lucide-react";
 import { MediaThumb } from "@/components/memories/MediaThumb";
@@ -163,12 +164,12 @@ export function MakeMovieFromLibraryButton({
                       <p className="text-sm leading-relaxed text-ink-muted">
                         {t("memories.makeMovieNoEligible")}
                       </p>
-                      <a
+                      <Link
                         href="/memories/new?intent=movie"
                         className="ui-btn ui-btn-primary ui-btn-sm"
                       >
                         {t("pages.createMemory")}
-                      </a>
+                      </Link>
                     </div>
                   ) : (
                     <ul className="space-y-1" role="listbox" aria-label={t("memories.makeMoviePickTitle")}>
