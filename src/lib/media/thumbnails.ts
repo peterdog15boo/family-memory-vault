@@ -22,10 +22,10 @@ import {
 } from "@/lib/media/ffmpeg";
 import { pickVideoPosterSeekSec } from "@/lib/media/video-poster-seek";
 import { isSafeToServe } from "@/lib/moderation/types";
+import { downloadObjectToFile } from "@/lib/r2-fs";
 import {
   buildMediaDisplayKey,
   buildMediaThumbnailKey,
-  downloadObjectToFile,
   getObjectBytes,
   putObjectBytes,
 } from "@/lib/r2";

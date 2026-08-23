@@ -20,10 +20,12 @@ import {
 } from "@/lib/media/ffmpeg";
 import { isSafeToServe } from "@/lib/moderation/types";
 import {
-  buildMediaPlaybackKey,
   downloadObjectToFile,
-  isMediaPlaybackKey,
   putObjectFromFile,
+} from "@/lib/r2-fs";
+import {
+  buildMediaPlaybackKey,
+  isMediaPlaybackKey,
 } from "@/lib/r2";
 
 const LOG = "[media.video-playback]";
