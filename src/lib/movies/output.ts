@@ -147,17 +147,17 @@ function encodeProfileForQuality(quality: QualityMode): Omit<
       };
     case "standard":
     default:
-      // Share-ready 1080p: lower CRF + slow preset for cleaner still motion.
+      // Share-ready 1080p: favor visual quality over encode speed.
       return {
         x264Preset: "slow",
-        crf: 15,
+        crf: 14,
         profile: "high",
         level: "4.1",
         fps: 30,
         // Near-lossless intermediates — JPEG→H.264 is already one generation.
         frameJpegQuality: 99,
-        maxrate: "14M",
-        bufsize: "28M",
+        maxrate: "16M",
+        bufsize: "32M",
       };
   }
 }
@@ -175,23 +175,55 @@ export function scaleThemeFontSize(
   return Math.round(designSize * scale);
 }
 
+/** How source media is fit into the export canvas. */
+export type EncodeFitMode = "cover" | "contain" | "exact";
+
 /**
- * ffmpeg -vf chain: lanczos scale, even pad, SAR 1, yuv420p, optional fps.
- * Frames are usually exact size; scale/pad remain a safety net for odd edges.
+ * ffmpeg -vf chain: lanczos scale, SAR 1, yuv420p, optional fps.
+ *
+ * - `cover` (default for memory videos): fill the frame; portrait sources are
+ *   zoomed/cropped — no pillarbox/letterbox bars.
+ * - `contain`: letterbox/pillarbox (legacy / rare).
+ * - `exact`: stretch to WxH (photo Ken Burns frames already match the canvas).
+ *
+ * Use the fps *filter* (not output -r) so concat `duration` lines are honored.
  */
 export function buildEncodeVideoFilter(
   width: number,
   height: number,
   fps?: number,
+  fit: EncodeFitMode = "cover",
+  options?: {
+    /** Normalized focal point for cover crops (faces / smart center). */
+    focalX?: number;
+    focalY?: number;
+  },
 ): string {
-  // Use the fps *filter* (not output -r) so concat `duration` lines are honored —
-  // otherwise zoom can collapse to sampleCount/fps seconds regardless of clip length.
-  const base = [
-    `scale=${width}:${height}:force_original_aspect_ratio=decrease:flags=lanczos`,
-    `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black`,
-    "setsar=1",
-    "format=yuv420p",
-  ].join(",");
+  const w = Math.max(2, Math.round(width / 2) * 2);
+  const h = Math.max(2, Math.round(height / 2) * 2);
+  const fx = Math.min(1, Math.max(0, options?.focalX ?? 0.5));
+  const fy = Math.min(1, Math.max(0, options?.focalY ?? 0.5));
+
+  let geometry: string[];
+  if (fit === "exact") {
+    geometry = [`scale=${w}:${h}:flags=lanczos`];
+  } else if (fit === "contain") {
+    geometry = [
+      `scale=${w}:${h}:force_original_aspect_ratio=decrease:flags=lanczos`,
+      `pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=black`,
+    ];
+  } else {
+    // Cover: scale up to fill, then crop. Bias crop toward focal point so
+    // faces stay in frame when portrait media fills a landscape canvas.
+    const cropX = `max(0\\,min(in_w-${w}\\,in_w*${fx.toFixed(4)}-${w}/2))`;
+    const cropY = `max(0\\,min(in_h-${h}\\,in_h*${fy.toFixed(4)}-${h}/2))`;
+    geometry = [
+      `scale=${w}:${h}:force_original_aspect_ratio=increase:flags=lanczos`,
+      `crop=${w}:${h}:${cropX}:${cropY}`,
+    ];
+  }
+
+  const base = [...geometry, "setsar=1", "format=yuv420p"].join(",");
   if (fps && fps > 0) {
     return `${base},fps=${fps}`;
   }

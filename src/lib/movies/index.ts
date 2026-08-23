@@ -129,6 +129,7 @@ export {
   buildEncodeVideoFilter,
   buildLibx264EncodeArgs,
   type MovieOutputSpec,
+  type EncodeFitMode,
 } from "@/lib/movies/output";
 export { composeMoviePoster } from "@/lib/movies/poster";
 export {

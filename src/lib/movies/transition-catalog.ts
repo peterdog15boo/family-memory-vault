@@ -25,7 +25,7 @@ export const TRANSITION_CATALOG: readonly TransitionCatalogEntry[] = [
     id: "soft_dissolve",
     label: "Soft dissolve",
     hint: "Gentle blend with soft mid bloom",
-    defaultDurationMs: 700,
+    defaultDurationMs: 900,
   },
   {
     id: "soft_cut",

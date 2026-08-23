@@ -565,6 +565,7 @@ async function selectAndOrderClips(
 
   const clips: MovieClip[] = [];
   const photoMediaRows: Media[] = [];
+  const framingMediaRows: Media[] = [];
   for (const link of links) {
     if (clips.length >= maxClips) break;
 
@@ -577,6 +578,7 @@ async function selectAndOrderClips(
         });
         continue;
       }
+      framingMediaRows.push(link.media);
       clips.push({
         mediaId: link.media.id,
         sortOrder: link.sortOrder,
@@ -604,6 +606,7 @@ async function selectAndOrderClips(
     }
 
     photoMediaRows.push(link.media);
+    framingMediaRows.push(link.media);
     clips.push({
       mediaId: link.media.id,
       sortOrder: link.sortOrder,
@@ -623,13 +626,12 @@ async function selectAndOrderClips(
     );
   }
 
-  // Face framing for photo clips only.
-  const framingMap = await resolveFramingForClips(photoMediaRows, ctx.userId);
+  // Face framing for photos + videos (videos use faces for fill-frame bias).
+  const framingMap = await resolveFramingForClips(framingMediaRows, ctx.userId);
   let faceFramed = 0;
   for (const clip of clips) {
-    if (clip.kind !== "photo") continue;
     const fromMap = framingMap.get(clip.mediaId);
-    const row = photoMediaRows.find((m) => m.id === clip.mediaId);
+    const row = framingMediaRows.find((m) => m.id === clip.mediaId);
     const cached = row ? framingFromMediaRow(row) : null;
     const framing =
       fromMap?.source === "faces"
@@ -648,7 +650,7 @@ async function selectAndOrderClips(
     photos: photoCount,
     videos: videoCount,
     faceFramed,
-    centerFallback: photoCount - faceFramed,
+    centerFallback: clips.length - faceFramed,
   });
   for (const clip of clips) {
     if (clip.kind !== "photo") continue;
@@ -847,23 +849,32 @@ export function buildRenderPlan(
 /* Frame rendering (sharp)                                                    */
 /* -------------------------------------------------------------------------- */
 
-function movieSourceMaxLongEdge(fast: boolean): number {
+function movieSourceMaxLongEdge(input: {
+  fast: boolean;
+  outputWidth: number;
+  outputHeight: number;
+}): number {
   const fromEnv = Number(process.env.MOVIE_SOURCE_MAX_LONG_EDGE ?? 0);
   if (Number.isFinite(fromEnv) && fromEnv > 0) return fromEnv;
-  // Keep worker RAM bounded on small containers (Railway etc.).
-  return fast ? 960 : 2560;
+  // Fast path stays lean for small workers.
+  if (input.fast) return 1280;
+  // Keep enough pixels for cover crop + Ken Burns zoom without upscaling.
+  // Portrait→landscape fill crops a short edge; 2× output long-edge preserves
+  // sharpness through medium zoom (~1.15) on phone photos.
+  const outLong = Math.max(input.outputWidth, input.outputHeight);
+  return Math.max(3840, Math.ceil(outLong * 2.25));
 }
 
 /** Decode, orient, and cap pixel volume before Ken Burns (Railway RAM). */
 async function prepareOrientedPhotoSource(
   body: Buffer,
-  fast: boolean,
+  opts: { fast: boolean; outputWidth: number; outputHeight: number },
 ): Promise<{ oriented: Buffer; sourceWidth: number; sourceHeight: number }> {
   let oriented = await sharp(body).rotate().toBuffer();
   let meta = await sharp(oriented).metadata();
   let sourceWidth = meta.width ?? 1;
   let sourceHeight = meta.height ?? 1;
-  const maxLong = movieSourceMaxLongEdge(fast);
+  const maxLong = movieSourceMaxLongEdge(opts);
   const longEdge = Math.max(sourceWidth, sourceHeight);
   if (longEdge > maxLong) {
     const scale = maxLong / longEdge;
@@ -1001,7 +1012,11 @@ export async function renderMovieAssets(
 
     // Decode + auto-orient once; reuse for all Ken Burns samples.
     const { oriented, sourceWidth, sourceHeight } =
-      await prepareOrientedPhotoSource(Buffer.from(body), plan.fast);
+      await prepareOrientedPhotoSource(Buffer.from(body), {
+        fast: plan.fast,
+        outputWidth: plan.width,
+        outputHeight: plan.height,
+      });
 
     // Fail-closed face framing: if plan has no faces, re-fetch before render
     // rather than silently center-cropping portraits.
@@ -1195,10 +1210,11 @@ export async function renderMovieAssets(
     ) {
       const { body: nextBody } = await getObjectBytes(nextClip.sourceKey);
       if (nextBody?.byteLength) {
-        const preparedNext = await prepareOrientedPhotoSource(
-          nextBody,
-          plan.fast,
-        );
+        const preparedNext = await prepareOrientedPhotoSource(nextBody, {
+          fast: plan.fast,
+          outputWidth: plan.width,
+          outputHeight: plan.height,
+        });
         const nextOriented = preparedNext.oriented;
         const nextSourceWidth = preparedNext.sourceWidth;
         const nextSourceHeight = preparedNext.sourceHeight;
@@ -1430,6 +1446,7 @@ async function prepareVideoSegment(input: {
     clip.contentType,
   );
   await writeFile(rawPath, Buffer.from(body));
+  const framing = clip.framing ?? centerFraming();
   const args = buildNormalizeVideoClipArgs({
     inputPath: rawPath,
     outputPath: segmentPath,
@@ -1438,6 +1455,15 @@ async function prepareVideoSegment(input: {
     height: plan.height,
     fps: plan.output.fps,
     output: plan.output,
+    focalX: framing.focalPointX,
+    focalY: framing.focalPointY,
+  });
+  console.info("[movies] Video fill-frame normalize", {
+    mediaId: clip.mediaId,
+    fit: "cover",
+    framingSource: framing.source,
+    focalX: Number(framing.focalPointX.toFixed(4)),
+    focalY: Number(framing.focalPointY.toFixed(4)),
   });
   try {
     await runFfmpeg(ffmpegPath, args);
@@ -1775,7 +1801,8 @@ async function assembleTimelineMp4(input: {
 }): Promise<void> {
   const { plan, assets, workDir, ffmpegPath, outputPath } = input;
   const { fps } = plan.output;
-  const vf = buildEncodeVideoFilter(plan.width, plan.height, fps);
+  // Ken Burns JPEGs are already WxH — exact scale avoids pad/letterbox artifacts.
+  const vf = buildEncodeVideoFilter(plan.width, plan.height, fps, "exact");
 
   const onlyFrames =
     assets.items.length === 1 && assets.items[0]!.kind === "frames";

@@ -42,7 +42,8 @@ export function storeMovieCreateMode(mode: MovieCreateMode): void {
 
 /**
  * Fixed polished settings for Simple Mode creates.
- * No title card, soft dissolves, 1080p, gentle face-aware motion, soft piano bed.
+ * Landscape 1080p, fill-frame crops, soft dissolves, no title card,
+ * gentle face-aware motion, soft piano bed.
  */
 export function buildSimpleModeSettings(): MovieSettings {
   const preset = getMoviePreset(SIMPLE_MODE_PRESET_ID);
@@ -53,7 +54,7 @@ export function buildSimpleModeSettings(): MovieSettings {
       aspectRatio: "16:9",
       qualityMode: "standard",
       transition: "soft_dissolve",
-      transitionDurationMs: 700,
+      transitionDurationMs: 900,
       zoomIntensity: "medium",
       zoomDirection: "alternate",
       colorFilter: "warm_family",
@@ -65,7 +66,7 @@ export function buildSimpleModeSettings(): MovieSettings {
       musicSuggestionId: "soft-piano",
       presetId: SIMPLE_MODE_PRESET_ID,
       targetDurationSeconds: 45,
-      photoDurationMs: 3200,
+      photoDurationMs: 3600,
     });
   }
 
@@ -73,7 +74,7 @@ export function buildSimpleModeSettings(): MovieSettings {
     targetDurationSeconds: preset.targetDurationSeconds,
     photoDurationMs: preset.photoDurationMs,
     transition: preset.transition,
-    transitionDurationMs: 700,
+    transitionDurationMs: 900,
     zoomIntensity: preset.zoomIntensity,
     zoomDirection: preset.zoomDirection,
     includeTitles: false,

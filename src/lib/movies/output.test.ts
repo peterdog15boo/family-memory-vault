@@ -15,12 +15,12 @@ describe("resolveMovieOutputSpec", () => {
     expect(spec).toMatchObject({
       width: 1920,
       height: 1080,
-      crf: 15,
+      crf: 14,
       profile: "high",
       fps: 30,
       x264Preset: "slow",
       frameJpegQuality: 99,
-      maxrate: "14M",
+      maxrate: "16M",
     });
   });
 
@@ -77,7 +77,7 @@ describe("resolveMovieOutputSpec", () => {
         qualityMode: "ultra",
         allowUltra: false,
       }),
-    ).toMatchObject({ width: 1920, height: 1080, crf: 15 });
+    ).toMatchObject({ width: 1920, height: 1080, crf: 14 });
   });
 });
 
@@ -92,15 +92,36 @@ describe("scaleThemeFontSize", () => {
 });
 
 describe("buildEncodeVideoFilter", () => {
-  it("locks exact frame size with lanczos, SAR 1, and optional fps filter", () => {
+  it("defaults to cover fill (no letterbox pad) for social landscape", () => {
     const vf = buildEncodeVideoFilter(1920, 1080, 30);
     expect(vf).toContain("1920:1080");
+    expect(vf).toContain("force_original_aspect_ratio=increase");
+    expect(vf).toContain("crop=1920:1080");
     expect(vf).toContain("flags=lanczos");
     expect(vf).toContain("setsar=1");
     expect(vf).toContain("format=yuv420p");
     expect(vf).toContain("fps=30");
-    expect(vf).not.toContain("-r");
-    expect(buildEncodeVideoFilter(1080, 1920)).toContain("setsar=1");
+    expect(vf).not.toContain("pad=");
+  });
+
+  it("supports contain pad and exact stretch modes", () => {
+    const contain = buildEncodeVideoFilter(1920, 1080, undefined, "contain");
+    expect(contain).toContain("force_original_aspect_ratio=decrease");
+    expect(contain).toContain("pad=1920:1080");
+
+    const exact = buildEncodeVideoFilter(1920, 1080, 30, "exact");
+    expect(exact).toContain("scale=1920:1080:flags=lanczos");
+    expect(exact).not.toContain("force_original_aspect_ratio");
+    expect(exact).not.toContain("pad=");
+  });
+
+  it("biases cover crop toward a face focal point", () => {
+    const vf = buildEncodeVideoFilter(1920, 1080, 30, "cover", {
+      focalX: 0.35,
+      focalY: 0.4,
+    });
+    expect(vf).toContain("0.3500");
+    expect(vf).toContain("0.4000");
   });
 });
 
@@ -113,9 +134,9 @@ describe("buildLibx264EncodeArgs", () => {
     const args = buildLibx264EncodeArgs(spec);
     expect(args).toContain("libx264");
     expect(args).toContain("slow");
-    expect(args).toContain("15");
+    expect(args).toContain("14");
     expect(args).toContain("bt709");
-    expect(args).toContain("14M");
+    expect(args).toContain("16M");
     expect(args).toContain("+faststart");
   });
 });

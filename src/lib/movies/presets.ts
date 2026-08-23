@@ -58,11 +58,11 @@ export const MOVIE_PRESETS: readonly MoviePreset[] = [
   {
     id: "simple_mode",
     label: "Simple",
-    blurb: "1080p slideshow · soft dissolve · no title card",
+    blurb: "1080p landscape · fill-frame · soft dissolve · no title card",
     style: "simple",
     aspectRatio: "16:9",
     targetDurationSeconds: 45,
-    photoDurationMs: 3200,
+    photoDurationMs: 3600,
     transition: "soft_dissolve",
     zoomIntensity: "medium",
     zoomDirection: "alternate",

@@ -139,11 +139,11 @@ export function resolveKenBurnsSampleCount(input: {
   // for gentle zooms (small crop deltas need denser intermediate crops).
   let densityMult = 1;
   if (!input.fast) {
-    if (input.zoomAmount <= 0.06) densityMult = 2;
-    else if (input.zoomAmount <= 0.1) densityMult = 1.5;
-    else densityMult = 1.25;
+    if (input.zoomAmount <= 0.06) densityMult = 2.25;
+    else if (input.zoomAmount <= 0.1) densityMult = 1.75;
+    else densityMult = 1.5;
     if ((input.intensityFactor ?? 1) <= 0.65) {
-      densityMult = Math.max(densityMult, 1.75);
+      densityMult = Math.max(densityMult, 2);
     }
   }
 

@@ -135,9 +135,9 @@ describe("motion / Ken Burns", () => {
       fast: false,
       targetFps: 30,
     });
-    // zoomAmount 0.1 → 1.5× density over encode fps
-    expect(short).toBe(90);
-    expect(longer).toBe(180);
+    // zoomAmount 0.1 → 1.75× density over encode fps
+    expect(short).toBe(105);
+    expect(longer).toBe(210);
     expect(longer).toBeGreaterThan(short);
   });
 
@@ -148,7 +148,7 @@ describe("motion / Ken Burns", () => {
       fast: false,
       targetFps: 30,
     });
-    expect(n).toBe(270);
+    expect(n).toBe(315);
   });
 
   it("boosts sample density for gentle zooms", () => {
@@ -164,8 +164,8 @@ describe("motion / Ken Burns", () => {
       fast: false,
       targetFps: 30,
     });
-    expect(gentle).toBe(240); // 2× fps
-    expect(strong).toBe(150); // 1.25× fps
+    expect(gentle).toBe(270); // 2.25× fps
+    expect(strong).toBe(180); // 1.5× fps
     expect(gentle).toBeGreaterThan(strong);
   });
 
@@ -207,8 +207,8 @@ describe("motion / Ken Burns", () => {
       height: 720,
       targetFps: 30,
     });
-    // 3.2s × 30fps × 1.5 density = 144 samples
-    expect(plan.samples).toHaveLength(144);
+    // 3.2s × 30fps × 1.75 density = 168 samples
+    expect(plan.samples).toHaveLength(168);
     const avgHold =
       plan.samples.reduce((s, x) => s + x.holdMs, 0) / plan.samples.length;
     expect(avgHold).toBeLessThanOrEqual(1000 / 30 + 0.5);

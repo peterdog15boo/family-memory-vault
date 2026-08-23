@@ -343,12 +343,12 @@ export const SIMPLE_THEME = defineTheme({
     accent: { r: 220, g: 214, b: 204 },
   },
   timing: {
-    defaultClipDurationMs: 3200,
+    defaultClipDurationMs: 3600,
     maxClips: 40,
   },
   transition: {
     style: "soft_dissolve",
-    durationMs: 550,
+    durationMs: 900,
     intensity: "subtle",
   },
   text: {
@@ -398,12 +398,12 @@ export const SIMPLE_THEME = defineTheme({
     tintOpacity: 0,
     vignette: false,
     vignetteStrength: 0.2,
-    grain: 0.03,
+    grain: 0,
     lightLeak: 0,
     contrast: 1.02,
   },
   motion: {
-    kenBurnsFrames: 20,
+    kenBurnsFrames: 24,
     kenBurnsZoom: 0.12,
     directionMode: "alternate",
     letterbox: false,

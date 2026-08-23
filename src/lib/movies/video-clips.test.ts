@@ -60,7 +60,7 @@ describe("isMovieVideoMedia", () => {
 });
 
 describe("buildNormalizeVideoClipArgs", () => {
-  it("includes trim, scale filter, and muted audio", () => {
+  it("includes trim, cover fill-frame filter, and muted audio", () => {
     const args = buildNormalizeVideoClipArgs({
       inputPath: "in.mov",
       outputPath: "out.mp4",
@@ -70,17 +70,24 @@ describe("buildNormalizeVideoClipArgs", () => {
       fps: 30,
       output: {
         x264Preset: "slow",
-        crf: 15,
+        crf: 14,
         profile: "high",
         level: "4.2",
-        maxrate: "12M",
-        bufsize: "24M",
+        maxrate: "16M",
+        bufsize: "32M",
       },
+      focalX: 0.42,
+      focalY: 0.38,
     });
     expect(args).toContain("-t");
     expect(args).toContain("5.000");
     expect(args).toContain("-an");
     expect(args).toContain("-vf");
+    const vf = args[args.indexOf("-vf") + 1]!;
+    expect(vf).toContain("force_original_aspect_ratio=increase");
+    expect(vf).toContain("crop=1920:1080");
+    expect(vf).toContain("0.4200");
+    expect(vf).not.toContain("pad=");
     expect(args.at(-1)).toBe("out.mp4");
   });
 });

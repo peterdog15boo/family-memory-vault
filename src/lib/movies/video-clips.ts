@@ -47,7 +47,8 @@ export function isMovieVideoMedia(row: {
 }
 
 /**
- * ffmpeg args: trim + fit to movie canvas, silent (soundtrack mixed later).
+ * ffmpeg args: trim + fill-frame crop to movie canvas, silent (music mixed later).
+ * Portrait clips zoom/crop into landscape — no letterboxing.
  */
 export function buildNormalizeVideoClipArgs(input: {
   inputPath: string;
@@ -60,9 +61,15 @@ export function buildNormalizeVideoClipArgs(input: {
     MovieOutputSpec,
     "x264Preset" | "crf" | "profile" | "level" | "maxrate" | "bufsize"
   >;
+  /** Face / smart-crop focal point (0–1). Defaults to center. */
+  focalX?: number;
+  focalY?: number;
 }): string[] {
   const durationSec = Math.max(0.5, input.durationMs / 1000);
-  const vf = buildEncodeVideoFilter(input.width, input.height, input.fps);
+  const vf = buildEncodeVideoFilter(input.width, input.height, input.fps, "cover", {
+    focalX: input.focalX,
+    focalY: input.focalY,
+  });
   return [
     "-y",
     "-i",

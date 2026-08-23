@@ -43,7 +43,10 @@ describe("simple mode preset", () => {
     expect(settings.posterStyle).toBe("photo");
     expect(settings.presetId).toBe(SIMPLE_MODE_PRESET_ID);
     expect(settings.transition).toBe("soft_dissolve");
+    expect(settings.transitionDurationMs).toBe(900);
+    expect(settings.aspectRatio).toBe("16:9");
     expect(settings.zoomIntensity).not.toBe("off");
     expect(settings.qualityMode).toBe("standard");
+    expect(settings.photoDurationMs).toBe(3600);
   });
 });
