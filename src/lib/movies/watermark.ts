@@ -71,7 +71,8 @@ export async function buildBrandWatermarkOverlay(input: {
       const srcW = Math.max(1, meta.width || 64);
       logoH = logoMaxH;
       logoW = Math.max(1, Math.round((srcW / srcH) * logoH));
-      // Flatten to warm-white using the logo alpha, then ghost to match text (~42%).
+      // Flatten to warm-white using the logo alpha, then ghost (~90% —
+      // ~2× the prior 45% so the mark reads brighter than the label).
       const resized = await sharp(logoSrc)
         .resize(logoW, logoH, { fit: "inside", kernel: "lanczos3" })
         .ensureAlpha()
@@ -95,7 +96,7 @@ export async function buildBrandWatermarkOverlay(input: {
       logoBuf = await sharp(whiteLockup)
         .composite([
           {
-            input: Buffer.from([255, 255, 255, Math.round(255 * 0.45)]),
+            input: Buffer.from([255, 255, 255, Math.round(255 * 0.9)]),
             raw: { width: 1, height: 1, channels: 4 },
             tile: true,
             blend: "dest-in",
