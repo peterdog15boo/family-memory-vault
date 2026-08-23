@@ -207,7 +207,7 @@ export async function createMovieJob(
   // Always keep face-aware Ken Burns enabled for Memories + Ask AI creates —
   // quality/filter/transition upgrades must not land as zoom-off / center stills.
   const { ensureFaceAwareMovieSettings } = await import("@/lib/movies/settings");
-  let normalized = normalizeMovieSettings(
+  const normalized = normalizeMovieSettings(
     ensureFaceAwareMovieSettings(settingsOnly),
   );
 

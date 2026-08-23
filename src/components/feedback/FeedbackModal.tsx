@@ -239,6 +239,7 @@ export function FeedbackModal({
 
     syncViewport();
     const vv = window.visualViewport;
+    const root = backdropRef.current;
     vv?.addEventListener("resize", syncViewport);
     vv?.addEventListener("scroll", syncViewport);
     mq.addEventListener("change", syncViewport);
@@ -246,8 +247,8 @@ export function FeedbackModal({
       vv?.removeEventListener("resize", syncViewport);
       vv?.removeEventListener("scroll", syncViewport);
       mq.removeEventListener("change", syncViewport);
-      backdropRef.current?.style.removeProperty("--feedback-vv-height");
-      backdropRef.current?.style.removeProperty("--feedback-vv-offset");
+      root?.style.removeProperty("--feedback-vv-height");
+      root?.style.removeProperty("--feedback-vv-offset");
     };
   }, [open]);
 

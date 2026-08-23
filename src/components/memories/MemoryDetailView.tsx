@@ -123,7 +123,7 @@ export function MemoryDetailView({
   );
   const allowEdit = Boolean(canEdit || viewerIsOwner);
   const allowManageMedia = viewerIsOwner;
-  const allowManageSharing = viewerIsOwner;
+  const allowManageSharing = Boolean(canManageSharing || viewerIsOwner);
 
   const inMemoryIds = useMemo(
     () => new Set(memory.media.map((item) => item.id)),
