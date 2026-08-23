@@ -2204,6 +2204,7 @@ async function applyBrandWatermark(input: {
     overlayPath: overlay.path,
     outputPath: brandedPath,
     margin: overlay.margin,
+    leftMargin: overlay.leftMargin,
     x264Preset: input.x264Preset ?? "medium",
     crf: input.crf ?? 16,
   });
@@ -2217,6 +2218,8 @@ async function applyBrandWatermark(input: {
       overlayWidth: overlay.width,
       overlayHeight: overlay.height,
       margin: overlay.margin,
+      leftMargin: overlay.leftMargin,
+      placement: "bottom-left",
     });
     return brandedPath;
   } catch (error) {

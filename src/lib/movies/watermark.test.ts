@@ -53,7 +53,7 @@ describe("shouldApplyMovieWatermark", () => {
 });
 
 describe("buildBrandWatermarkOverlay", () => {
-  it("renders a bottom overlay with readable pixels and a larger logo band", async () => {
+  it("renders a transparent left-bottom mark without a pill background", async () => {
     const workDir = mkdtempSync(join(tmpdir(), "fmv-wm-unit-"));
     expect(resolveWatermarkFontPath()).toBeTruthy();
 
@@ -63,34 +63,45 @@ describe("buildBrandWatermarkOverlay", () => {
       height: 1080,
     });
     expect(overlay.path).toContain("brand-watermark.png");
-    // Logo ~7.5% of 1080 ≈ 81px + padding → pill taller than the old ~34px band.
-    expect(overlay.height).toBeGreaterThanOrEqual(70);
-    expect(overlay.width).toBeGreaterThan(400);
+    expect(overlay.height).toBeGreaterThanOrEqual(36);
+    expect(overlay.width).toBeGreaterThan(300);
     expect(overlay.margin).toBeGreaterThan(10);
+    expect(overlay.leftMargin).toBeGreaterThan(10);
     expect(overlay.hasLogo).toBe(true);
 
     const meta = await sharp(overlay.path).metadata();
     expect(meta.width).toBe(overlay.width);
     expect(meta.hasAlpha).toBe(true);
-    const stats = await sharp(overlay.path).stats();
-    // Must not be a fully transparent / empty image.
-    expect(stats.channels[3]!.mean).toBeGreaterThan(20);
+    const { data, info } = await sharp(overlay.path)
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    // Corner pixel should be fully transparent (no pill).
+    expect(data[3]).toBe(0);
+    // Some pixels must carry content.
+    let opaque = 0;
+    for (let i = 3; i < data.length; i += info.channels) {
+      if (data[i]! > 8) opaque += 1;
+    }
+    expect(opaque).toBeGreaterThan(100);
   });
 });
 
 describe("buildBrandWatermarkFfmpegArgs", () => {
-  it("maps filtered video and optional audio with bottom-center overlay", () => {
+  it("maps filtered video and optional audio with bottom-left overlay", () => {
     const args = buildBrandWatermarkFfmpegArgs({
       videoPath: "in.mp4",
       overlayPath: "wm.png",
       outputPath: "out.mp4",
       margin: 24,
+      leftMargin: 32,
       x264Preset: "medium",
       crf: 16,
     });
     expect(args).toContain("-filter_complex");
     const fc = args[args.indexOf("-filter_complex") + 1]!;
-    expect(fc).toContain("overlay=(W-w)/2:H-h-24");
+    expect(fc).toContain("overlay=32:H-h-24");
+    expect(fc).not.toContain("(W-w)/2");
     expect(args).toContain("-map");
     expect(args).toContain("[v]");
     expect(args).toContain("0:a?");

@@ -1,8 +1,9 @@
 /**
  * Free-plan movie brand watermark — burned into the final MP4.
  *
- * Text is rendered with a bundled font file (not system “sans”) so Linux
- * workers never show tofu □□□ boxes. Plan policy stays in watermark-policy.ts.
+ * Soft left-bottom mark: light logo + small ghosted label, no background pill.
+ * Text uses a bundled font so Linux workers never show tofu □□□ boxes.
+ * Plan policy stays in watermark-policy.ts.
  */
 
 import { existsSync } from "node:fs";
@@ -14,8 +15,10 @@ export type BrandWatermarkOverlay = {
   path: string;
   width: number;
   height: number;
-  /** Bottom margin in output pixels. */
+  /** Bottom inset in output pixels. */
   margin: number;
+  /** Left inset in output pixels. */
+  leftMargin: number;
   hasLogo: boolean;
 };
 
@@ -36,7 +39,8 @@ export function resolveWatermarkFontPath(): string | null {
 }
 
 /**
- * Build a bottom-safe overlay PNG: soft pill + larger logo + readable label.
+ * Build a transparent bottom-left overlay: light logo + smaller ghosted label.
+ * No pill / bubble behind the mark.
  */
 export async function buildBrandWatermarkOverlay(input: {
   workDir: string;
@@ -44,13 +48,12 @@ export async function buildBrandWatermarkOverlay(input: {
   height: number;
 }): Promise<BrandWatermarkOverlay> {
   const { workDir, width, height } = input;
-  const margin = Math.max(16, Math.round(height * 0.03));
-  // ~3% of frame height for type; ~7.5% for the logo lockup.
-  const fontPx = Math.max(18, Math.round(height * 0.03));
-  const logoMaxH = Math.max(40, Math.round(height * 0.075));
-  const padX = Math.max(14, Math.round(width * 0.014));
-  const padY = Math.max(10, Math.round(height * 0.012));
-  const gap = Math.max(10, Math.round(padX * 0.65));
+  const margin = Math.max(18, Math.round(height * 0.028));
+  const leftMargin = Math.max(18, Math.round(width * 0.022));
+  // Smaller type than the logo treatment — soft and non-intrusive.
+  const fontPx = Math.max(12, Math.round(height * 0.018));
+  const logoMaxH = Math.max(36, Math.round(height * 0.07));
+  const gap = Math.max(8, Math.round(width * 0.008));
 
   const logoCandidates = [
     join(process.cwd(), "public", "brand", "logo.png"),
@@ -68,12 +71,20 @@ export async function buildBrandWatermarkOverlay(input: {
       const srcW = Math.max(1, meta.width || 64);
       logoH = logoMaxH;
       logoW = Math.max(1, Math.round((srcW / srcH) * logoH));
-      // Soften / lift the mark so it reads on both light and dark footage.
+      // Light, slightly translucent mark — matches a soft brand treatment.
       logoBuf = await sharp(logoSrc)
         .resize(logoW, logoH, { fit: "inside", kernel: "lanczos3" })
         .ensureAlpha()
-        .modulate({ brightness: 1.5, saturation: 0.8 })
-        .linear(1.08, 22)
+        .modulate({ brightness: 1.55, saturation: 0.75 })
+        .linear(1.1, 24)
+        .composite([
+          {
+            input: Buffer.from([255, 255, 255, Math.round(255 * 0.78)]),
+            raw: { width: 1, height: 1, channels: 4 },
+            tile: true,
+            blend: "dest-in",
+          },
+        ])
         .png()
         .toBuffer();
       const sized = await sharp(logoBuf).metadata();
@@ -91,30 +102,34 @@ export async function buildBrandWatermarkOverlay(input: {
   const textW =
     textMeta.width ?? Math.ceil(MOVIE_WATERMARK_LABEL.length * fontPx * 0.55);
   const textH = textMeta.height ?? fontPx;
+
+  // Ghosted warm-white type (~42% opacity) + very soft dark halo for light scenes.
   const textWhite = await sharp(textBlack)
     .negate({ alpha: false })
+    .ensureAlpha(0.42)
     .png()
     .toBuffer();
-  // Soft dark halo so light footage still reads the label.
   const textHalo = await sharp(textBlack)
-    .blur(1.2)
-    .ensureAlpha(0.6)
+    .blur(0.9)
+    .ensureAlpha(0.22)
     .png()
     .toBuffer();
 
-  const boxW = padX * 2 + logoW + (logoBuf ? gap : 0) + textW;
-  const boxH = Math.max(logoH, textH) + padY * 2;
-  const radius = Math.round(boxH / 2);
+  const boxW = Math.max(1, logoW + (logoBuf ? gap : 0) + textW);
+  const boxH = Math.max(logoH, textH);
 
-  const pillSvg = Buffer.from(
-    `<svg width="${boxW}" height="${boxH}" xmlns="http://www.w3.org/2000/svg">
-  <rect width="100%" height="100%" rx="${radius}" ry="${radius}"
-        fill="rgba(10,8,6,0.5)"/>
-</svg>`,
-  );
-  const pill = await sharp(pillSvg).png().toBuffer();
+  const canvas = await sharp({
+    create: {
+      width: boxW,
+      height: boxH,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  })
+    .png()
+    .toBuffer();
 
-  const textLeft = padX + (logoBuf ? logoW + gap : 0);
+  const textLeft = logoBuf ? logoW + gap : 0;
   const textTop = Math.max(0, Math.round((boxH - textH) / 2));
   const logoTop = Math.max(0, Math.round((boxH - logoH) / 2));
 
@@ -130,20 +145,21 @@ export async function buildBrandWatermarkOverlay(input: {
   if (logoBuf) {
     layers.unshift({
       input: logoBuf,
-      left: padX,
+      left: 0,
       top: logoTop,
       blend: "over",
     });
   }
 
   const path = join(workDir, "brand-watermark.png");
-  await sharp(pill).composite(layers).png().toFile(path);
+  await sharp(canvas).composite(layers).png().toFile(path);
 
   return {
     path,
     width: boxW,
     height: boxH,
     margin,
+    leftMargin,
     hasLogo: Boolean(logoBuf),
   };
 }
@@ -154,7 +170,7 @@ export async function buildBrandWatermarkOverlay(input: {
  */
 async function renderWatermarkLabel(fontPx: number): Promise<Buffer> {
   const fontfile = resolveWatermarkFontPath();
-  const dpi = Math.max(160, Math.round(fontPx * 8));
+  const dpi = Math.max(140, Math.round(fontPx * 8));
 
   if (fontfile) {
     try {
@@ -179,7 +195,6 @@ async function renderWatermarkLabel(fontPx: number): Promise<Buffer> {
     );
   }
 
-  // SVG path: embed the OTF as a data URI so glyphs don’t depend on OS fonts.
   if (fontfile) {
     const { readFileSync } = await import("node:fs");
     const b64 = readFileSync(fontfile).toString("base64");
@@ -201,7 +216,6 @@ async function renderWatermarkLabel(fontPx: number): Promise<Buffer> {
     return sharp(Buffer.from(svg)).png().toBuffer();
   }
 
-  // Last resort — may tofu on locked-down images; better than crashing.
   const approxW = Math.ceil(MOVIE_WATERMARK_LABEL.length * fontPx * 0.58);
   const h = Math.ceil(fontPx * 1.45);
   const svg = `<svg width="${approxW}" height="${h}" xmlns="http://www.w3.org/2000/svg">
@@ -222,7 +236,7 @@ function escapeXml(value: string): string {
 }
 
 /**
- * ffmpeg args: burn overlay at bottom-center of the finished movie.
+ * ffmpeg args: burn overlay at bottom-left of the finished movie.
  * Audio is optional (`0:a?`) so silent exports still succeed.
  */
 export function buildBrandWatermarkFfmpegArgs(input: {
@@ -230,11 +244,13 @@ export function buildBrandWatermarkFfmpegArgs(input: {
   overlayPath: string;
   outputPath: string;
   margin: number;
+  leftMargin?: number;
   /** Prefer matching the main encode when available. */
   x264Preset?: string;
   crf?: number;
 }): string[] {
   const margin = Math.max(0, Math.round(input.margin));
+  const left = Math.max(0, Math.round(input.leftMargin ?? margin));
   const preset = input.x264Preset ?? "medium";
   const crf = input.crf ?? 16;
   return [
@@ -244,8 +260,8 @@ export function buildBrandWatermarkFfmpegArgs(input: {
     "-i",
     input.overlayPath,
     "-filter_complex",
-    // Bottom-center — clearly in the lower frame, no extra letterbox bars.
-    `[0:v][1:v]overlay=(W-w)/2:H-h-${margin}:format=auto[v]`,
+    // Bottom-left — no letterbox bars, soft brand in the lower frame.
+    `[0:v][1:v]overlay=${left}:H-h-${margin}:format=auto[v]`,
     "-map",
     "[v]",
     "-map",
