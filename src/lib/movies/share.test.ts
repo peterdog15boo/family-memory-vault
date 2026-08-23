@@ -1,18 +1,14 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import {
-  DEFAULT_PHOTO_REQUEST_MESSAGE,
-  PHOTO_REQUEST_PRESETS,
-} from "@/lib/photo-requests/copy";
-import {
+  buildSocialIntentUrl,
   moviePublicShareUrl,
   movieShareText,
+  movieShareTokenFromUrl,
   movieShareUrl,
   movieSocialShareUrl,
   movieSocialUsesPublicLink,
-  navigateShareTab,
-  openBlankShareTab,
-  openMovieSocialShare,
-  tryOpenExternalUrl,
+  navigateShareIntent,
+  openShareIntentPlaceholder,
 } from "@/lib/movies/share";
 import type { SerializedMovie } from "@/lib/movies/serialize";
 
@@ -47,109 +43,86 @@ describe("movie share helpers", () => {
 
   it("prefers durable shareUrl over signed R2 URLs", () => {
     const movie = sampleMovie({
-      shareUrl: "https://app.example/share/m/tok",
+      shareUrl: "https://app.example/share/movies/tok",
     });
-    expect(movieShareUrl(movie)).toBe("https://app.example/share/m/tok");
+    expect(movieShareUrl(movie)).toBe("https://app.example/share/movies/tok");
   });
 
-  it("falls back to download/play when shareUrl is missing", () => {
-    expect(movieShareUrl(sampleMovie())).toContain("cdn.example");
-  });
-
-  it("exposes public share URL separately from CDN fallbacks", () => {
-    expect(moviePublicShareUrl(sampleMovie())).toBeNull();
+  it("parses tokens from new and legacy share paths", () => {
     expect(
-      moviePublicShareUrl(
-        sampleMovie({ shareUrl: "https://app.example/share/m/tok" }),
-      ),
-    ).toBe("https://app.example/share/m/tok");
+      movieShareTokenFromUrl("https://app.example/share/movies/abc123"),
+    ).toBe("abc123");
+    expect(movieShareTokenFromUrl("https://app.example/share/m/legacy")).toBe(
+      "legacy",
+    );
+  });
+
+  it("builds Facebook / X / Pinterest intents from the public page URL", () => {
+    const page = "https://app.example/share/movies/tok123";
+    const text = "Watch “Beach day” — made with Family Memory Vault";
+    const poster = "https://app.example/api/public/movies/tok123/poster";
+
+    expect(buildSocialIntentUrl("facebook", { sharePageUrl: page, text })).toBe(
+      "https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fapp.example%2Fshare%2Fmovies%2Ftok123",
+    );
+    expect(buildSocialIntentUrl("x", { sharePageUrl: page, text })).toContain(
+      "twitter.com/intent/tweet",
+    );
+    expect(buildSocialIntentUrl("x", { sharePageUrl: page, text })).toContain(
+      encodeURIComponent(page),
+    );
+    const pin = buildSocialIntentUrl("pinterest", {
+      sharePageUrl: page,
+      text,
+      posterUrl: poster,
+    });
+    expect(pin).toContain("pinterest.com/pin/create/button");
+    expect(pin).toContain(encodeURIComponent(page));
+    expect(pin).toContain(encodeURIComponent(poster));
+  });
+
+  it("refuses social intents when only a CDN MP4 exists", () => {
+    expect(movieSocialShareUrl("facebook", sampleMovie())).toBeNull();
+    expect(moviePublicShareUrl(sampleMovie())).toBeNull();
+  });
+
+  it("keeps Instagram and TikTok as non-link networks", () => {
+    expect(movieSocialUsesPublicLink("instagram")).toBe(false);
+    expect(movieSocialUsesPublicLink("facebook")).toBe(true);
   });
 
   it("includes product name in share text", () => {
     expect(movieShareText(sampleMovie())).toMatch(/Family Memory Vault/);
   });
 
-  it("builds Facebook sharer.php with the public share page URL", () => {
-    const movie = sampleMovie({
-      shareUrl: "https://app.example/share/m/tok123",
-    });
-    const href = movieSocialShareUrl("facebook", movie);
-    expect(href).toBe(
-      "https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fapp.example%2Fshare%2Fm%2Ftok123",
-    );
-    expect(movieSocialUsesPublicLink("facebook")).toBe(true);
-  });
-
-  it("refuses Facebook share when only a CDN MP4 URL exists", () => {
-    expect(movieSocialShareUrl("facebook", sampleMovie())).toBeNull();
-  });
-
-  it("keeps Instagram and TikTok as non-link networks", () => {
-    const movie = sampleMovie({
-      shareUrl: "https://app.example/share/m/tok",
-    });
-    expect(movieSocialShareUrl("instagram", movie)).toBeNull();
-    expect(movieSocialShareUrl("tiktok", movie)).toBeNull();
-    expect(movieSocialUsesPublicLink("instagram")).toBe(false);
-  });
-
-  it("reports blocked when window.open returns null", () => {
-    vi.stubGlobal("window", {
-      open: () => null,
-    });
-    expect(
-      navigateShareTab("https://www.facebook.com/sharer/sharer.php?u=x"),
-    ).toEqual({ opened: false, blocked: true });
-    expect(
-      tryOpenExternalUrl("https://www.facebook.com/sharer/sharer.php?u=x"),
-    ).toEqual({ opened: false, blocked: true });
-  });
-
-  it("navigates a pre-opened blank tab", () => {
+  it("navigates a placeholder tab to the intent URL", () => {
     const fakeWin = {
       closed: false,
       focus: vi.fn(),
-      location: { href: "about:blank", assign: vi.fn() },
-      opener: {} as Window | null,
+      location: { href: "about:blank", replace: vi.fn() },
     };
-    vi.stubGlobal("window", {
-      open: () => null,
-    });
-    // Prefer assign when present.
-    fakeWin.location.assign = vi.fn((url: string) => {
-      fakeWin.location.href = url;
-    });
-    const result = navigateShareTab(
+    vi.stubGlobal("window", { open: () => null });
+    const result = navigateShareIntent(
       "https://www.facebook.com/sharer/sharer.php?u=x",
       fakeWin as unknown as Window,
     );
-    expect(result).toEqual({ opened: true, blocked: false });
-    expect(fakeWin.location.assign).toHaveBeenCalled();
-    expect(fakeWin.location.href).toContain("facebook.com/sharer");
+    expect(result.opened).toBe(true);
+    expect(fakeWin.location.replace).toHaveBeenCalled();
   });
 
-  it("openBlankShareTab returns the window from window.open", () => {
-    const fakeWin = { closed: false };
-    vi.stubGlobal("window", {
-      open: () => fakeWin,
-    });
-    expect(openBlankShareTab()).toBe(fakeWin);
+  it("reports blocked when placeholder and window.open both fail", () => {
+    vi.stubGlobal("window", { open: () => null });
+    expect(
+      navigateShareIntent("https://www.facebook.com/sharer/sharer.php?u=x", null),
+    ).toEqual({ opened: false, blocked: true });
   });
 
-  it("openMovieSocialShare returns false when the tab is blocked", () => {
-    vi.stubGlobal("window", {
-      open: () => null,
-    });
-    const movie = sampleMovie({
-      shareUrl: "https://app.example/share/m/tok",
-    });
-    expect(openMovieSocialShare("facebook", movie)).toBe(false);
-  });
-});
-
-describe("photo request presets", () => {
-  it("keeps wedding-photos example as the default", () => {
-    expect(DEFAULT_PHOTO_REQUEST_MESSAGE).toMatch(/wedding photos/i);
-    expect(PHOTO_REQUEST_PRESETS[0]).toBe(DEFAULT_PHOTO_REQUEST_MESSAGE);
+  it("openShareIntentPlaceholder returns the window", () => {
+    const fakeWin = {
+      closed: false,
+      document: { open: vi.fn(), write: vi.fn(), close: vi.fn() },
+    };
+    vi.stubGlobal("window", { open: () => fakeWin });
+    expect(openShareIntentPlaceholder()).toBe(fakeWin);
   });
 });

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireMemoryApiUser } from "@/lib/memories/http";
 import { MovieError } from "@/lib/movies/errors";
-import { ensureMovieShareLink } from "@/lib/movies/public-share";
+import { ensureMovieShareLink, buildMovieSharePosterUrl } from "@/lib/movies/public-share";
 import { movieApiErrorResponse } from "@/lib/movies/serialize";
 
 type RouteContext = {
@@ -29,6 +29,7 @@ export async function POST(_request: Request, context: RouteContext) {
     return NextResponse.json({
       shareUrl: result.shareUrl,
       token: result.share.token,
+      posterUrl: buildMovieSharePosterUrl(result.share.token),
       created: result.created,
     });
   } catch (error) {

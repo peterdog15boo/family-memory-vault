@@ -484,9 +484,11 @@ export const enUS = {
     noteSocialFailed: "Couldn’t open that share page. Try Copy link or Download.",
     noteFacebookOpened: "Facebook opened in a new tab with your movie link.",
     noteSocialOpened: "Share page opened in a new tab.",
+    noteSocialOpenedNamed: "{network} opened in a new tab with your movie link.",
     noteFacebookCopyFallback: "Link copied. Paste it into Facebook.",
     noteSocialCopyFallback:
       "Link copied. Paste it into the app to share your movie.",
+    noteSocialCopyNamed: "Link copied. Paste it into {network}.",
     noteFacebookReadyRetry:
       "Share link ready — tap Facebook again to open the share dialog.",
     noteSocialReadyRetry:

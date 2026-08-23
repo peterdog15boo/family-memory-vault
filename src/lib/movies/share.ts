@@ -44,12 +44,24 @@ export function movieShareUrl(movie: SerializedMovie): string | null {
 }
 
 /**
- * Durable public share page only — required for Facebook / X / Pinterest intents.
- * Never returns signed CDN MP4 URLs (crawlers reject those and Facebook lands on home).
+ * Durable public share page only — required for Facebook / X / Pinterest.
+ * Never returns signed CDN MP4 URLs.
  */
 export function moviePublicShareUrl(movie: SerializedMovie): string | null {
   const url = movie.shareUrl?.trim();
   return url || null;
+}
+
+/** Extract share token from /share/movies/{token} or legacy /share/m/{token}. */
+export function movieShareTokenFromUrl(shareUrl: string | null | undefined): string | null {
+  if (!shareUrl?.trim()) return null;
+  try {
+    const path = new URL(shareUrl, "https://example.invalid").pathname;
+    const match = /\/share\/(?:movies|m)\/([^/]+)\/?$/.exec(path);
+    return match?.[1] ? decodeURIComponent(match[1]) : null;
+  } catch {
+    return null;
+  }
 }
 
 export type MovieSocialNetwork =
@@ -59,54 +71,82 @@ export type MovieSocialNetwork =
   | "instagram"
   | "tiktok";
 
-/** Networks that compose a post from a public link (not file upload). */
 export function movieSocialUsesPublicLink(
   network: MovieSocialNetwork,
 ): boolean {
   return network === "facebook" || network === "x" || network === "pinterest";
 }
 
-/**
- * Build a share intent URL where the platform supports link sharing.
- * Instagram and TikTok have no public web share endpoint for videos —
- * callers should download + open the app instead.
- *
- * Facebook / X / Pinterest require a durable public share page URL.
- */
-export function movieSocialShareUrl(
-  network: MovieSocialNetwork,
-  movie: SerializedMovie,
-): string | null {
-  if (network === "instagram" || network === "tiktok") {
-    return null;
+export function movieSocialNetworkLabel(network: MovieSocialNetwork): string {
+  switch (network) {
+    case "facebook":
+      return "Facebook";
+    case "x":
+      return "X";
+    case "pinterest":
+      return "Pinterest";
+    case "instagram":
+      return "Instagram";
+    case "tiktok":
+      return "TikTok";
   }
+}
 
-  const url = moviePublicShareUrl(movie);
-  if (!url) return null;
-  const text = movieShareText(movie);
+export type SocialIntentInput = {
+  /** Absolute public share page URL (never a signed R2 MP4). */
+  sharePageUrl: string;
+  text: string;
+  /** Absolute poster URL for Pinterest (and OG). */
+  posterUrl?: string | null;
+};
+
+/**
+ * Build platform intent URLs that share the public movie page.
+ */
+export function buildSocialIntentUrl(
+  network: Exclude<MovieSocialNetwork, "instagram" | "tiktok">,
+  input: SocialIntentInput,
+): string {
+  const page = input.sharePageUrl.trim();
+  const text = input.text.trim();
 
   switch (network) {
     case "facebook":
-      // Official web share dialog — populates the composer with `u`.
-      return `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
+      return `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(page)}`;
     case "x":
-      return `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
+      return `https://twitter.com/intent/tweet?url=${encodeURIComponent(page)}&text=${encodeURIComponent(text)}`;
     case "pinterest": {
       const params = new URLSearchParams({
-        url,
+        url: page,
         description: text,
       });
-      if (movie.thumbnailUrl) params.set("media", movie.thumbnailUrl);
+      if (input.posterUrl?.trim()) {
+        params.set("media", input.posterUrl.trim());
+      }
       return `https://www.pinterest.com/pin/create/button/?${params.toString()}`;
     }
   }
 }
 
-export type TryOpenExternalUrlResult = {
-  opened: boolean;
-  /** True when the browser blocked the new tab/window. */
-  blocked: boolean;
-};
+/** @deprecated Prefer buildSocialIntentUrl with an explicit share page URL. */
+export function movieSocialShareUrl(
+  network: MovieSocialNetwork,
+  movie: SerializedMovie,
+  posterUrl?: string | null,
+): string | null {
+  if (network === "instagram" || network === "tiktok") return null;
+  const page = moviePublicShareUrl(movie);
+  if (!page) return null;
+  return buildSocialIntentUrl(network, {
+    sharePageUrl: page,
+    text: movieShareText(movie),
+    posterUrl:
+      posterUrl ??
+      (movieShareTokenFromUrl(page)
+        ? undefined
+        : movie.thumbnailUrl),
+  });
+}
 
 const SHARE_LOG = "[movie.share]";
 
@@ -114,223 +154,92 @@ export function logMovieShare(
   message: string,
   details?: Record<string, unknown>,
 ): void {
-  if (details) {
-    console.info(SHARE_LOG, message, details);
-  } else {
-    console.info(SHARE_LOG, message);
-  }
+  if (details) console.info(SHARE_LOG, message, details);
+  else console.info(SHARE_LOG, message);
 }
 
 /**
- * Open a blank tab under the current user gesture.
- * Must be called synchronously from a click handler (before await/setState).
+ * Open a placeholder tab under the user gesture.
+ * Writes a tiny loading doc so the tab is not an empty about:blank flash.
  */
-export function openBlankShareTab(): Window | null {
+export function openShareIntentPlaceholder(): Window | null {
   if (typeof window === "undefined") return null;
   try {
     const win = window.open("about:blank", "_blank");
-    logMovieShare("openBlankShareTab", {
-      opened: Boolean(win),
-      closed: win?.closed ?? null,
-    });
+    if (!win) {
+      logMovieShare("placeholder:blocked");
+      return null;
+    }
+    try {
+      win.document.open();
+      win.document.write(
+        `<!doctype html><html><head><meta charset="utf-8"><title>Opening share…</title></head><body style="margin:0;font:15px/1.4 system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;background:#111;color:#eee">Opening share…</body></html>`,
+      );
+      win.document.close();
+    } catch {
+      // Some browsers restrict document write on the new tab — still usable.
+    }
+    logMovieShare("placeholder:opened");
     return win;
   } catch (err) {
-    console.error(SHARE_LOG, "openBlankShareTab failed", err);
+    console.error(SHARE_LOG, "placeholder open failed", err);
     return null;
   }
 }
 
 /**
- * Navigate a previously opened tab (or open a fresh tab) to href.
- * Prefer navigating a gesture-captured blank tab — that survives async work.
+ * Point a gesture-captured tab at the social intent URL.
+ * Never closes the tab on success (closing caused flash-and-return).
  */
-export function navigateShareTab(
+export function navigateShareIntent(
   href: string,
-  targetWindow?: Window | null,
-): TryOpenExternalUrlResult {
+  placeholder: Window | null,
+): { opened: boolean; blocked: boolean } {
   if (!href || typeof window === "undefined") {
     return { opened: false, blocked: true };
   }
 
-  if (targetWindow && !targetWindow.closed) {
+  if (placeholder && !placeholder.closed) {
     try {
-      const loc = targetWindow.location as Location & {
-        assign?: (url: string) => void;
-      };
-      if (typeof loc.assign === "function") {
-        loc.assign(href);
-      } else {
-        loc.href = href;
-      }
-      targetWindow.focus();
-      logMovieShare("navigateShareTab via placeholder", { href });
-      return { opened: true, blocked: false };
-    } catch (err) {
-      console.error(SHARE_LOG, "navigateShareTab placeholder failed", err);
-    }
-  }
-
-  // Plain _blank tab (no size features) — less likely treated as a blocked popup.
-  try {
-    const win = window.open(href, "_blank");
-    if (win) {
+      placeholder.location.replace(href);
       try {
-        win.opener = null;
+        placeholder.focus();
       } catch {
         // ignore
       }
-      logMovieShare("navigateShareTab via window.open", { href });
+      logMovieShare("intent:navigated", { href });
+      return { opened: true, blocked: false };
+    } catch (err) {
+      console.error(SHARE_LOG, "intent navigate failed", err);
+    }
+  }
+
+  try {
+    const win = window.open(href, "_blank");
+    if (win) {
+      logMovieShare("intent:windowOpen", { href });
       return { opened: true, blocked: false };
     }
   } catch (err) {
-    console.error(SHARE_LOG, "window.open failed", err);
+    console.error(SHARE_LOG, "intent window.open failed", err);
   }
 
-  logMovieShare("navigateShareTab blocked", { href });
+  logMovieShare("intent:blocked", { href });
   return { opened: false, blocked: true };
-}
-
-/**
- * @deprecated Prefer navigateShareTab / openBlankShareTab.
- */
-export function tryOpenExternalUrl(
-  href: string,
-  targetWindow?: Window | null,
-): TryOpenExternalUrlResult {
-  return navigateShareTab(href, targetWindow);
-}
-
-/**
- * @deprecated Prefer navigateShareTab.
- */
-export function openMovieSocialShare(
-  network: MovieSocialNetwork,
-  movie: SerializedMovie,
-  options?: { targetWindow?: Window | null },
-): boolean {
-  const href = movieSocialShareUrl(network, movie);
-  if (!href) return false;
-  return navigateShareTab(href, options?.targetWindow).opened;
-}
-
-export type SocialShareEnsuredResult = {
-  ok: boolean;
-  opened: boolean;
-  blocked: boolean;
-  copied: boolean;
-  movie: SerializedMovie;
-  shareUrl: string | null;
-  error?: "no_share_url" | "copy_failed";
-};
-
-/**
- * Ensure a durable public share link exists, then open the network composer.
- * Caller should pass a blank Window opened synchronously on click when possible.
- */
-export async function openMovieSocialShareEnsured(
-  network: MovieSocialNetwork,
-  movie: SerializedMovie,
-  ensureShareUrl: () => Promise<SerializedMovie>,
-  preOpenedTab?: Window | null,
-): Promise<SocialShareEnsuredResult> {
-  if (network === "instagram" || network === "tiktok") {
-    return {
-      ok: false,
-      opened: false,
-      blocked: false,
-      copied: false,
-      movie,
-      shareUrl: null,
-      error: "no_share_url",
-    };
-  }
-
-  let placeholder = preOpenedTab ?? null;
-  const alreadyPublic = Boolean(moviePublicShareUrl(movie));
-  if (typeof window !== "undefined" && !placeholder) {
-    placeholder = openBlankShareTab();
-  }
-
-  let ready = movie;
-  try {
-    if (!alreadyPublic) {
-      ready = await ensureShareUrl();
-    }
-  } catch (err) {
-    console.error(SHARE_LOG, "ensureShareUrl failed", err);
-    if (placeholder && !placeholder.closed) placeholder.close();
-    return {
-      ok: false,
-      opened: false,
-      blocked: false,
-      copied: false,
-      movie,
-      shareUrl: null,
-      error: "no_share_url",
-    };
-  }
-
-  const shareUrl = moviePublicShareUrl(ready);
-  const href = shareUrl ? movieSocialShareUrl(network, ready) : null;
-  if (!shareUrl || !href) {
-    if (placeholder && !placeholder.closed) placeholder.close();
-    return {
-      ok: false,
-      opened: false,
-      blocked: false,
-      copied: false,
-      movie: ready,
-      shareUrl: null,
-      error: "no_share_url",
-    };
-  }
-
-  const { opened, blocked } = navigateShareTab(href, placeholder);
-  if (opened) {
-    return {
-      ok: true,
-      opened: true,
-      blocked: false,
-      copied: false,
-      movie: ready,
-      shareUrl,
-    };
-  }
-
-  if (placeholder && !placeholder.closed) {
-    try {
-      placeholder.close();
-    } catch {
-      // ignore
-    }
-  }
-
-  const copied = await copyMovieShareLink(ready);
-  return {
-    ok: copied,
-    opened: false,
-    blocked,
-    copied,
-    movie: ready,
-    shareUrl,
-    error: copied ? undefined : "copy_failed",
-  };
 }
 
 export async function copyMovieShareLink(
   movie: SerializedMovie,
 ): Promise<boolean> {
   const url = moviePublicShareUrl(movie) || movieShareUrl(movie);
-  if (!url || typeof navigator === "undefined") {
-    return false;
-  }
+  if (!url || typeof navigator === "undefined") return false;
   try {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(url);
       return true;
     }
   } catch {
-    // Fall through to execCommand fallback.
+    // fall through
   }
   try {
     const input = document.createElement("textarea");
@@ -348,10 +257,128 @@ export async function copyMovieShareLink(
   }
 }
 
+export async function copyTextToClipboard(text: string): Promise<boolean> {
+  if (!text || typeof navigator === "undefined") return false;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // fall through
+  }
+  try {
+    const input = document.createElement("textarea");
+    input.value = text;
+    input.setAttribute("readonly", "");
+    input.style.position = "fixed";
+    input.style.left = "-9999px";
+    document.body.appendChild(input);
+    input.select();
+    const ok = document.execCommand("copy");
+    input.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Best-effort Web Share API with file attachment; falls back to opening the
- * download URL. Safe to call from the browser only.
+ * Full social share open flow for Facebook / X / Pinterest.
+ * Call openShareIntentPlaceholder() synchronously on click first, then this.
  */
+export async function completeSocialShareIntent(input: {
+  network: Exclude<MovieSocialNetwork, "instagram" | "tiktok">;
+  placeholder: Window | null;
+  ensureSharePage: () => Promise<{
+    sharePageUrl: string;
+    posterUrl: string | null;
+    text: string;
+  }>;
+}): Promise<{
+  opened: boolean;
+  copied: boolean;
+  sharePageUrl: string | null;
+  error?: string;
+}> {
+  const { network, placeholder } = input;
+  try {
+    const ready = await input.ensureSharePage();
+    const href = buildSocialIntentUrl(network, {
+      sharePageUrl: ready.sharePageUrl,
+      text: ready.text,
+      posterUrl: ready.posterUrl,
+    });
+    const nav = navigateShareIntent(href, placeholder);
+    if (nav.opened) {
+      return {
+        opened: true,
+        copied: false,
+        sharePageUrl: ready.sharePageUrl,
+      };
+    }
+    // Popup blocked — do NOT close a successful tab; placeholder may be null.
+    if (placeholder && !placeholder.closed) {
+      try {
+        placeholder.close();
+      } catch {
+        // ignore
+      }
+    }
+    const copied = await copyTextToClipboard(ready.sharePageUrl);
+    return {
+      opened: false,
+      copied,
+      sharePageUrl: ready.sharePageUrl,
+      error: copied ? undefined : "copy_failed",
+    };
+  } catch (err) {
+    console.error(SHARE_LOG, "completeSocialShareIntent failed", network, err);
+    if (placeholder && !placeholder.closed) {
+      try {
+        placeholder.close();
+      } catch {
+        // ignore
+      }
+    }
+    return {
+      opened: false,
+      copied: false,
+      sharePageUrl: null,
+      error: err instanceof Error ? err.message : "share_failed",
+    };
+  }
+}
+
+/** Legacy aliases used by older tests/callers. */
+export function openBlankShareTab(): Window | null {
+  return openShareIntentPlaceholder();
+}
+
+export function navigateShareTab(
+  href: string,
+  targetWindow?: Window | null,
+): { opened: boolean; blocked: boolean } {
+  return navigateShareIntent(href, targetWindow ?? null);
+}
+
+export function tryOpenExternalUrl(
+  href: string,
+  targetWindow?: Window | null,
+): { opened: boolean; blocked: boolean } {
+  return navigateShareIntent(href, targetWindow ?? null);
+}
+
+export function openMovieSocialShare(
+  network: MovieSocialNetwork,
+  movie: SerializedMovie,
+  options?: { targetWindow?: Window | null },
+): boolean {
+  const href = movieSocialShareUrl(network, movie);
+  if (!href) return false;
+  return navigateShareIntent(href, options?.targetWindow ?? null).opened;
+}
+
 export async function shareMovieFile(movie: SerializedMovie): Promise<boolean> {
   const url = movie.downloadUrl || movie.playUrl || movieShareUrl(movie);
   if (!url || typeof window === "undefined") return false;
@@ -380,7 +407,7 @@ export async function shareMovieFile(movie: SerializedMovie): Promise<boolean> {
         }
       }
     } catch {
-      // Fall through to URL share / download.
+      // fall through
     }
 
     const pageUrl = moviePublicShareUrl(movie);
@@ -393,7 +420,7 @@ export async function shareMovieFile(movie: SerializedMovie): Promise<boolean> {
         });
         return true;
       } catch {
-        // User cancel or unsupported — open download.
+        // cancel
       }
     }
   }
@@ -409,7 +436,6 @@ export async function shareMovieFile(movie: SerializedMovie): Promise<boolean> {
   return true;
 }
 
-/** Trigger a direct file download in the browser. */
 export function downloadMovieFile(movie: SerializedMovie): boolean {
   const url = movie.downloadUrl || movie.playUrl;
   if (!url || typeof document === "undefined") return false;

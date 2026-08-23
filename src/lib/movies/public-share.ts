@@ -14,6 +14,16 @@ import { serializeMovie, type SerializedMovie } from "@/lib/movies/serialize";
 const SHARE_TOKEN_BYTES = 21;
 
 export function buildMovieSharePageUrl(token: string): string {
+  // Stable public page (opaque token — not the internal movie id).
+  const url = new URL(
+    `/share/movies/${encodeURIComponent(token)}`,
+    getAppUrl(),
+  );
+  return url.toString();
+}
+
+/** Legacy path kept for old copied links. */
+export function buildLegacyMovieSharePageUrl(token: string): string {
   const url = new URL(`/share/m/${encodeURIComponent(token)}`, getAppUrl());
   return url.toString();
 }
