@@ -755,7 +755,6 @@ export function CreateMoviePanel({
                 <ul className="mt-3 space-y-1.5 text-sm text-ink-muted">
                   <li>{t("movie.simpleModeBulletSlideshow")}</li>
                   <li>{t("movie.simpleModeBulletMedia", { count: mediaCount })}</li>
-                  <li>{t("movie.simpleModeBulletTitle")}</li>
                 </ul>
               </div>
 
