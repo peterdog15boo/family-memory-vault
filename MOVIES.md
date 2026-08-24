@@ -52,7 +52,7 @@ Default export is **1080p** (social-ready). Aspect presets: **16:9**, **1:1**, *
 
 Pipeline: sharp frames (display/original stills, **Lanczos** scale, **duration-driven Ken Burns** at encode fps with **face-aware focal framing** when People/face boxes exist + **cinematic color filter** grade) → **baked clip transitions** (`src/lib/movies/transitions.ts`, sampled at encode fps) → ffmpeg libx264 (`yuv420p`, Rec.709 tags, `+faststart`, lanczos `scale` + `fps=` filter so concat durations are honored) → optional **soundtrack mix** (library or upload: loop, fade in/out, soft ducking when video audio exists) → R2. Each ready movie also gets a composed poster JPEG (up to 1920 long-edge, high-quality JPEG).
 
-Set `MOVIE_FAST_RENDER=true` only when you need a temporary speed override (forces `fast`).
+Set `MOVIE_FAST_RENDER=true` only when you need a temporary speed override (forces `fast` encode profile — shorter still durations / leaner decode). It does **not** silently drop Memory photos.
 
 ### Color filters
 
@@ -140,7 +140,7 @@ Requires `ffmpeg-static` (installed with npm). Path resolution avoids Next’s b
 - **Not family-shared** — movies do not appear for co-members.
 - **Ultra 4K** is plan-gated (`priorityRender`) and slower to render.
 - **Serverless timeouts** — large albums / 4K should use `npm run worker:movies`, not only the API drain.
-- **No AI highlight selection** yet — clips follow memory sort order (capped).
+- **No AI highlight selection** yet — clips follow memory sort order and include **all** usable clean/ready media in the Memory (visual timeline is the source of truth; music loops/pads to match). An absolute runaway guard (~250) only applies to pathological albums.
 
 ---
 

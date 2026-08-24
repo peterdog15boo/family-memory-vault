@@ -487,6 +487,24 @@ async function loadGenerationContext(
 }
 
 /**
+ * Absolute runaway guard only — pathological album sizes.
+ * Normal Memory movies include every usable clean/ready clip (no silent 12/40 caps).
+ */
+export const MEMORY_MOVIE_ABSOLUTE_MAX_CLIPS = 250;
+
+/**
+ * Clip inclusion policy for Memory → movie.
+ * Visual timeline is the source of truth: do not truncate to music length or
+ * an arbitrary fast-mode half-set. Theme `maxClips` is advisory only.
+ */
+export function resolveMemoryMovieClipCap(_options?: {
+  fast?: boolean;
+  themeMaxClips?: number;
+}): number {
+  return MEMORY_MOVIE_ABSOLUTE_MAX_CLIPS;
+}
+
+/**
  * Load only clean+ready media linked to the memory, in album order.
  * Includes family-shared media the memory owner can access.
  * Photos and videos are both eligible for the movie timeline.
@@ -563,23 +581,44 @@ async function selectAndOrderClips(
         2800,
       )
     : ctx.settings.photoDurationMs || ctx.theme.timing.defaultClipDurationMs;
-  const maxClips = ctx.fast
-    ? Math.min(ctx.theme.timing.maxClips, 12)
-    : ctx.theme.timing.maxClips;
+  const maxClips = resolveMemoryMovieClipCap({
+    fast: ctx.fast,
+    themeMaxClips: ctx.theme.timing.maxClips,
+  });
+
+  if (links.length > maxClips) {
+    console.error("[movies] Memory media exceeds absolute clip guard — truncating", {
+      movieId: ctx.movie.id,
+      memoryId: ctx.memoryId,
+      memoryMediaCount: links.length,
+      absoluteMax: maxClips,
+    });
+  } else if (links.length > ctx.theme.timing.maxClips) {
+    console.info("[movies] Including all Memory media (above legacy theme maxClips)", {
+      movieId: ctx.movie.id,
+      memoryMediaCount: links.length,
+      legacyThemeMaxClips: ctx.theme.timing.maxClips,
+    });
+  }
 
   const clips: MovieClip[] = [];
   const photoMediaRows: Media[] = [];
   const framingMediaRows: Media[] = [];
+  let skippedUnrenderable = 0;
   for (const link of links) {
     if (clips.length >= maxClips) break;
 
     if (isMovieVideoMedia(link.media)) {
       const sourceKey = pickVideoKey(link.media);
-      if (!sourceKey) continue;
+      if (!sourceKey) {
+        skippedUnrenderable += 1;
+        continue;
+      }
       if (isQuarantineKey(sourceKey)) {
         console.warn("[movies] Skipping quarantined video key", {
           mediaId: link.media.id,
         });
+        skippedUnrenderable += 1;
         continue;
       }
       framingMediaRows.push(link.media);
@@ -601,11 +640,15 @@ async function selectAndOrderClips(
     }
 
     const sourceKey = pickStillKey(link.media);
-    if (!sourceKey) continue;
+    if (!sourceKey) {
+      skippedUnrenderable += 1;
+      continue;
+    }
     if (isQuarantineKey(sourceKey)) {
       console.warn("[movies] Skipping quarantined media key", {
         mediaId: link.media.id,
       });
+      skippedUnrenderable += 1;
       continue;
     }
 
@@ -629,6 +672,15 @@ async function selectAndOrderClips(
       { retryable: false },
     );
   }
+
+  console.info("[movies] Memory media → movie clips", {
+    movieId: ctx.movie.id,
+    memoryId: ctx.memoryId,
+    memoryMediaCount: links.length,
+    clipCount: clips.length,
+    skippedUnrenderable,
+    fast: ctx.fast,
+  });
 
   // Face framing for photos + videos (videos use faces for fill-frame bias).
   const framingMap = await resolveFramingForClips(framingMediaRows, ctx.userId);
@@ -679,7 +731,9 @@ async function selectAndOrderClips(
     });
   }
 
-  // Photos share remaining runtime after title + videos (videos keep natural length).
+  // Photos keep preferred duration; total runtime expands with the album.
+  // Never drop clips to fit targetDurationSeconds or music track length —
+  // music loops/pads to the visual timeline instead.
   const titleMs =
     ctx.settings.includeTitles && ctx.theme.text.showTitleCard
       ? Math.min(
@@ -696,13 +750,16 @@ async function selectAndOrderClips(
     .reduce((sum, c) => sum + c.durationMs, 0);
   const photoClips = clips.filter((c) => c.kind === "photo");
   if (photoClips.length > 0) {
+    const naturalPhotoMs = photoDurationMs * photoClips.length;
+    // Prefer natural pacing. Only stretch photos when the album is shorter
+    // than the target; never compress by omitting clips.
     const photoBudget = Math.max(
-      photoDurationMs * photoClips.length,
+      naturalPhotoMs,
       targetMs - titleMs - videoTotalMs,
     );
     const perClip = Math.max(
       1000,
-      Math.min(photoDurationMs, Math.floor(photoBudget / photoClips.length)),
+      Math.floor(photoBudget / photoClips.length),
     );
     for (const clip of photoClips) {
       clip.durationMs = perClip;

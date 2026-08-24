@@ -47,6 +47,8 @@ export {
   generateMovie,
   planMovieGeneration,
   loadCleanMemoryMedia,
+  MEMORY_MOVIE_ABSOLUTE_MAX_CLIPS,
+  resolveMemoryMovieClipCap,
   hashRenderPlan,
   pickMovieStillKey,
   pickMovieVideoKey,

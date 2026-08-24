@@ -105,7 +105,9 @@ export async function resolveMovieMusic(input: {
   const volume = clamp01(settings.musicVolume);
   const fadeInMs = settings.musicFadeInMs;
   const fadeOutMs = settings.musicFadeOutMs;
-  const loop = settings.musicLoop;
+  // Prefer looping so the soundtrack covers the full visual timeline (Memory
+  // movies can outlast a single ~45s library bed). Explicit false still pads.
+  const loop = settings.musicLoop !== false;
 
   const validation = validateMovieMusicSettings(settings);
   if (!validation.ok) {

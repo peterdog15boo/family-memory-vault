@@ -139,7 +139,7 @@ export type ThemeMotionConfig = {
 export type ThemeTimingConfig = {
   /** Default still duration when settings omit photoDurationMs. */
   defaultClipDurationMs: number;
-  /** Hard cap on stills so renders stay bounded. */
+  /** Soft advisory for UI; generator includes all Memory media up to an absolute guard. */
   maxClips: number;
 };
 
