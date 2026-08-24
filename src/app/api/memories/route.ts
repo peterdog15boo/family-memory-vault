@@ -18,7 +18,7 @@ const createBodySchema = z.object({
   description: z.string().trim().max(5000).nullable().optional(),
   type: z.enum(MEMORY_TYPES).optional(),
   coverMediaId: z.string().min(1).nullable().optional(),
-  /** Only clean/ready owned media will be linked; others are skipped. */
+  /** Clean/ready media the creator can view (own or family-shared). */
   mediaIds: z.array(z.string().min(1)).optional(),
 });
 
@@ -37,7 +37,7 @@ export async function GET() {
 
 /**
  * POST /api/memories — create a memory with optional clean media + cover.
- * Cover/members must be the caller's clean + ready media.
+ * Cover/members must be clean + ready media the caller can view (own or family-shared).
  */
 export async function POST(request: Request) {
   const authResult = await requireMemoryApiUser();

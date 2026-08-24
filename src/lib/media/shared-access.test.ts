@@ -23,13 +23,13 @@ describe("shared media access policy", () => {
     expect(filter).toBeTruthy();
   });
 
-  it("documents assign + Ask AI acceptance matrix", () => {
+  it("documents memory attach + Ask AI acceptance matrix", () => {
     const cases = [
-      { kind: "owner", assign: true, askAi: true },
-      { kind: "shared_family", assign: true, askAi: true },
-      { kind: "outsider", assign: false, askAi: false },
+      { kind: "owner", memoryAttach: true, askAi: true },
+      { kind: "shared_family", memoryAttach: true, askAi: true },
+      { kind: "outsider", memoryAttach: false, askAi: false },
     ] as const;
-    expect(cases.filter((c) => c.assign).map((c) => c.kind)).toEqual([
+    expect(cases.filter((c) => c.memoryAttach).map((c) => c.kind)).toEqual([
       "owner",
       "shared_family",
     ]);

@@ -24,9 +24,8 @@ const removeMediaBodySchema = z.object({
 });
 
 /**
- * POST /api/memories/[id]/media — attach clean/ready media owned by the caller.
- * Pending, rejected, adult, needs_human_review, and csam_quarantined ids are
- * never linked (skipped).
+ * POST /api/memories/[id]/media — attach clean/ready media the caller can view
+ * (own or family-shared). Unauthorized or unclean ids are rejected.
  */
 export async function POST(request: Request, context: RouteContext) {
   const authResult = await requireMemoryApiUser();

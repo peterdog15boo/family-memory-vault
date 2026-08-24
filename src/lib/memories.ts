@@ -2,9 +2,9 @@
  * Memory (album / story) helpers.
  *
  * SAFETY: every read path that returns media for a memory only includes items
- * with moderation_status = clean and status = ready. Writes that attach media
- * (cover or members) reject anything that is not clean + ready and accessible
- * to the memory owner (owned or family-shared).
+ * with moderation_status = clean and status = ready that the viewer can access
+ * (owned or family-shared). Writes that attach media (cover or members) reject
+ * anything that is not clean + ready and accessible to the editor.
  */
 
 import { and, asc, count, desc, eq, inArray, max } from "drizzle-orm";
@@ -24,8 +24,6 @@ import {
   type NewMemory,
 } from "@/lib/db/schema";
 import {
-  cleanReadyMediaFilter,
-  cleanReadyMediaOwnedByFilter,
   loadCleanAccessibleMediaByIds,
   toSafeMediaItem,
   type SafeMediaItem,
@@ -33,6 +31,7 @@ import {
 import {
   canEditMemory,
   canViewMemory,
+  getAccessibleMediaFilter,
   getAccessibleOwnerIds,
 } from "@/lib/permissions";
 import {
@@ -172,28 +171,6 @@ async function loadCleanOwnedMedia(
   return loadCleanAccessibleMediaByIds(userId, mediaIds);
 }
 
-/**
- * Load clean + ready media among ids for any of the given owners
- * (covers on shared family memories).
- */
-async function loadCleanMediaForOwners(
-  ownerIds: string[],
-  mediaIds: string[],
-): Promise<Media[]> {
-  if (mediaIds.length === 0 || ownerIds.length === 0) return [];
-
-  const db = getDb();
-  return db
-    .select()
-    .from(media)
-    .where(
-      and(
-        cleanReadyMediaOwnedByFilter(ownerIds),
-        inArray(media.id, mediaIds),
-      ),
-    );
-}
-
 async function resolveCover(
   userId: string,
   coverMediaId: string | null,
@@ -251,11 +228,22 @@ export async function createMemory(
   const id = nanoid();
 
   const coverMediaId: string | null = parsed.coverMediaId ?? null;
-  if (coverMediaId) {
-    const [cover] = await loadCleanOwnedMedia(parsed.userId, [coverMediaId]);
-    if (!cover) {
+  const requestedMediaIds = [
+    ...new Set(
+      [coverMediaId, ...(parsed.mediaIds ?? [])].filter(
+        (id): id is string => Boolean(id),
+      ),
+    ),
+  ];
+  if (requestedMediaIds.length > 0) {
+    const accessible = await loadCleanAccessibleMediaByIds(
+      parsed.userId,
+      requestedMediaIds,
+    );
+    if (accessible.length !== requestedMediaIds.length) {
       throw new MemoryError(
-        "Cover media must be clean / ready and accessible to you.",
+        "Every photo must be clean, ready, and visible to you (yours or shared family).",
+        { code: "validation" },
       );
     }
   }
@@ -308,12 +296,11 @@ export async function createMemory(
 }
 
 /**
- * Attach clean / ready media the memory owner can access
- * (owned or family-shared).
+ * Attach clean / ready media the editor can access (owned or family-shared).
  *
  * SAFETY: `userId` is required. Only media with moderation_status=clean and
- * status=ready that the user may view can be linked. Unclean, quarantined,
- * unauthorized, or unknown ids are skipped (never inserted).
+ * status=ready that the actor may view can be linked. Unclean, quarantined,
+ * unauthorized, or unknown ids are rejected (no silent drop of requested ids).
  */
 export async function addMediaToMemory(
   memoryId: string,
@@ -329,13 +316,25 @@ export async function addMediaToMemory(
     return { memoryId, addedMediaIds: [], skippedMediaIds: [] };
   }
 
-  // Ownership gate — non-owners get the same 404-style error (no leakage).
-  const memoryRow = await getOwnedMemory(memoryId, options.userId);
-  const ownerId = memoryRow.userId;
-  const db = getDb();
+  if (!(await canEditMemory(options.userId, memoryId))) {
+    throw new MemoryError("Memory not found.");
+  }
 
-  // Only clean + ready + accessible to this user may be linked.
-  const cleanRows = await loadCleanOwnedMedia(ownerId, uniqueIds);
+  const db = getDb();
+  const [memoryRow] = await db
+    .select({ id: memories.id })
+    .from(memories)
+    .where(eq(memories.id, memoryId))
+    .limit(1);
+  if (!memoryRow) {
+    throw new MemoryError("Memory not found.");
+  }
+
+  // Actor access — same rule as the picker (own + family-shared clean/ready).
+  const cleanRows = await loadCleanAccessibleMediaByIds(
+    options.userId,
+    uniqueIds,
+  );
   const cleanIds = new Set(cleanRows.map((r) => r.id));
 
   const existing = await db
@@ -352,14 +351,25 @@ export async function addMediaToMemory(
   const toAdd = uniqueIds.filter(
     (id) => cleanIds.has(id) && !alreadyLinked.has(id),
   );
-  const skippedMediaIds = uniqueIds.filter((id) => !toAdd.includes(id));
+  const unauthorizedOrUnclean = uniqueIds.filter(
+    (id) => !cleanIds.has(id) && !alreadyLinked.has(id),
+  );
+
+  if (unauthorizedOrUnclean.length > 0) {
+    throw new MemoryError(
+      "Some photos could not be added. Only clean, ready photos you can view (yours or shared family) can be linked.",
+      { code: "validation" },
+    );
+  }
+
+  const skippedMediaIds = uniqueIds.filter((id) => alreadyLinked.has(id));
 
   if (toAdd.length === 0) {
     return { memoryId, addedMediaIds: [], skippedMediaIds };
   }
 
   // Defense in depth: never insert an id that failed the clean gate.
-  const verified = await loadCleanOwnedMedia(ownerId, toAdd);
+  const verified = await loadCleanAccessibleMediaByIds(options.userId, toAdd);
   if (verified.length !== toAdd.length) {
     throw new MemoryError(
       "One or more media items are not clean / ready and cannot be added.",
@@ -441,7 +451,8 @@ export async function removeMediaFromMemory(
 
 /**
  * Load one memory the viewer can access (own or shared family), with clean/ready
- * media only. Returns null when missing or not viewable.
+ * media only — including family-shared items linked into the album.
+ * Returns null when missing or not viewable.
  */
 export async function getMemoryWithMedia(
   memoryId: string,
@@ -458,6 +469,11 @@ export async function getMemoryWithMedia(
   if (!row) return null;
   if (!(await canViewMemory(userId, memoryId))) return null;
 
+  // Same visibility rule as the picker: clean/ready media the viewer can see
+  // (owned or family-shared). Do not restrict to memory.owner user_id — that
+  // drops shared family photos that were correctly linked in memory_media.
+  const accessFilter = await getAccessibleMediaFilter(userId);
+
   const links = await db
     .select({
       media: media,
@@ -467,13 +483,7 @@ export async function getMemoryWithMedia(
     })
     .from(memoryMedia)
     .innerJoin(media, eq(memoryMedia.mediaId, media.id))
-    .where(
-      and(
-        eq(memoryMedia.memoryId, memoryId),
-        // SAFETY GATE — clean + ready media owned by the memory owner
-        cleanReadyMediaFilter(row.userId),
-      ),
-    )
+    .where(and(eq(memoryMedia.memoryId, memoryId), accessFilter))
     .orderBy(asc(memoryMedia.sortOrder), asc(memoryMedia.addedAt));
 
   const mediaItems: MemoryMediaItem[] = [];
@@ -503,11 +513,11 @@ export async function getMemoryWithMedia(
         previewUrl: coverFromList.previewUrl,
         hasThumbnail: coverFromList.hasThumbnail,
       }
-    : await resolveCover(row.userId, row.coverMediaId);
+    : await resolveCover(userId, row.coverMediaId);
 
   return {
     ...memoryBaseFields(row),
-    // Hide unclean cover id from clients so UI never tries to load it.
+    // Hide unclean / inaccessible cover id from clients so UI never tries to load it.
     coverMediaId: coverSafe ? row.coverMediaId : null,
     cover: coverSafe,
     media: mediaItems,
@@ -569,9 +579,9 @@ async function buildMemoryListItems(options: {
   if (rows.length === 0) return [];
 
   const memoryIds = rows.map((r) => r.id);
-  const memoryOwnerIds = [...new Set(rows.map((r) => r.userId))];
 
-  // Clean-only member counts — do not scope to viewer; media belongs to memory owners.
+  // Count all clean/ready linked media — including family-shared items attached
+  // to the album (not only media owned by the memory owner).
   const countRows = await db
     .select({
       memoryId: memoryMedia.memoryId,
@@ -582,7 +592,6 @@ async function buildMemoryListItems(options: {
     .where(
       and(
         inArray(memoryMedia.memoryId, memoryIds),
-        inArray(media.userId, memoryOwnerIds),
         eq(media.moderationStatus, "clean"),
         eq(media.status, "ready"),
       ),
@@ -597,9 +606,10 @@ async function buildMemoryListItems(options: {
     .map((r) => r.coverMediaId)
     .filter((id): id is string => Boolean(id));
 
+  // Covers may be family-shared media the viewer can see — not only owner media.
   const coverRows =
     coverIds.length > 0
-      ? await loadCleanMediaForOwners(memoryOwnerIds, coverIds)
+      ? await loadCleanAccessibleMediaByIds(viewerId, coverIds)
       : [];
   const coverById = new Map(
     (
@@ -872,7 +882,7 @@ export async function setMemoryCover(
   const [cover] = await loadCleanOwnedMedia(userId, [coverMediaId]);
   if (!cover) {
     throw new MemoryError(
-      "Cover media must belong to you and be clean / ready.",
+      "Cover media must be clean / ready and accessible to you.",
     );
   }
 
