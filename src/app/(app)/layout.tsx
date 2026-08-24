@@ -14,6 +14,13 @@ import { canUseLegacyPlusFeatures } from "@/lib/plans/gates";
 import { ensureAppUser } from "@/lib/users";
 
 /**
+ * User-specific shell (auth, unread badge, Ava). Must not serve a cached
+ * layout RSC after mark-read — that resurrects the header badge when
+ * returning from Admin (separate route group remounts this layout).
+ */
+export const dynamic = "force-dynamic";
+
+/**
  * Resolve a display name without hard-failing the whole app shell.
  * `currentUser()` can throw (Clerk API / TLS / rate limits) during
  * re-renders after mutations — fall back gracefully.

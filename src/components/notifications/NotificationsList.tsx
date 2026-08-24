@@ -85,6 +85,8 @@ export function NotificationsList({ initialItems }: Props) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
+    // Keep header badge seed in sync when leaving for Admin and returning.
+    startTransition(() => router.refresh());
   }
 
   async function handleMarkAllRead() {
@@ -96,6 +98,7 @@ export function NotificationsList({ initialItems }: Props) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ all: true }),
     });
+    startTransition(() => router.refresh());
   }
 
   function handleClick(item: NotificationItem) {

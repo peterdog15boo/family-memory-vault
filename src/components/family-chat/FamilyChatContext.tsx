@@ -117,8 +117,9 @@ export function FamilyChatProvider({ children }: { children: ReactNode }) {
     }
 
     function applyHash() {
-      const target = parseOpenTargetFromHash(window.location.hash);
-      if (!target.threadId && !target.familyId) return;
+      const hash = window.location.hash;
+      if (!hash.includes("family-chat")) return;
+      const target = parseOpenTargetFromHash(hash);
       openFamilyChat(target);
       const url = new URL(window.location.href);
       url.hash = "";

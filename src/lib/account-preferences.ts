@@ -42,6 +42,7 @@ export const ACCOUNT_PREFERENCE_TOGGLE_KEYS = [
   "emailWeeklyDigest",
   "inAppWeeklyDigest",
   "productUpdatesEmail",
+  "emailFeatureTips",
   "idleTimeoutEnabled",
 ] as const satisfies readonly (keyof UserAccountPreferences)[];
 
@@ -62,6 +63,7 @@ export function resolveAccountPreferences(
 ): ResolvedAccountPreferences {
   const out: ResolvedAccountPreferences = {
     ...DEFAULT_USER_ACCOUNT_PREFERENCES,
+    lifecycleEmailsSent: [...DEFAULT_USER_ACCOUNT_PREFERENCES.lifecycleEmailsSent],
   };
   if (!raw || typeof raw !== "object") return out;
 
@@ -78,6 +80,16 @@ export function resolveAccountPreferences(
     out.lastWeeklyDigestAt = raw.lastWeeklyDigestAt;
   } else if (raw.lastWeeklyDigestAt === null) {
     out.lastWeeklyDigestAt = null;
+  }
+  if (typeof raw.lastLifecycleEmailAt === "string") {
+    out.lastLifecycleEmailAt = raw.lastLifecycleEmailAt;
+  } else if (raw.lastLifecycleEmailAt === null) {
+    out.lastLifecycleEmailAt = null;
+  }
+  if (Array.isArray(raw.lifecycleEmailsSent)) {
+    out.lifecycleEmailsSent = raw.lifecycleEmailsSent.filter(
+      (k): k is string => typeof k === "string" && k.trim().length > 0,
+    );
   }
   if (isAppLocale(raw.locale)) {
     out.locale = raw.locale;
@@ -167,6 +179,16 @@ export async function updateAccountPreferences(
   if (patch.lastWeeklyDigestAt !== undefined) {
     next.lastWeeklyDigestAt = patch.lastWeeklyDigestAt;
   }
+  if (patch.lastLifecycleEmailAt !== undefined) {
+    next.lastLifecycleEmailAt = patch.lastLifecycleEmailAt;
+  }
+  if (patch.lifecycleEmailsSent !== undefined) {
+    next.lifecycleEmailsSent = Array.isArray(patch.lifecycleEmailsSent)
+      ? patch.lifecycleEmailsSent.filter(
+          (k): k is string => typeof k === "string" && k.trim().length > 0,
+        )
+      : [];
+  }
   if (patch.locale !== undefined) {
     next.locale = isAppLocale(patch.locale) ? patch.locale : DEFAULT_LOCALE;
   }
@@ -190,7 +212,9 @@ export async function userAllowsEmail(
     | "family_invite"
     | "storage_warning"
     | "milestone"
-    | "weekly_digest",
+    | "weekly_digest"
+    | "feature_tips"
+    | "product_updates",
 ): Promise<boolean> {
   const prefs = await getAccountPreferences(userId);
   switch (kind) {
@@ -204,6 +228,10 @@ export async function userAllowsEmail(
       return prefs.emailMilestoneCelebrations;
     case "weekly_digest":
       return prefs.emailWeeklyDigest;
+    case "feature_tips":
+      return prefs.emailFeatureTips;
+    case "product_updates":
+      return prefs.productUpdatesEmail;
     default:
       return true;
   }

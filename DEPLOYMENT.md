@@ -128,6 +128,9 @@ Keep the previous deployment + DB migration forward-only. Do not enable NCMEC li
 2. Enable PhotoDNA + AI moderation; keep NCMEC off until legal sign-off, then finish live CyberTipline integration tests.
 3. Wire Stripe live prices, webhook, and a test checkout; confirm quota gates update.
 4. Configure Resend + SPF/DKIM for invites and lifecycle email.
+   - Cron `POST /api/jobs/digest` for weekly digests.
+   - Cron `POST /api/jobs/lifecycle-emails` for feature-discovery tips (max 1 / user / 7 days).
+   - Admin **Announcements** sends opt-in product updates (`productUpdatesEmail`).
 5. Add uptime on `/api/health` and dashboards from [MONITORING.md](./MONITORING.md).
 6. Expand E2E coverage (Playwright) for upload → library and invite → accept.
 7. Plan evidence retention / quarantine ops runbooks for safety incidents.

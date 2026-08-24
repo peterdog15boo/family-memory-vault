@@ -421,6 +421,13 @@ export function AccountPrivacySettings({
               disabled={prefsState === "saving"}
               onChange={(v) => void savePreference("emailWeeklyDigest", v)}
             />
+            <ToggleRow
+              label={t("settings.featureTips")}
+              description={t("settings.featureTipsHelp")}
+              checked={prefs.emailFeatureTips}
+              disabled={prefsState === "saving"}
+              onChange={(v) => void savePreference("emailFeatureTips", v)}
+            />
           </PreferenceGroup>
 
           <PreferenceGroup

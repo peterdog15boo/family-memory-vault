@@ -32,6 +32,7 @@ const prefsPatchSchema = z
     askAiRobotGreetingsEnabled: z.boolean().optional(),
     emailMilestoneCelebrations: z.boolean().optional(),
     productUpdatesEmail: z.boolean().optional(),
+    emailFeatureTips: z.boolean().optional(),
     idleTimeoutEnabled: z.boolean().optional(),
     locale: z.enum(APP_LOCALES).optional(),
   })

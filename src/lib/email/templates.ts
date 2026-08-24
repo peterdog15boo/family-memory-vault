@@ -701,4 +701,271 @@ export function weeklyDigestEmail(data: {
   };
 }
 
+/* -------------------------------------------------------------------------- */
+/* Feature-discovery tips + product announcements                              */
+/* -------------------------------------------------------------------------- */
+
+function greetingName(firstName?: string | null): string {
+  return firstName?.trim() || "there";
+}
+
+function settingsFooterNote(): string {
+  return `You’re receiving this because you have an account with ${BRAND}. Manage email preferences anytime in Settings.`;
+}
+
+export function inviteFamilyTipEmail(data: {
+  firstName?: string | null;
+  inviteCtaUrl: string;
+}): EmailContent {
+  const name = greetingName(data.firstName);
+  const subject = "Someone in your family has the photos you don’t";
+  const text = [
+    `Hi ${name},`,
+    ``,
+    `You’ve started saving memories in Family Memory Vault. The next step is the powerful one: invite family.`,
+    ``,
+    `Other people often have the photos, videos, and moments missing from your camera roll.`,
+    ``,
+    `Invite someone to contribute:`,
+    data.inviteCtaUrl,
+    ``,
+    `It takes a minute, and it makes the vault a real family place.`,
+    ``,
+    `— ${BRAND}`,
+  ].join("\n");
+
+  return {
+    subject,
+    text,
+    html: layout({
+      preview: "Invite family to fill in the moments you’re missing.",
+      heading: "Invite family",
+      bodyHtml: paragraphs([
+        `Hi ${name},`,
+        `You’ve started saving memories in Family Memory Vault. The next step is the powerful one: invite family.`,
+        `Other people often have the photos, videos, and moments missing from your camera roll.`,
+        `It takes a minute, and it makes the vault a real family place.`,
+      ]),
+      ctaLabel: "Invite someone",
+      ctaHref: data.inviteCtaUrl,
+      plainLinkHref: data.inviteCtaUrl,
+      footerNote: settingsFooterNote(),
+    }),
+  };
+}
+
+export function tryFamilyChatTipEmail(data: {
+  firstName?: string | null;
+  chatCtaUrl: string;
+}): EmailContent {
+  const name = greetingName(data.firstName);
+  const subject = "Your family chat is ready";
+  const text = [
+    `Hi ${name},`,
+    ``,
+    `Your family is in the vault — now you can message them there too.`,
+    ``,
+    `Use Family Chat to ask for photos, coordinate uploads, or just keep the conversation going.`,
+    ``,
+    `Open Family Chat:`,
+    data.chatCtaUrl,
+    ``,
+    `— ${BRAND}`,
+  ].join("\n");
+
+  return {
+    subject,
+    text,
+    html: layout({
+      preview: "Message your family inside the vault.",
+      heading: "Family Chat is ready",
+      bodyHtml: paragraphs([
+        `Hi ${name},`,
+        `Your family is in the vault — now you can message them there too.`,
+        `Use Family Chat to ask for photos, coordinate uploads, or just keep the conversation going.`,
+      ]),
+      ctaLabel: "Open Family Chat",
+      ctaHref: data.chatCtaUrl,
+      plainLinkHref: data.chatCtaUrl,
+      footerNote: settingsFooterNote(),
+    }),
+  };
+}
+
+export function makeFirstMovieTipEmail(data: {
+  firstName?: string | null;
+  movieCtaUrl: string;
+}): EmailContent {
+  const name = greetingName(data.firstName);
+  const subject = "Your photos are ready to become a movie";
+  const text = [
+    `Hi ${name},`,
+    ``,
+    `You’ve added enough memories to make something special.`,
+    ``,
+    `With Simple Mode, Family Memory Vault can turn your photos and videos into a polished movie in one click.`,
+    ``,
+    `Make your first movie:`,
+    data.movieCtaUrl,
+    ``,
+    `— ${BRAND}`,
+  ].join("\n");
+
+  return {
+    subject,
+    text,
+    html: layout({
+      preview: "Turn your photos into a polished movie in one click.",
+      heading: "Make your first movie",
+      bodyHtml: paragraphs([
+        `Hi ${name},`,
+        `You’ve added enough memories to make something special.`,
+        `With Simple Mode, Family Memory Vault can turn your photos and videos into a polished movie in one click.`,
+      ]),
+      ctaLabel: "Make a movie",
+      ctaHref: data.movieCtaUrl,
+      plainLinkHref: data.movieCtaUrl,
+      footerNote: settingsFooterNote(),
+    }),
+  };
+}
+
+export function namePeopleTipEmail(data: {
+  firstName?: string | null;
+  peopleCtaUrl: string;
+}): EmailContent {
+  const name = greetingName(data.firstName);
+  const subject = "Put names to the faces in your photos";
+  const text = [
+    `Hi ${name},`,
+    ``,
+    `Your photos are in the vault. Next, name the people in them.`,
+    ``,
+    `Once people are identified, it’s much easier to find moments and make better movies.`,
+    ``,
+    `Open People:`,
+    data.peopleCtaUrl,
+    ``,
+    `— ${BRAND}`,
+  ].join("\n");
+
+  return {
+    subject,
+    text,
+    html: layout({
+      preview: "Name the people in your photos.",
+      heading: "Name the people",
+      bodyHtml: paragraphs([
+        `Hi ${name},`,
+        `Your photos are in the vault. Next, name the people in them.`,
+        `Once people are identified, it’s much easier to find moments and make better movies.`,
+      ]),
+      ctaLabel: "Open People",
+      ctaHref: data.peopleCtaUrl,
+      plainLinkHref: data.peopleCtaUrl,
+      footerNote: settingsFooterNote(),
+    }),
+  };
+}
+
+export function tryAskAiTipEmail(data: {
+  firstName?: string | null;
+  askAiCtaUrl: string;
+}): EmailContent {
+  const name = greetingName(data.firstName);
+  const subject = "Ask your photo library a question";
+  const text = [
+    `Hi ${name},`,
+    ``,
+    `You don’t have to scroll forever.`,
+    ``,
+    `Try Ask AI with something simple:`,
+    `- show me photos of Mom`,
+    `- show me beach photos`,
+    `- show me birthday parties`,
+    ``,
+    `Open Ask AI:`,
+    data.askAiCtaUrl,
+    ``,
+    `— ${BRAND}`,
+  ].join("\n");
+
+  return {
+    subject,
+    text,
+    html: layout({
+      preview: "Ask your photo library a question.",
+      heading: "Try Ask AI",
+      bodyHtml: [
+        paragraphs([
+          `Hi ${name},`,
+          `You don’t have to scroll forever.`,
+          `Try Ask AI with something simple:`,
+        ]),
+        `<ul style="margin:0 0 14px;padding-left:18px;color:#4a4641;font-size:15px;line-height:1.6;">
+          <li>show me photos of Mom</li>
+          <li>show me beach photos</li>
+          <li>show me birthday parties</li>
+        </ul>`,
+      ].join(""),
+      ctaLabel: "Open Ask AI",
+      ctaHref: data.askAiCtaUrl,
+      plainLinkHref: data.askAiCtaUrl,
+      footerNote: settingsFooterNote(),
+    }),
+  };
+}
+
+export function productAnnouncementEmail(data: {
+  firstName?: string | null;
+  featureName: string;
+  featureSummary: string;
+  featureCtaUrl: string;
+}): EmailContent {
+  const name = greetingName(data.firstName);
+  const feature = data.featureName.trim();
+  const summary = data.featureSummary.trim();
+  const subject = "What’s new in Family Memory Vault";
+  const text = [
+    `Hi ${name},`,
+    ``,
+    `We just added something new to Family Memory Vault:`,
+    ``,
+    feature,
+    ``,
+    summary,
+    ``,
+    `Try it here:`,
+    data.featureCtaUrl,
+    ``,
+    `Thanks for being part of the beta and helping us build this for families.`,
+    ``,
+    `— ${BRAND}`,
+  ].join("\n");
+
+  return {
+    subject,
+    text,
+    html: layout({
+      preview: `New: ${feature}`,
+      heading: "What’s new",
+      bodyHtml: [
+        paragraphs([
+          `Hi ${name},`,
+          `We just added something new to Family Memory Vault:`,
+        ]),
+        `<p style="margin:0 0 14px;font-size:17px;font-weight:600;color:#2a2825;">${escapeHtml(feature)}</p>`,
+        paragraphs([
+          summary,
+          `Thanks for being part of the beta and helping us build this for families.`,
+        ]),
+      ].join(""),
+      ctaLabel: "Try it",
+      ctaHref: data.featureCtaUrl,
+      plainLinkHref: data.featureCtaUrl,
+      footerNote: `You’re receiving this because you opted in to product updates from ${BRAND}. Change this anytime in Settings.`,
+    }),
+  };
+}
+
 export { appUrl as emailAppUrl };

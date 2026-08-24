@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireApiUser } from "@/lib/auth/api";
@@ -11,6 +12,11 @@ const bodySchema = z.union([
   z.object({ all: z.literal(true) }),
   z.object({ id: z.string().trim().min(1).max(128) }),
 ]);
+
+/** App shell embeds unread count — invalidate after read-state changes. */
+function revalidateAppShell() {
+  revalidatePath("/", "layout");
+}
 
 /**
  * POST /api/notifications/read
@@ -38,18 +44,20 @@ export async function POST(request: Request) {
 
   if ("all" in parsed.data && parsed.data.all) {
     const count = await markAllAsRead(userId);
+    revalidateAppShell();
     return NextResponse.json({ marked: count, unreadCount: 0 });
   }
 
   if ("id" in parsed.data) {
     const row = await markAsRead(parsed.data.id, userId);
     if (!row) {
-      return NextResponse.json(
-        { error: "Not found or already read" },
-        { status: 404 },
-      );
+      // Idempotent: already-read is success for clients that race mark + navigate.
+      const unreadCount = await getUnreadCount(userId);
+      revalidateAppShell();
+      return NextResponse.json({ marked: 0, unreadCount });
     }
     const unreadCount = await getUnreadCount(userId);
+    revalidateAppShell();
     return NextResponse.json({ marked: 1, unreadCount });
   }
 

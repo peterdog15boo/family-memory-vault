@@ -188,6 +188,9 @@ export const enUS = {
       "One calm email each week with a few vault highlights and links — skipped when there’s nothing new.",
     weeklyDigestInApp:
       "A weekly note in your notification bell with the same highlights.",
+    featureTips: "Feature tips",
+    featureTipsHelp:
+      "Occasional suggestions when a feature you haven’t tried yet would help — at most one every 7 days. Stopped automatically once you use that feature.",
     browserPushGroup: "This device",
     browserPushHelp:
       "Get a gentle alert when a movie is ready or you reach a rare milestone — even if the vault is closed. We never use this for marketing. You can turn it off anytime.",

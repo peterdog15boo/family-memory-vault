@@ -30,6 +30,7 @@ export const ADMIN_AUDIT_ACTIONS = [
   "moderation.quarantine",
   "job.retry",
   "admin.inspect",
+  "email.announcement_send",
 ] as const;
 
 export type AdminAuditAction =

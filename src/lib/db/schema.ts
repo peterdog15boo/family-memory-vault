@@ -297,6 +297,11 @@ export type UserAccountPreferences = {
   /** Occasional product updates — opt-in only. */
   productUpdatesEmail?: boolean;
   /**
+   * Automated feature-discovery tips (invite family, make a movie, etc.).
+   * Default on; respects the same 7-day cadence as other lifecycle mail.
+   */
+  emailFeatureTips?: boolean;
+  /**
    * Automatically log out after inactivity (bank-style idle timeout).
    * Persisted as `idle_timeout_enabled` conceptually / `idleTimeoutEnabled` in JSON.
    * Default ON. Free plans always enforce ON regardless of this value.
@@ -306,31 +311,42 @@ export type UserAccountPreferences = {
   lastStorageWarningAt?: string | null;
   /** Internal dedupe for weekly digest sends (ISO timestamp). */
   lastWeeklyDigestAt?: string | null;
+  /** Internal dedupe for automated feature-tip emails (ISO timestamp). */
+  lastLifecycleEmailAt?: string | null;
+  /**
+   * Campaign keys already sent (invite_family, try_family_chat, …).
+   * Each tip is sent at most once; feature use also suppresses eligibility.
+   */
+  lifecycleEmailsSent?: string[];
   /** UI locale (BCP 47), e.g. en-US. */
   locale?: string | null;
 };
 
-export const DEFAULT_USER_ACCOUNT_PREFERENCES = {
-  emailMovieReady: true,
-  emailFamilyInvite: true,
-  emailStorageWarnings: true,
-  inAppMovieReady: true,
-  inAppFamilyInvite: true,
-  inAppStorageWarnings: true,
-  inAppMediaReady: true,
-  inAppEmergencyAccess: true,
-  notificationSoundEnabled: true,
-  celebrationSoundEnabled: false,
-  askAiRobotGreetingsEnabled: true,
-  emailMilestoneCelebrations: true,
-  emailWeeklyDigest: true,
-  inAppWeeklyDigest: true,
-  productUpdatesEmail: false,
-  idleTimeoutEnabled: true,
-  lastStorageWarningAt: null,
-  lastWeeklyDigestAt: null,
-  locale: "en-US",
-} as const satisfies Required<UserAccountPreferences>;
+export const DEFAULT_USER_ACCOUNT_PREFERENCES: Required<UserAccountPreferences> =
+  {
+    emailMovieReady: true,
+    emailFamilyInvite: true,
+    emailStorageWarnings: true,
+    inAppMovieReady: true,
+    inAppFamilyInvite: true,
+    inAppStorageWarnings: true,
+    inAppMediaReady: true,
+    inAppEmergencyAccess: true,
+    notificationSoundEnabled: true,
+    celebrationSoundEnabled: false,
+    askAiRobotGreetingsEnabled: true,
+    emailMilestoneCelebrations: true,
+    emailWeeklyDigest: true,
+    inAppWeeklyDigest: true,
+    productUpdatesEmail: false,
+    emailFeatureTips: true,
+    idleTimeoutEnabled: true,
+    lastStorageWarningAt: null,
+    lastWeeklyDigestAt: null,
+    lastLifecycleEmailAt: null,
+    lifecycleEmailsSent: [],
+    locale: "en-US",
+  };
 
 /** How much location a user shares with active family members. Default off. */
 export const LOCATION_SHARING_LEVELS = ["off", "city", "precise"] as const;

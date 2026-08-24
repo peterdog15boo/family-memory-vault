@@ -17,9 +17,15 @@ import {
   movieReadyEmail,
   paymentFailedEmail,
   paymentSuccessEmail,
+  productAnnouncementEmail,
   storageWarningEmail,
   weeklyDigestEmail,
   welcomeEmail,
+  inviteFamilyTipEmail,
+  tryFamilyChatTipEmail,
+  makeFirstMovieTipEmail,
+  namePeopleTipEmail,
+  tryAskAiTipEmail,
   type EmailContent,
 } from "@/lib/email/templates";
 
@@ -38,6 +44,12 @@ export {
   feedbackSubmissionAdminEmail,
   milestoneEmail,
   weeklyDigestEmail,
+  inviteFamilyTipEmail,
+  tryFamilyChatTipEmail,
+  makeFirstMovieTipEmail,
+  namePeopleTipEmail,
+  tryAskAiTipEmail,
+  productAnnouncementEmail,
   emailAppUrl,
 } from "@/lib/email/templates";
 
@@ -50,6 +62,18 @@ export {
   maybeNotifyStorageThreshold,
   getUserContact,
 } from "@/lib/email/lifecycle";
+
+export {
+  drainLifecycleTipEmails,
+  deliverLifecycleTipForUser,
+  pickEligibleCampaign,
+  LIFECYCLE_CAMPAIGN_KEYS,
+} from "@/lib/email/campaigns";
+
+export {
+  sendProductAnnouncement,
+  resolveAnnouncementCtaUrl,
+} from "@/lib/email/announcements";
 
 /* -------------------------------------------------------------------------- */
 /* Config                                                                      */
@@ -305,4 +329,70 @@ export async function sendWeeklyDigestEmail(input: {
   movieCount: number;
 }): Promise<SendEmailResult> {
   return sendTemplated(input.to, weeklyDigestEmail(input), "weekly_digest");
+}
+
+export async function sendInviteFamilyTipEmail(input: {
+  to: string;
+  firstName?: string | null;
+  inviteCtaUrl: string;
+}): Promise<SendEmailResult> {
+  return sendTemplated(
+    input.to,
+    inviteFamilyTipEmail(input),
+    "tip_invite_family",
+  );
+}
+
+export async function sendTryFamilyChatTipEmail(input: {
+  to: string;
+  firstName?: string | null;
+  chatCtaUrl: string;
+}): Promise<SendEmailResult> {
+  return sendTemplated(
+    input.to,
+    tryFamilyChatTipEmail(input),
+    "tip_try_family_chat",
+  );
+}
+
+export async function sendMakeFirstMovieTipEmail(input: {
+  to: string;
+  firstName?: string | null;
+  movieCtaUrl: string;
+}): Promise<SendEmailResult> {
+  return sendTemplated(
+    input.to,
+    makeFirstMovieTipEmail(input),
+    "tip_make_first_movie",
+  );
+}
+
+export async function sendNamePeopleTipEmail(input: {
+  to: string;
+  firstName?: string | null;
+  peopleCtaUrl: string;
+}): Promise<SendEmailResult> {
+  return sendTemplated(input.to, namePeopleTipEmail(input), "tip_name_people");
+}
+
+export async function sendTryAskAiTipEmail(input: {
+  to: string;
+  firstName?: string | null;
+  askAiCtaUrl: string;
+}): Promise<SendEmailResult> {
+  return sendTemplated(input.to, tryAskAiTipEmail(input), "tip_try_ask_ai");
+}
+
+export async function sendProductAnnouncementEmail(input: {
+  to: string;
+  firstName?: string | null;
+  featureName: string;
+  featureSummary: string;
+  featureCtaUrl: string;
+}): Promise<SendEmailResult> {
+  return sendTemplated(
+    input.to,
+    productAnnouncementEmail(input),
+    "product_announcement",
+  );
 }

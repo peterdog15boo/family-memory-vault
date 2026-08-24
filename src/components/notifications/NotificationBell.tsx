@@ -114,6 +114,8 @@ export function NotificationBell({
   const soundEnabledRef = useRef(true);
   /** Skip attention until after mount so SSR unread never “arrives”. */
   const liveRef = useRef(false);
+  const openRef = useRef(open);
+  openRef.current = open;
 
   useEffect(() => {
     setMounted(true);
@@ -173,7 +175,7 @@ export function NotificationBell({
       }
 
       // Opening the panel (or fetching while open) clears highlight; no ding.
-      if (options?.fromOpenPanel || open) {
+      if (options?.fromOpenPanel || openRef.current) {
         setAttention(false);
         return;
       }
@@ -190,7 +192,7 @@ export function NotificationBell({
         playNotificationDing();
       }
     },
-    [open],
+    [],
   );
 
   /**
@@ -249,6 +251,32 @@ export function NotificationBell({
     }
   }, [applyUnreadCount]);
 
+  /**
+   * Live unread from the API — not the SSR/router-cache seed.
+   * Critical after Admin ↔ app remounts, which can restore a stale
+   * `initialUnreadCount` and otherwise resurrect already-read badges.
+   */
+  const syncUnreadFromServer = useCallback(
+    async (options?: { fromOpenPanel?: boolean }) => {
+      try {
+        const res = await fetch("/api/notifications?unread=1&limit=1");
+        if (!res.ok) return;
+        const data = (await res.json()) as { unreadCount: number };
+        applyUnreadCount(data.unreadCount, {
+          fromOpenPanel: options?.fromOpenPanel,
+        });
+      } catch {
+        /* swallow */
+      }
+    },
+    [applyUnreadCount],
+  );
+
+  // Always reconcile with DB on mount (covers Admin → app remount).
+  useEffect(() => {
+    void syncUnreadFromServer();
+  }, [syncUnreadFromServer]);
+
   // Fetch on open — also clear attention highlight.
   useEffect(() => {
     if (!open) return;
@@ -284,34 +312,30 @@ export function NotificationBell({
     updatePanelPosition();
   }, [open, loading, items.length, updatePanelPosition]);
 
-  // Poll unread count every 60s when closed (and once when tab becomes visible).
+  // Poll unread count every 60s when closed (and when the tab/page is shown again).
   useEffect(() => {
-    async function pollUnread() {
-      if (open) return;
-      try {
-        const res = await fetch("/api/notifications?unread=1&limit=1");
-        if (!res.ok) return;
-        const data = (await res.json()) as { unreadCount: number };
-        applyUnreadCount(data.unreadCount);
-      } catch {
-        /* swallow */
-      }
-    }
-
     const interval = setInterval(() => {
-      void pollUnread();
+      if (open) return;
+      void syncUnreadFromServer();
     }, 60_000);
 
     function onVisible() {
-      if (document.visibilityState === "visible") void pollUnread();
+      if (document.visibilityState === "visible" && !open) {
+        void syncUnreadFromServer();
+      }
+    }
+    function onPageShow() {
+      if (!open) void syncUnreadFromServer();
     }
     document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("pageshow", onPageShow);
 
     return () => {
       clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pageshow", onPageShow);
     };
-  }, [open, applyUnreadCount]);
+  }, [open, syncUnreadFromServer]);
 
   // Close on outside click
   useEffect(() => {
@@ -345,11 +369,23 @@ export function NotificationBell({
     );
     const next = Math.max(0, unreadCount - 1);
     applyUnreadCount(next, { fromOpenPanel: true });
-    await fetch("/api/notifications/read", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
+    try {
+      const res = await fetch("/api/notifications/read", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { unreadCount?: number };
+        if (typeof data.unreadCount === "number") {
+          applyUnreadCount(data.unreadCount, { fromOpenPanel: true });
+        }
+        // Drop stale app-layout RSC seed so Admin → app doesn’t restore old badge.
+        startTransition(() => router.refresh());
+      }
+    } catch {
+      void syncUnreadFromServer({ fromOpenPanel: true });
+    }
   }
 
   async function handleMarkAllRead() {
@@ -357,11 +393,19 @@ export function NotificationBell({
       prev.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })),
     );
     applyUnreadCount(0, { fromOpenPanel: true });
-    await fetch("/api/notifications/read", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ all: true }),
-    });
+    try {
+      const res = await fetch("/api/notifications/read", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ all: true }),
+      });
+      if (res.ok) {
+        applyUnreadCount(0, { fromOpenPanel: true });
+        startTransition(() => router.refresh());
+      }
+    } catch {
+      void syncUnreadFromServer({ fromOpenPanel: true });
+    }
   }
 
   function handleClickNotification(item: NotificationItem) {
