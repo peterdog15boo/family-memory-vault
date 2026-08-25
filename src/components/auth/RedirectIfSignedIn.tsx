@@ -7,6 +7,9 @@ import { useLayoutEffect, type ReactNode } from "react";
  * Once Clerk reports a signed-in session on an auth page, leave immediately.
  * Renders a calm handoff instead of the login/sign-up shell so post-auth
  * never flashes the marketing login UI (email OTP + Google SSO).
+ *
+ * Pending MFA / session tasks are treated as signed-out by Clerk’s default
+ * `treatPendingAsSignedOut`, so `isSignedIn` alone is enough here.
  */
 export function RedirectIfSignedIn({
   redirectTo,
@@ -15,9 +18,8 @@ export function RedirectIfSignedIn({
   redirectTo: string;
   children: ReactNode;
 }) {
-  const { isLoaded, isSignedIn, sessionStatus } = useAuth();
-  const readyToLeave =
-    isLoaded && isSignedIn && sessionStatus !== "pending";
+  const { isLoaded, isSignedIn } = useAuth();
+  const readyToLeave = Boolean(isLoaded && isSignedIn);
 
   useLayoutEffect(() => {
     if (!readyToLeave) return;
