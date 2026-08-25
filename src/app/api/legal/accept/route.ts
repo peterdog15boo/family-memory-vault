@@ -147,7 +147,7 @@ export async function POST(request: Request) {
       });
     }
 
-    let redirectTo = safeRedirectPath(parsed.data.redirectTo);
+    const redirectTo = safeRedirectPath(parsed.data.redirectTo);
 
     const response = NextResponse.json({
       ok: true,

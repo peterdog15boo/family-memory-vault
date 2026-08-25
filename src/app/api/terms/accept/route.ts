@@ -134,7 +134,7 @@ export async function POST(request: Request) {
       termsVersion: TERMS_VERSION,
     });
 
-    let redirectTo = safeRedirectPath(parsed.data.redirectTo);
+    const redirectTo = safeRedirectPath(parsed.data.redirectTo);
     const response = NextResponse.json({
       ok: true,
       acceptedAt: row?.acceptedAt?.toISOString() ?? new Date().toISOString(),

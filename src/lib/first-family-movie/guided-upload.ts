@@ -35,7 +35,7 @@ export function getGuidedUploadProgressCopy(
     return {
       progressLine: `Add at least ${softMin} photos to continue`,
       encouragement: "Favorites work best — candid, smiling, everyday moments.",
-      canContinue: false,
+      canContinue,
     };
   }
 
@@ -45,7 +45,7 @@ export function getGuidedUploadProgressCopy(
       encouragement:
         ENCOURAGEMENT_BY_COUNT[n] ??
         "Keep going — a few more make a lovely movie.",
-      canContinue: false,
+      canContinue,
     };
   }
 
@@ -53,14 +53,14 @@ export function getGuidedUploadProgressCopy(
     return {
       progressLine: `${n} of ${softMin} photos added…`,
       encouragement: "Perfect — that’s enough to begin. Add more if you like.",
-      canContinue: true,
+      canContinue,
     };
   }
 
   return {
     progressLine: `${n} photos added`,
     encouragement: "Wonderful collection. Add more anytime, or continue when ready.",
-    canContinue: true,
+    canContinue,
   };
 }
 

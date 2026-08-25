@@ -299,32 +299,6 @@ function identitySetupComplete(
   );
 }
 
-/** Kept for tests / greetings that still inspect onboarding.screenName. */
-function hasAvaScreenName(state: UserOnboardingState): boolean {
-  return Boolean(state.screenName?.trim());
-}
-
-function hasAvaAvatar(state: UserOnboardingState): boolean {
-  const hp = state.helperProgress;
-  if (hp?.avatarSkipped === true) return true;
-  return Boolean(state.avatarMediaId || state.avatarUrl?.trim());
-}
-
-function hasRealScreenName(
-  state: UserOnboardingState,
-  displayName: string | null,
-): boolean {
-  if (hasLiveScreenName(displayName)) return true;
-  return hasAvaScreenName(state);
-}
-
-function hasAvatarSet(
-  _state: UserOnboardingState,
-  signals: AvaSignals,
-): boolean {
-  return hasLiveAvatar(signals.imageUrl) || hasAvaAvatar(_state);
-}
-
 /**
  * Derive durable helper flags from live vault signals so resume never
  * re-asks for finished setup (name, avatar, photos, memory, etc.).
