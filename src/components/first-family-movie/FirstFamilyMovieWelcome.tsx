@@ -1,9 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
 import { FirstFamilyMovieSkipButton } from "@/components/first-family-movie/FirstFamilyMovieSkipButton";
-import { buildFirstFamilyMovieCollage } from "@/content/first-family-movie-collage";
-import { cn } from "@/lib/utils";
 
 type Props = {
   onStart: () => void;
@@ -13,17 +10,16 @@ type Props = {
 };
 
 /**
- * Premium full-bleed collage welcome for the first-session ritual.
+ * Welcome overlay only — collage backdrop lives in FirstFamilyMovieExperience
+ * so it keeps scrolling across later ritual steps.
  */
 export function FirstFamilyMovieWelcome({
   onStart,
   onSkip,
   skipPending = false,
 }: Props) {
-  const tiles = useMemo(() => buildFirstFamilyMovieCollage(48), []);
-
   return (
-    <main className="ffm-welcome relative min-h-dvh overflow-hidden bg-[#0c0a09] text-[#f7f0e8]">
+    <main className="ffm-welcome relative min-h-dvh text-[#f7f0e8]">
       <div className="absolute right-3 top-3 z-20 sm:right-5 sm:top-5">
         <FirstFamilyMovieSkipButton
           variant="header"
@@ -31,38 +27,6 @@ export function FirstFamilyMovieWelcome({
           pending={skipPending}
         />
       </div>
-
-      <div
-        className="ffm-welcome-mosaic pointer-events-none absolute inset-0"
-        aria-hidden
-      >
-        <div className="ffm-welcome-mosaic-grid">
-          {tiles.map((tile, i) => (
-            <div
-              key={`${tile.src}-${i}`}
-              className={cn(
-                "ffm-welcome-tile",
-                tile.span === "wide" && "ffm-welcome-tile--wide",
-                tile.span === "tall" && "ffm-welcome-tile--tall",
-              )}
-              style={{
-                backgroundImage: `url(${tile.src})`,
-                backgroundPosition: tile.focus ?? "center",
-                animationDelay: `${(i % 10) * 0.06}s`,
-              }}
-            />
-          ))}
-        </div>
-      </div>
-
-      <div
-        className="pointer-events-none absolute inset-0"
-        aria-hidden
-        style={{
-          background:
-            "linear-gradient(180deg, rgba(8,6,5,0.58) 0%, rgba(8,6,5,0.32) 32%, rgba(8,6,5,0.68) 72%, rgba(8,6,5,0.94) 100%), radial-gradient(ellipse 85% 55% at 50% 100%, rgba(181,111,94,0.26), transparent 62%)",
-        }}
-      />
 
       <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-xl flex-col justify-end px-6 pb-12 pt-20 sm:justify-center sm:px-8 sm:pb-16">
         <p className="ffm-fade-in font-sans text-[0.6875rem] font-semibold uppercase tracking-[0.22em] text-[#e8c9a4]">

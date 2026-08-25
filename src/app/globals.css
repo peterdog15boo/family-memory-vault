@@ -331,6 +331,16 @@ body {
   }
 }
 
+/* Seamless left pan — track is two equal panels; -50% = one panel width */
+@keyframes ffm-collage-pan {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
 .ffm-fade-in,
 .ffm-fade-in-delay-1,
 .ffm-fade-in-delay-2 {
@@ -345,11 +355,75 @@ body {
   animation-delay: 0.16s;
 }
 
-/* Dense collage welcome — larger tiles, mixed spans, fewer obvious repeats */
-.ffm-welcome-mosaic {
-  transform: scale(1.06);
+/* Shared ritual collage backdrop */
+.ffm-collage-backdrop {
+  background: #0c0a09;
+  z-index: 0;
 }
 
+.ffm-collage-viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  contain: paint;
+}
+
+.ffm-collage-track {
+  display: flex;
+  width: max-content;
+  height: 100%;
+  will-change: transform;
+  backface-visibility: hidden;
+  animation: ffm-collage-pan 160s linear infinite;
+}
+
+.ffm-collage-panel {
+  position: relative;
+  flex: 0 0 100vw;
+  width: 100vw;
+  height: 118%;
+  margin-top: -4%;
+}
+
+.ffm-collage-grid {
+  height: 100%;
+  width: 112%;
+  margin: 0 0 0 -6%;
+}
+
+.ffm-collage-veil {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(8, 6, 5, 0.55) 0%,
+      rgba(8, 6, 5, 0.28) 34%,
+      rgba(8, 6, 5, 0.62) 72%,
+      rgba(8, 6, 5, 0.92) 100%
+    ),
+    radial-gradient(
+      ellipse 85% 55% at 50% 100%,
+      rgba(181, 111, 94, 0.24),
+      transparent 62%
+    );
+}
+
+.ffm-collage-veil--dense {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(8, 6, 5, 0.62) 0%,
+      rgba(8, 6, 5, 0.45) 40%,
+      rgba(8, 6, 5, 0.72) 78%,
+      rgba(8, 6, 5, 0.94) 100%
+    ),
+    radial-gradient(
+      ellipse 80% 50% at 50% 100%,
+      rgba(181, 111, 94, 0.2),
+      transparent 60%
+    );
+}
+
+/* Dense collage — larger tiles, mixed spans */
 .ffm-welcome-mosaic-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -380,10 +454,18 @@ body {
   border-radius: 0.4rem;
   background-size: cover;
   background-repeat: no-repeat;
-  opacity: 0;
-  animation: ffm-tile-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   filter: saturate(1.06) contrast(1.03);
   min-height: 100%;
+  opacity: 0.94;
+}
+
+.ffm-welcome-tile--enter {
+  opacity: 0;
+  animation: ffm-tile-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.ffm-welcome-tile--static {
+  opacity: 0.94;
 }
 
 .ffm-welcome-tile--wide {
@@ -398,6 +480,11 @@ body {
   .ffm-welcome-tile--tall {
     grid-row: span 1;
   }
+
+  /* Slightly slower / calmer on small screens */
+  .ffm-collage-track {
+    animation-duration: 200s;
+  }
 }
 
 @keyframes ffm-tile-in {
@@ -409,6 +496,64 @@ body {
     opacity: 0.94;
     transform: scale(1);
   }
+}
+
+/* Step overlay crossfade */
+.ffm-step-overlay {
+  position: relative;
+  z-index: 10;
+  min-height: 100dvh;
+  transition:
+    opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ffm-step-overlay--in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.ffm-step-overlay--out {
+  opacity: 0;
+  transform: translateY(10px);
+  pointer-events: none;
+}
+
+/* Frosted content card over collage */
+.ffm-ritual-card {
+  border-radius: 1.15rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(252, 248, 243, 0.94);
+  box-shadow: 0 24px 64px rgba(8, 6, 5, 0.35);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: var(--ink);
+}
+
+.ffm-backdrop-fade {
+  transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ffm-backdrop-fade--hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Education slide luxurious fade */
+.ffm-slide-fade {
+  transition:
+    opacity 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ffm-slide-fade--in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.ffm-slide-fade--out {
+  opacity: 0;
+  transform: translateY(12px);
 }
 
 .ffm-wait-status {
@@ -452,19 +597,33 @@ body {
   .ffm-fade-in,
   .ffm-fade-in-delay-1,
   .ffm-fade-in-delay-2,
-  .ffm-welcome-tile,
+  .ffm-welcome-tile--enter,
   .ffm-cinematic-orb,
   .ffm-wait-status,
-  .ffm-progress-shimmer::after {
+  .ffm-progress-shimmer::after,
+  .ffm-collage-track {
     animation: none;
   }
 
-  .ffm-welcome-tile {
+  .ffm-welcome-tile,
+  .ffm-welcome-tile--enter,
+  .ffm-welcome-tile--static {
     opacity: 0.94;
   }
 
   .ffm-wait-status {
     opacity: 1;
+  }
+
+  .ffm-step-overlay,
+  .ffm-slide-fade,
+  .ffm-backdrop-fade {
+    transition-duration: 0.01ms;
+  }
+
+  .ffm-step-overlay--out,
+  .ffm-slide-fade--out {
+    transform: none;
   }
 }
 

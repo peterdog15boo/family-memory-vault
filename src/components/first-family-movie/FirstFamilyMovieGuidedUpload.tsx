@@ -457,7 +457,8 @@ export function FirstFamilyMovieGuidedUpload({
     "image/jpeg,image/png,image/webp,image/heic,image/heif,image/*,.jpg,.jpeg,.png,.webp,.heic,.heif";
 
   return (
-    <main className="relative mx-auto flex min-h-dvh w-full max-w-xl flex-col px-5 py-8 sm:px-8 sm:py-12">
+    <main className="relative mx-auto flex min-h-dvh w-full max-w-xl flex-col justify-center px-5 py-8 sm:px-8 sm:py-12">
+      <div className="ffm-ritual-card px-5 py-6 sm:px-7 sm:py-8">
       <button
         type="button"
         onClick={onBack}
@@ -653,7 +654,7 @@ export function FirstFamilyMovieGuidedUpload({
         ) : null}
       </div>
 
-      <div className="sticky bottom-0 mt-8 border-t border-[color:var(--border-subtle)] bg-[color:var(--canvas)]/90 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur-sm">
+      <div className="sticky bottom-0 mt-8 border-t border-[color:var(--border-subtle)] bg-[color:var(--surface-elevated)]/95 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur-sm">
         <button
           type="button"
           disabled={!canContinue || skipPending}
@@ -681,6 +682,7 @@ export function FirstFamilyMovieGuidedUpload({
             You can add more photos anytime — or continue when ready.
           </p>
         )}
+      </div>
       </div>
     </main>
   );

@@ -8,6 +8,7 @@ import type { SerializedMovie } from "@/lib/movies/serialize";
 import { storeLastSimpleModeMusicTrackId } from "@/lib/movies/simple-mode";
 import { trackFirstMovieEvent } from "@/lib/first-family-movie/track-client";
 import { userFacingApiError } from "@/lib/http/user-messages";
+import { cn } from "@/lib/utils";
 
 type Props = {
   mediaIds: string[];
@@ -18,6 +19,8 @@ type Props = {
   onContinueToPeople: (movieId: string) => void;
   /** Kick people discovery in parallel while rendering. */
   onRenderStarted?: (movieId: string) => void;
+  /** Fired just before Big Reveal mounts so the collage can fade. */
+  onRevealStart?: () => void;
   onSkip?: () => void;
   skipPending?: boolean;
 };
@@ -34,6 +37,7 @@ export function FirstFamilyMovieCreating({
   onBack,
   onContinueToPeople,
   onRenderStarted,
+  onRevealStart,
   onSkip,
   skipPending = false,
 }: Props) {
@@ -49,12 +53,16 @@ export function FirstFamilyMovieCreating({
   );
   const [error, setError] = useState<string | null>(null);
   const [movie, setMovie] = useState<SerializedMovie | null>(initialMovie);
+  const [showReveal, setShowReveal] = useState(
+    initialMovie?.status === "ready",
+  );
   const startedRef = useRef(Boolean(initialMovie?.status === "ready"));
   const movieIdRef = useRef<string | null>(initialMovie?.id ?? null);
   const startMsRef = useRef(Date.now());
   const cancelledRef = useRef(false);
   const renderCompletedRef = useRef(initialMovie?.status === "ready");
   const renderStartedNotified = useRef(false);
+  const revealNotified = useRef(false);
 
   const markRevealSeen = useCallback(async () => {
     try {
@@ -67,6 +75,21 @@ export function FirstFamilyMovieCreating({
       // Non-fatal — completion still stamps later.
     }
   }, []);
+
+  // Soft handoff: wait UI fades, then Big Reveal mounts over the ritual.
+  useEffect(() => {
+    if (uiPhase !== "ready" || !movie || showReveal) return;
+    if (!revealNotified.current) {
+      revealNotified.current = true;
+      onRevealStart?.();
+    }
+    const reduce =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const delay = reduce ? 0 : 480;
+    const t = window.setTimeout(() => setShowReveal(true), delay);
+    return () => window.clearTimeout(t);
+  }, [uiPhase, movie, showReveal, onRevealStart]);
 
   useEffect(() => {
     if (uiPhase === "ready") return;
@@ -252,7 +275,7 @@ export function FirstFamilyMovieCreating({
     };
   }, [mediaIds, onRenderStarted, runKey, uiPhase]);
 
-  if (uiPhase === "ready" && movie) {
+  if (showReveal && movie) {
     return (
       <FirstFamilyMovieReveal
         movie={movie}
@@ -266,7 +289,8 @@ export function FirstFamilyMovieCreating({
 
   if (uiPhase === "failed") {
     return (
-      <main className="relative mx-auto flex min-h-dvh w-full max-w-lg flex-col justify-center px-6 py-14 sm:px-8">
+      <main className="relative mx-auto flex min-h-dvh w-full max-w-lg flex-col justify-center px-5 py-14 sm:px-8">
+        <div className="ffm-ritual-card px-6 py-8 sm:px-8">
         <h1 className="font-display text-2xl tracking-tight text-[color:var(--ink)]">
           We couldn’t finish just yet
         </h1>
@@ -293,6 +317,8 @@ export function FirstFamilyMovieCreating({
               setError(null);
               setProgress(8);
               setStatusLabel("Checking your photos…");
+              setShowReveal(false);
+              revealNotified.current = false;
               setUiPhase("working");
               setRunKey((k) => k + 1);
             }}
@@ -311,15 +337,23 @@ export function FirstFamilyMovieCreating({
             </button>
           ) : null}
         </div>
+        </div>
       </main>
     );
   }
 
   return (
-    <FirstFamilyMovieWaitSlideshow
-      progress={progress}
-      statusLabel={statusLabel}
-    />
+    <div
+      className={cn(
+        "ffm-slide-fade",
+        uiPhase === "ready" ? "ffm-slide-fade--out" : "ffm-slide-fade--in",
+      )}
+    >
+      <FirstFamilyMovieWaitSlideshow
+        progress={progress}
+        statusLabel={statusLabel}
+      />
+    </div>
   );
 }
 

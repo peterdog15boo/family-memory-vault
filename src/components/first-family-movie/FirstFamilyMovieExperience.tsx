@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FirstFamilyMovieCelebration } from "@/components/first-family-movie/FirstFamilyMovieCelebration";
+import { FirstFamilyMovieCollageBackdrop } from "@/components/first-family-movie/FirstFamilyMovieCollageBackdrop";
 import { FirstFamilyMovieCreating } from "@/components/first-family-movie/FirstFamilyMovieCreating";
 import { FirstFamilyMovieGuidedUpload } from "@/components/first-family-movie/FirstFamilyMovieGuidedUpload";
 import { FirstFamilyMoviePeopleDiscovery } from "@/components/first-family-movie/FirstFamilyMoviePeopleDiscovery";
 import { FirstFamilyMovieSkipButton } from "@/components/first-family-movie/FirstFamilyMovieSkipButton";
 import { FirstFamilyMovieWelcome } from "@/components/first-family-movie/FirstFamilyMovieWelcome";
+import { usePrefersReducedMotion } from "@/components/media-section/usePrefersReducedMotion";
 import { trackFirstMovieEvent } from "@/lib/first-family-movie/track-client";
 import type { SerializedMovie } from "@/lib/movies/serialize";
 import { cn } from "@/lib/utils";
@@ -29,9 +31,21 @@ type Props = {
   localPreview?: boolean;
 };
 
+const COLLAGE_STEPS: ReadonlySet<Step> = new Set([
+  "welcome",
+  "upload",
+  "photos-ready",
+  "creating",
+]);
+
+const STEP_FADE_MS = 520;
+
 /**
  * First-session “Your First Family Movie” —
  * welcome → upload → create (+ parallel faces) → reveal → people → celebration.
+ *
+ * Collage backdrop mounts once and keeps panning across early ritual steps;
+ * overlays crossfade so the experience feels continuous.
  */
 export function FirstFamilyMovieExperience({
   storageBlocked = false,
@@ -40,13 +54,36 @@ export function FirstFamilyMovieExperience({
   localPreview = false,
 }: Props) {
   const router = useRouter();
+  const reduceMotion = usePrefersReducedMotion();
   const [step, setStep] = useState<Step>(
     resumeMovie?.status === "ready" ? "creating" : "welcome",
   );
+  const [renderStep, setRenderStep] = useState<Step>(
+    resumeMovie?.status === "ready" ? "creating" : "welcome",
+  );
+  const [overlayPhase, setOverlayPhase] = useState<"in" | "out">("in");
   const [mediaIds, setMediaIds] = useState<string[]>([]);
   const [skipPending, setSkipPending] = useState(false);
+  const [revealActive, setRevealActive] = useState(
+    resumeMovie?.status === "ready",
+  );
   const completionSent = useRef(false);
   const peopleWarmRef = useRef(false);
+
+  useEffect(() => {
+    if (step === renderStep) return;
+    if (reduceMotion) {
+      setRenderStep(step);
+      setOverlayPhase("in");
+      return;
+    }
+    setOverlayPhase("out");
+    const t = window.setTimeout(() => {
+      setRenderStep(step);
+      setOverlayPhase("in");
+    }, STEP_FADE_MS);
+    return () => window.clearTimeout(t);
+  }, [step, renderStep, reduceMotion]);
 
   const persistCompletion = useCallback(async () => {
     if (localPreview || completionSent.current) return;
@@ -92,17 +129,20 @@ export function FirstFamilyMovieExperience({
   }, [localPreview, router, skipPending]);
 
   const showStepSkip =
-    step === "upload" ||
-    step === "photos-ready" ||
-    step === "creating" ||
-    step === "people";
+    renderStep === "upload" ||
+    renderStep === "photos-ready" ||
+    renderStep === "creating" ||
+    renderStep === "people";
+
+  const showCollage =
+    (COLLAGE_STEPS.has(step) || COLLAGE_STEPS.has(renderStep)) &&
+    !revealActive;
 
   useEffect(() => {
     if (step !== "celebrate") return;
     void persistCompletion();
   }, [step, persistCompletion]);
 
-  // Warm people discovery while the movie renders (faces run in parallel).
   const warmPeopleDiscovery = useCallback((ids: string[]) => {
     if (peopleWarmRef.current || ids.length === 0) return;
     peopleWarmRef.current = true;
@@ -125,7 +165,12 @@ export function FirstFamilyMovieExperience({
   );
 
   return (
-    <div className="ffm-shell relative min-h-dvh overflow-hidden bg-[color:var(--canvas)] text-[color:var(--ink)]">
+    <div
+      className={cn(
+        "ffm-shell relative min-h-dvh overflow-hidden text-[color:var(--ink)]",
+        showCollage ? "bg-[#0c0a09]" : "bg-[color:var(--canvas)]",
+      )}
+    >
       {localPreview ? (
         <p
           className="pointer-events-none absolute left-3 top-3 z-50 rounded-md bg-black/55 px-2.5 py-1 font-sans text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-[#e8c9a4] backdrop-blur-sm"
@@ -135,25 +180,21 @@ export function FirstFamilyMovieExperience({
         </p>
       ) : null}
 
-      {showStepSkip ? (
-        <div
-          className={cn(
-            "absolute z-50",
-            localPreview ? "right-3 top-12 sm:right-5" : "right-3 top-3 sm:right-5 sm:top-5",
-          )}
-        >
-          <FirstFamilyMovieSkipButton
-            variant="header"
-            onClick={() => {
-              void skipRitual();
-            }}
-            pending={skipPending}
-            className="border-[color:var(--border-strong)] bg-[color:var(--surface-elevated)]/95 text-[color:var(--ink)] hover:bg-[color:var(--surface-elevated)]"
+      <div
+        className={cn(
+          "ffm-backdrop-fade absolute inset-0 z-0",
+          !showCollage && "ffm-backdrop-fade--hidden",
+        )}
+        aria-hidden={!showCollage}
+      >
+        {(COLLAGE_STEPS.has(step) || COLLAGE_STEPS.has(renderStep)) && (
+          <FirstFamilyMovieCollageBackdrop
+            denserVeil={renderStep !== "welcome"}
           />
-        </div>
-      ) : null}
+        )}
+      </div>
 
-      {step !== "welcome" ? (
+      {!showCollage ? (
         <>
           <div
             className="page-atmosphere pointer-events-none absolute inset-0"
@@ -170,81 +211,112 @@ export function FirstFamilyMovieExperience({
         </>
       ) : null}
 
-      {step === "welcome" ? (
-        <FirstFamilyMovieWelcome
-          onStart={() => setStep("upload")}
-          onSkip={() => {
-            void skipRitual();
-          }}
-          skipPending={skipPending}
-        />
-      ) : step === "upload" ? (
-        <FirstFamilyMovieGuidedUpload
-          storageBlocked={storageBlocked}
-          planName={planName}
-          initialMediaIds={mediaIds}
-          onBack={() => setStep("welcome")}
-          onContinue={(ids) => {
-            setMediaIds(ids);
-            setStep("photos-ready");
-          }}
-          onSkip={() => {
-            void skipRitual();
-          }}
-          skipPending={skipPending}
-        />
-      ) : step === "photos-ready" ? (
-        <PhotosReadyStep
-          count={mediaIds.length}
-          onAddMore={() => setStep("upload")}
-          onCreate={() => {
-            trackFirstMovieEvent("first_movie_create_clicked", {
-              mediaCount: mediaIds.length,
-            });
-            warmPeopleDiscovery(mediaIds);
-            setStep("creating");
-          }}
-          onSkip={() => {
-            void skipRitual();
-          }}
-          skipPending={skipPending}
-        />
-      ) : step === "creating" ? (
-        <FirstFamilyMovieCreating
-          mediaIds={mediaIds}
-          initialMovie={resumeMovie}
-          onBack={() => setStep("photos-ready")}
-          onRenderStarted={() => warmPeopleDiscovery(mediaIds)}
-          onContinueToPeople={() => setStep("people")}
-          onSkip={() => {
-            void skipRitual();
-          }}
-          skipPending={skipPending}
-        />
-      ) : step === "people" ? (
-        <FirstFamilyMoviePeopleDiscovery
-          mediaIds={mediaIds}
-          onContinue={() => setStep("celebrate")}
-          onSkip={() => {
-            void skipRitual();
-          }}
-          skipPending={skipPending}
-        />
-      ) : (
-        <FirstFamilyMovieCelebration
-          onAddPhotos={() => {
-            trackFirstMovieEvent("first_movie_add_more_clicked");
-            void goToApp("/upload");
-          }}
-          onInviteFamily={() => {
-            trackFirstMovieEvent("first_movie_invite_clicked");
-            void goToApp("/family");
-          }}
-          onEnterApp={() => {
-            void goToApp("/media");
-          }}
-        />
-      )}
+      {showStepSkip && !revealActive ? (
+        <div
+          className={cn(
+            "absolute z-50",
+            localPreview
+              ? "right-3 top-12 sm:right-5"
+              : "right-3 top-3 sm:right-5 sm:top-5",
+          )}
+        >
+          <FirstFamilyMovieSkipButton
+            variant="header"
+            onClick={() => {
+              void skipRitual();
+            }}
+            pending={skipPending}
+            className="border-white/20 bg-black/35 text-[#f7f0e8] hover:bg-black/50"
+          />
+        </div>
+      ) : null}
+
+      <div
+        className={cn(
+          "ffm-step-overlay",
+          overlayPhase === "in" ? "ffm-step-overlay--in" : "ffm-step-overlay--out",
+        )}
+      >
+        {renderStep === "welcome" ? (
+          <FirstFamilyMovieWelcome
+            onStart={() => setStep("upload")}
+            onSkip={() => {
+              void skipRitual();
+            }}
+            skipPending={skipPending}
+          />
+        ) : renderStep === "upload" ? (
+          <FirstFamilyMovieGuidedUpload
+            storageBlocked={storageBlocked}
+            planName={planName}
+            initialMediaIds={mediaIds}
+            onBack={() => setStep("welcome")}
+            onContinue={(ids) => {
+              setMediaIds(ids);
+              setStep("photos-ready");
+            }}
+            onSkip={() => {
+              void skipRitual();
+            }}
+            skipPending={skipPending}
+          />
+        ) : renderStep === "photos-ready" ? (
+          <PhotosReadyStep
+            count={mediaIds.length}
+            onAddMore={() => setStep("upload")}
+            onCreate={() => {
+              trackFirstMovieEvent("first_movie_create_clicked", {
+                mediaCount: mediaIds.length,
+              });
+              warmPeopleDiscovery(mediaIds);
+              setStep("creating");
+            }}
+            onSkip={() => {
+              void skipRitual();
+            }}
+            skipPending={skipPending}
+          />
+        ) : renderStep === "creating" ? (
+          <FirstFamilyMovieCreating
+            mediaIds={mediaIds}
+            initialMovie={resumeMovie}
+            onBack={() => setStep("photos-ready")}
+            onRenderStarted={() => warmPeopleDiscovery(mediaIds)}
+            onRevealStart={() => setRevealActive(true)}
+            onContinueToPeople={() => {
+              setRevealActive(false);
+              setStep("people");
+            }}
+            onSkip={() => {
+              void skipRitual();
+            }}
+            skipPending={skipPending}
+          />
+        ) : renderStep === "people" ? (
+          <FirstFamilyMoviePeopleDiscovery
+            mediaIds={mediaIds}
+            onContinue={() => setStep("celebrate")}
+            onSkip={() => {
+              void skipRitual();
+            }}
+            skipPending={skipPending}
+          />
+        ) : (
+          <FirstFamilyMovieCelebration
+            onAddPhotos={() => {
+              trackFirstMovieEvent("first_movie_add_more_clicked");
+              void goToApp("/upload");
+            }}
+            onInviteFamily={() => {
+              trackFirstMovieEvent("first_movie_invite_clicked");
+              void goToApp("/family");
+            }}
+            onEnterApp={() => {
+              void goToApp("/media");
+            }}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -263,42 +335,44 @@ function PhotosReadyStep({
   skipPending: boolean;
 }) {
   return (
-    <main className="relative mx-auto flex min-h-dvh w-full max-w-lg flex-col justify-center px-6 py-14 sm:px-8">
-      <p className="font-sans text-[0.6875rem] font-semibold uppercase tracking-[0.2em] text-[color:var(--accent-deep)]">
-        Photos ready
-      </p>
-      <h1 className="mt-6 font-display text-[clamp(1.75rem,6vw,2.4rem)] leading-tight tracking-tight text-[color:var(--ink)]">
-        {count} favorite{count === 1 ? "" : "s"} are safely in your vault.
-      </h1>
-      <p className="mt-4 text-base leading-relaxed text-[color:var(--ink-muted)]">
-        We’ll arrange them with soft transitions, face-aware framing, and a
-        gentle soundtrack — no black title card.
-      </p>
-      <div className="mt-10 flex flex-col gap-3">
-        <button
-          type="button"
-          onClick={onCreate}
-          disabled={skipPending}
-          className="ui-btn ui-btn-primary inline-flex h-12 w-full items-center justify-center px-6 text-base font-semibold disabled:opacity-60"
-        >
-          Create My Movie
-        </button>
-        <button
-          type="button"
-          onClick={onAddMore}
-          disabled={skipPending}
-          className="ui-btn ui-btn-secondary inline-flex h-11 w-full items-center justify-center px-5 text-sm font-semibold disabled:opacity-60"
-        >
-          Add more photos
-        </button>
-        <button
-          type="button"
-          onClick={onSkip}
-          disabled={skipPending}
-          className="ui-btn ui-btn-ghost inline-flex h-11 w-full items-center justify-center px-5 text-sm font-semibold text-[color:var(--ink-muted)] disabled:opacity-60"
-        >
-          {skipPending ? "Skipping…" : "Skip"}
-        </button>
+    <main className="relative mx-auto flex min-h-dvh w-full max-w-lg flex-col justify-center px-5 py-14 sm:px-8">
+      <div className="ffm-ritual-card px-6 py-8 sm:px-8 sm:py-9">
+        <p className="font-sans text-[0.6875rem] font-semibold uppercase tracking-[0.2em] text-[color:var(--accent-deep)]">
+          Photos ready
+        </p>
+        <h1 className="mt-6 font-display text-[clamp(1.75rem,6vw,2.4rem)] leading-tight tracking-tight text-[color:var(--ink)]">
+          {count} favorite{count === 1 ? "" : "s"} are safely in your vault.
+        </h1>
+        <p className="mt-4 text-base leading-relaxed text-[color:var(--ink-muted)]">
+          We’ll arrange them with soft transitions, face-aware framing, and a
+          gentle soundtrack — no black title card.
+        </p>
+        <div className="mt-10 flex flex-col gap-3">
+          <button
+            type="button"
+            onClick={onCreate}
+            disabled={skipPending}
+            className="ui-btn ui-btn-primary inline-flex h-12 w-full items-center justify-center px-6 text-base font-semibold disabled:opacity-60"
+          >
+            Create My Movie
+          </button>
+          <button
+            type="button"
+            onClick={onAddMore}
+            disabled={skipPending}
+            className="ui-btn ui-btn-secondary inline-flex h-11 w-full items-center justify-center px-5 text-sm font-semibold disabled:opacity-60"
+          >
+            Add more photos
+          </button>
+          <button
+            type="button"
+            onClick={onSkip}
+            disabled={skipPending}
+            className="ui-btn ui-btn-ghost inline-flex h-11 w-full items-center justify-center px-5 text-sm font-semibold text-[color:var(--ink-muted)] disabled:opacity-60"
+          >
+            {skipPending ? "Skipping…" : "Skip"}
+          </button>
+        </div>
       </div>
     </main>
   );
