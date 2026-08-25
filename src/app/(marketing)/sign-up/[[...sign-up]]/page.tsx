@@ -1,4 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { SignUp } from "@clerk/nextjs";
 import { AuthClerkMount } from "@/components/auth/AuthClerkMount";
@@ -13,10 +14,13 @@ type PageProps = {
   searchParams: Promise<{ redirect_url?: string }>;
 };
 
+function isAuthHandshakePath(pathname: string): boolean {
+  return /\/(sso-callback|verify)(\/|$)/i.test(pathname);
+}
+
 /**
- * Do not set forceRedirectUrl — preserves redirect_url deep links after signup.
- *
- * Signed-in visitors never paint the sign-up shell (server + client gates).
+ * Deep links are preserved by resolving `redirect_url` ourselves, then passing
+ * that as forceRedirectUrl so Clerk always leaves auth for that destination.
  */
 export default async function SignUpPage({ searchParams }: PageProps) {
   const params = await searchParams;
@@ -27,20 +31,38 @@ export default async function SignUpPage({ searchParams }: PageProps) {
     redirect(landing);
   }
 
+  const pathname = (await headers()).get("x-pathname")?.trim() || "/sign-up";
+  const handshake = isAuthHandshakePath(pathname);
+
+  const widget = handshake ? (
+    <SignUp
+      forceRedirectUrl={landing}
+      fallbackRedirectUrl={landing}
+      appearance={authClerkAppearance}
+    />
+  ) : (
+    <AuthClerkMount>
+      <SignUp
+        forceRedirectUrl={landing}
+        fallbackRedirectUrl={landing}
+        appearance={authClerkAppearance}
+      />
+    </AuthClerkMount>
+  );
+
   return (
-    <RedirectIfSignedIn redirectTo={landing}>
-      <AuthPageShell
-        eyebrow="Begin your vault"
-        title="A private home for what love leaves behind."
-        support="Create your account and start gathering photos, stories, and keepsakes — safely."
-      >
-        <AuthClerkMount>
-          <SignUp
-            fallbackRedirectUrl={landing}
-            appearance={authClerkAppearance}
-          />
-        </AuthClerkMount>
-      </AuthPageShell>
+    <RedirectIfSignedIn redirectTo={landing} initialHandshake={handshake}>
+      {handshake ? (
+        widget
+      ) : (
+        <AuthPageShell
+          eyebrow="Begin your vault"
+          title="A private home for what love leaves behind."
+          support="Create your account and start gathering photos, stories, and keepsakes — safely."
+        >
+          {widget}
+        </AuthPageShell>
+      )}
     </RedirectIfSignedIn>
   );
 }
