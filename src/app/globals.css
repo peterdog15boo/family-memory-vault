@@ -355,68 +355,83 @@ body {
   animation-delay: 0.16s;
 }
 
-/* Shared ritual collage backdrop — full viewport coverage + slow pan */
+/* Shared ritual collage backdrop — full-bleed cover + slow pan */
 .ffm-collage-backdrop {
-  background: #0c0a09;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 100dvh;
+  background: #1a1512;
   z-index: 0;
+  overflow: hidden;
 }
 
 .ffm-collage-viewport {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
-  contain: paint;
 }
 
 .ffm-collage-track {
   display: flex;
+  flex-wrap: nowrap;
   align-items: stretch;
-  width: max-content;
+  /* 200% of the viewport — two equal panels; -50% pans exactly one */
+  width: 200%;
   height: 100%;
   min-height: 100%;
   will-change: transform;
   backface-visibility: hidden;
-  /* Ever-so-slow elegant pan (~5+ minutes per loop) */
+  /* Ever-so-slow elegant pan */
   animation: ffm-collage-pan 320s linear infinite;
 }
 
+/*
+ * Each panel is half the track (= one viewport). Avoid 100vw — scrollbar
+ * gutters can leave a black strip on the right during pan.
+ */
 .ffm-collage-panel {
   position: relative;
   box-sizing: border-box;
-  flex: 0 0 100vw;
-  width: 100vw;
+  flex: 0 0 50%;
+  width: 50%;
   height: 100%;
   min-height: 100%;
-  padding: 0.35rem;
+  padding: 0;
   overflow: hidden;
 }
 
 /*
- * Fill the panel edge-to-edge: equal 1fr rows stretch to full height
- * (vw-based row heights were leaving a bottom gap on tall desktops).
+ * Oversized uniform grid (cover behavior): every cell filled, then
+ * scaled past the viewport so bottom/right never show empty slots
+ * during the horizontal pan.
  */
 .ffm-collage-grid {
-  display: grid;
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 142%;
+  height: 142%;
   margin: 0;
-  gap: 0.35rem;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  grid-auto-rows: minmax(0, 1fr);
-  align-content: stretch;
+  display: grid;
+  grid-template-columns: repeat(var(--ffm-cols, 8), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--ffm-rows, 7), minmax(0, 1fr));
+  gap: 0.3rem;
+  transform: translate(-50%, -50%);
 }
 
-@media (min-width: 640px) {
+@media (max-width: 639px) {
   .ffm-collage-grid {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 0.4rem;
+    width: 150%;
+    height: 150%;
+    gap: 0.25rem;
   }
-}
 
-@media (min-width: 1024px) {
-  .ffm-collage-grid {
-    grid-template-columns: repeat(8, minmax(0, 1fr));
-    gap: 0.45rem;
+  .ffm-collage-track {
+    animation-duration: 380s;
   }
 }
 
@@ -478,7 +493,8 @@ body {
 }
 
 .ffm-welcome-tile {
-  border-radius: 0.4rem;
+  border-radius: 0.35rem;
+  background-color: #2a221c;
   background-size: cover;
   background-repeat: no-repeat;
   background-position: center;
@@ -510,10 +526,6 @@ body {
 @media (max-width: 639px) {
   .ffm-welcome-tile--tall {
     grid-row: span 1;
-  }
-
-  .ffm-collage-track {
-    animation-duration: 380s;
   }
 }
 

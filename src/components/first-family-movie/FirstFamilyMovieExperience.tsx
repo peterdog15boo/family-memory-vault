@@ -182,7 +182,7 @@ export function FirstFamilyMovieExperience({
 
       <div
         className={cn(
-          "ffm-backdrop-fade absolute inset-0 z-0",
+          "ffm-backdrop-fade absolute inset-0 z-0 min-h-[100dvh] w-full",
           !showCollage && "ffm-backdrop-fade--hidden",
         )}
         aria-hidden={!showCollage}

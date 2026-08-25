@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type CSSProperties } from "react";
 import { buildFirstFamilyMovieCollage } from "@/content/first-family-movie-collage";
 import { cn } from "@/lib/utils";
 
@@ -10,24 +10,40 @@ type Props = {
   denserVeil?: boolean;
 };
 
+/** Explicit mosaic size — every cell filled (no wide/tall holes). */
+const COLLAGE_COLS = 8;
+const COLLAGE_ROWS = 7;
+const COLLAGE_CELLS = COLLAGE_COLS * COLLAGE_ROWS;
+
 /**
  * Full-bleed mosaic that slowly pans left in a seamless loop.
  * Mount once for the ritual so motion never resets between steps.
+ *
+ * Coverage strategy: uniform filled grid, oversized past the viewport
+ * (cover/crop), dual panels for a seamless horizontal loop.
  */
 export function FirstFamilyMovieCollageBackdrop({
   className,
   denserVeil = false,
 }: Props) {
-  // Enough tiles for a dense full-viewport mosaic on large desktops.
-  const tiles = useMemo(() => buildFirstFamilyMovieCollage(48), []);
+  const tiles = useMemo(() => {
+    // Force square cells only — spans leave black holes in CSS grid.
+    return buildFirstFamilyMovieCollage(COLLAGE_CELLS).map((tile) => ({
+      ...tile,
+      span: "square" as const,
+    }));
+  }, []);
+
+  const gridVars = {
+    "--ffm-cols": COLLAGE_COLS,
+    "--ffm-rows": COLLAGE_ROWS,
+  } as CSSProperties;
 
   return (
     <div
-      className={cn(
-        "ffm-collage-backdrop pointer-events-none absolute inset-0",
-        className,
-      )}
+      className={cn("ffm-collage-backdrop pointer-events-none", className)}
       aria-hidden
+      style={gridVars}
     >
       <div className="ffm-collage-viewport">
         <div className="ffm-collage-track">
@@ -62,15 +78,13 @@ function CollagePanel({
               "ffm-welcome-tile",
               !duplicate && "ffm-welcome-tile--enter",
               duplicate && "ffm-welcome-tile--static",
-              tile.span === "wide" && "ffm-welcome-tile--wide",
-              tile.span === "tall" && "ffm-welcome-tile--tall",
             )}
             style={{
               backgroundImage: `url(${tile.src})`,
               backgroundPosition: tile.focus ?? "center",
               ...(duplicate
                 ? undefined
-                : { animationDelay: `${(i % 10) * 0.05}s` }),
+                : { animationDelay: `${(i % 10) * 0.04}s` }),
             }}
           />
         ))}
