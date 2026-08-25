@@ -138,7 +138,12 @@ export async function renderFirstFamilyMovieRitual(options: {
         .from(movies)
         .where(and(eq(movies.id, resumeId), eq(movies.userId, userId)))
         .limit(1);
-      if (row && (row.status === "ready" || row.status === "rendering")) {
+      if (
+        row &&
+        (row.status === "ready" ||
+          row.status === "processing" ||
+          row.status === "queued")
+      ) {
         resumeMovie = await serializeMovie(row, { includeUrls: true });
       }
     } catch (error) {

@@ -30,12 +30,12 @@ describe("firstFamilyMovieDurationSettings", () => {
   it("keeps duration in a snappy 24–42s band", () => {
     const five = firstFamilyMovieDurationSettings(5);
     const ten = firstFamilyMovieDurationSettings(10);
-    expect(five.targetDurationSeconds).toBeGreaterThanOrEqual(24);
-    expect(five.targetDurationSeconds).toBeLessThanOrEqual(42);
-    expect(ten.targetDurationSeconds).toBeGreaterThanOrEqual(
-      five.targetDurationSeconds,
-    );
-    expect(ten.targetDurationSeconds).toBeLessThanOrEqual(42);
+    const fiveSec = five.targetDurationSeconds ?? 0;
+    const tenSec = ten.targetDurationSeconds ?? 0;
+    expect(fiveSec).toBeGreaterThanOrEqual(24);
+    expect(fiveSec).toBeLessThanOrEqual(42);
+    expect(tenSec).toBeGreaterThanOrEqual(fiveSec);
+    expect(tenSec).toBeLessThanOrEqual(42);
   });
 
   it("caps photo count for duration math", () => {

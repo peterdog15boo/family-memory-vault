@@ -148,7 +148,10 @@ export function FirstFamilyMovieCreating({
               setUiPhase("failed");
               return;
             }
-            if (data.movie.status === "rendering") {
+            if (
+              data.movie.status === "processing" ||
+              data.movie.status === "queued"
+            ) {
               setStatusLabel("Adding soft transitions and music…");
             }
           }
