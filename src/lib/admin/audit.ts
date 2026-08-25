@@ -26,6 +26,7 @@ export const ADMIN_AUDIT_ACTIONS = [
   "user.plan_change",
   "user.admin_grant",
   "user.admin_revoke",
+  "user.delete",
   "moderation.review",
   "moderation.quarantine",
   "job.retry",

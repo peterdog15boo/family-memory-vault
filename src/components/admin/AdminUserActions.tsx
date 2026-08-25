@@ -29,6 +29,8 @@ export function AdminUserActions({
   const [error, setError] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState(planSlug);
   const [reason, setReason] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   async function run(body: Record<string, unknown>) {
     setError(null);
@@ -110,6 +112,33 @@ export function AdminUserActions({
       userId,
       suspended: false,
     }).catch((err) => setError(err instanceof Error ? err.message : "Failed"));
+  }
+
+  function onDeleteUser() {
+    const typed = deleteConfirm.trim();
+    const emailOk = typed.toLowerCase() === email.trim().toLowerCase();
+    const deleteOk = typed.toUpperCase() === "DELETE";
+    if (!emailOk && !deleteOk) {
+      setError(`Type ${email} or DELETE to confirm permanent deletion.`);
+      return;
+    }
+    if (
+      !confirmAdminAction(
+        `PERMANENTLY delete ${email}?\n\nThis removes their Clerk login and vault data so the email can sign up again as a new user. This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+
+    void run({
+      action: "deleteUser",
+      userId,
+      confirmation: typed,
+    })
+      .then(() => {
+        startTransition(() => router.replace("/admin/users"));
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : "Failed"));
   }
 
   return (
@@ -214,6 +243,73 @@ export function AdminUserActions({
           >
             Unsuspend user
           </button>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-red-300/80 bg-red-50/60 p-4">
+        <h2 className="font-display text-lg text-red-900">Delete user</h2>
+        <p className="mt-1 text-xs text-red-900/80">
+          Permanent hard delete for test accounts. Removes Clerk login, vault
+          data, memberships, and onboarding so the same email can re-run First
+          Family Movie. Families they created are removed. Cannot be undone.
+        </p>
+        {isSelf ? (
+          <p className="mt-3 text-[11px] text-red-900/80">
+            You cannot delete your own account here.
+          </p>
+        ) : !deleteOpen ? (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => {
+              setError(null);
+              setDeleteOpen(true);
+            }}
+            className="mt-3 rounded-md border border-red-400 bg-red-100 px-3 py-1.5 text-sm font-medium text-red-900 hover:bg-red-200 disabled:opacity-50"
+          >
+            Delete user
+          </button>
+        ) : (
+          <div className="mt-3 space-y-2">
+            <label
+              className="block text-xs font-medium text-red-900"
+              htmlFor="delete-user-confirm"
+            >
+              Type <span className="font-mono">{email}</span> or{" "}
+              <span className="font-mono">DELETE</span> to confirm
+            </label>
+            <input
+              id="delete-user-confirm"
+              type="text"
+              value={deleteConfirm}
+              onChange={(e) => setDeleteConfirm(e.target.value)}
+              autoComplete="off"
+              className="w-full rounded-md border border-red-300 bg-canvas px-2.5 py-1.5 text-sm text-ink"
+              disabled={pending}
+              placeholder={email}
+            />
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={pending || !deleteConfirm.trim()}
+                onClick={onDeleteUser}
+                className="rounded-md bg-red-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-800 disabled:opacity-50"
+              >
+                Permanently delete
+              </button>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => {
+                  setDeleteOpen(false);
+                  setDeleteConfirm("");
+                }}
+                className="rounded-md border border-ink/15 px-3 py-1.5 text-sm font-medium text-ink hover:bg-ink/5 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         )}
       </section>
 

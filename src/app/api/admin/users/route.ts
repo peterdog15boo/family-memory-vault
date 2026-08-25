@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAdminApi, setUserAdminFlag } from "@/lib/auth/admin";
 import {
   adminSetUserPlan,
+  adminDeleteUser,
   listAdminUsers,
   setUserSuspended,
 } from "@/lib/admin/users";
@@ -35,11 +36,17 @@ const actionSchema = z.discriminatedUnion("action", [
     userId: z.string().min(1),
     planSlug: z.enum(PLAN_SLUGS),
   }),
+  z.object({
+    action: z.literal("deleteUser"),
+    userId: z.string().min(1),
+    /** Must match the target email (case-insensitive) or the word DELETE. */
+    confirmation: z.string().trim().min(1).max(320),
+  }),
 ]);
 
 /**
  * GET  — list users (search + filters)
- * POST — setAdmin | setSuspended | setPlan
+ * POST — setAdmin | setSuspended | setPlan | deleteUser
  */
 export async function GET(request: Request) {
   const authResult = await requireAdminApi();
@@ -150,6 +157,15 @@ export async function POST(request: Request) {
         data.reason,
       );
       return NextResponse.json({ ok: true });
+    }
+
+    if (data.action === "deleteUser") {
+      const result = await adminDeleteUser(
+        userId,
+        data.userId,
+        data.confirmation,
+      );
+      return NextResponse.json({ ok: true, ...result });
     }
 
     const plan = await adminSetUserPlan(userId, data.userId, data.planSlug);

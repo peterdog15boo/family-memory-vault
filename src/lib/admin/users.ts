@@ -1,7 +1,8 @@
 /**
- * Admin user management — list, detail, suspend, plan override.
+ * Admin user management — list, detail, suspend, plan override, hard delete.
  */
 
+import { clerkClient } from "@clerk/nextjs/server";
 import {
   and,
   asc,
@@ -19,8 +20,11 @@ import { logAdminAudit } from "@/lib/admin/audit";
 import { assertAdminUser } from "@/lib/auth/admin";
 import { formatBytes } from "@/lib/billing/quotas";
 import { getDb } from "@/lib/db";
+import { collectDeletableMediaKeys } from "@/lib/media/delete";
+import { logger } from "@/lib/observability/logger";
 import { likeContainsPattern } from "@/lib/security/sanitize";
 import {
+  betaNdaAcceptances,
   families,
   familyMembers,
   media,
@@ -28,6 +32,7 @@ import {
   moderationEvents,
   plans,
   subscriptions,
+  termsAcceptances,
   users,
   type PlanSlug,
 } from "@/lib/db/schema";
@@ -425,6 +430,172 @@ export async function adminSetUserPlan(
   });
 
   return { planSlug: result.planSlug, planName: result.planName };
+}
+
+/**
+ * Strong confirmation for hard delete: must type the account email or DELETE.
+ */
+export function matchesAdminUserDeleteConfirmation(
+  email: string,
+  confirmation: string,
+): boolean {
+  const typed = confirmation.trim();
+  if (!typed) return false;
+  if (typed.toUpperCase() === "DELETE") return true;
+  return typed.toLowerCase() === email.trim().toLowerCase();
+}
+
+export type AdminDeleteUserResult = {
+  deletedUserId: string;
+  email: string;
+  clerkDeleted: boolean;
+  mediaRows: number;
+  r2ObjectsAttempted: number;
+};
+
+/**
+ * Permanently delete a user for test-account recycling.
+ * Cascades app data via FKs, best-effort R2 cleanup, then removes the Clerk user
+ * so the same email can sign up again as a fresh ritual candidate.
+ */
+export async function adminDeleteUser(
+  actorUserId: string,
+  targetUserId: string,
+  confirmation: string,
+): Promise<AdminDeleteUserResult> {
+  await assertAdminUser(actorUserId);
+
+  if (actorUserId === targetUserId) {
+    throw new Error("You cannot delete your own account from this UI.");
+  }
+
+  const db = getDb();
+  const [target] = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      displayName: users.displayName,
+      isAdmin: users.isAdmin,
+    })
+    .from(users)
+    .where(eq(users.id, targetUserId))
+    .limit(1);
+
+  if (!target) {
+    throw new Error("User not found.");
+  }
+
+  if (!matchesAdminUserDeleteConfirmation(target.email, confirmation)) {
+    throw new Error(
+      'Confirmation did not match. Type the user’s email or DELETE to proceed.',
+    );
+  }
+
+  const mediaRows = await db
+    .select({
+      id: media.id,
+      originalKey: media.originalKey,
+      processedKey: media.processedKey,
+      thumbnailKey: media.thumbnailKey,
+      status: media.status,
+      moderationStatus: media.moderationStatus,
+    })
+    .from(media)
+    .where(eq(media.userId, targetUserId));
+
+  let r2ObjectsAttempted = 0;
+  try {
+    const { deleteObject } = await import("@/lib/r2");
+    for (const row of mediaRows) {
+      if (
+        row.status === "csam_quarantined" ||
+        row.moderationStatus === "csam_quarantined"
+      ) {
+        continue;
+      }
+      for (const key of collectDeletableMediaKeys(row)) {
+        r2ObjectsAttempted += 1;
+        try {
+          await deleteObject(key);
+        } catch (error) {
+          logger.warn("admin.user_delete.r2_failed", {
+            targetUserId,
+            mediaId: row.id,
+            errorMessage:
+              error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    }
+  } catch (error) {
+    logger.warn("admin.user_delete.r2_init_failed", {
+      targetUserId,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  // Drop clickwrap rows so re-signup is a clean legal + ritual path.
+  await db
+    .delete(betaNdaAcceptances)
+    .where(eq(betaNdaAcceptances.userId, targetUserId));
+  await db
+    .delete(termsAcceptances)
+    .where(eq(termsAcceptances.userId, targetUserId));
+  await db
+    .delete(betaNdaAcceptances)
+    .where(eq(betaNdaAcceptances.email, target.email.toLowerCase()));
+  await db
+    .delete(termsAcceptances)
+    .where(eq(termsAcceptances.email, target.email.toLowerCase()));
+
+  await logAdminAudit({
+    actorId: actorUserId,
+    action: "user.delete",
+    targetType: "user",
+    targetId: targetUserId,
+    metadata: {
+      email: target.email,
+      displayName: target.displayName,
+      wasAdmin: target.isAdmin,
+      mediaCount: mediaRows.length,
+      r2ObjectsAttempted,
+      hardDelete: true,
+    },
+  });
+
+  await db.delete(users).where(eq(users.id, targetUserId));
+
+  let clerkDeleted = false;
+  try {
+    const client = await clerkClient();
+    await client.users.deleteUser(targetUserId);
+    clerkDeleted = true;
+  } catch (error) {
+    logger.error("admin.user_delete.clerk_failed", {
+      targetUserId,
+      email: target.email,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+    throw new Error(
+      "App data was deleted, but Clerk user removal failed. Delete the user in the Clerk dashboard so the email can be reused.",
+    );
+  }
+
+  logger.info("admin.user_deleted", {
+    actorUserId,
+    targetUserId,
+    email: target.email,
+    mediaCount: mediaRows.length,
+    clerkDeleted,
+  });
+
+  return {
+    deletedUserId: targetUserId,
+    email: target.email,
+    clerkDeleted,
+    mediaRows: mediaRows.length,
+    r2ObjectsAttempted,
+  };
 }
 
 export async function isUserSuspended(userId: string): Promise<boolean> {
