@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { currentUser } from "@clerk/nextjs/server";
 import { getDb } from "@/lib/db";
-import { users } from "@/lib/db/schema";
+import { users, type UserOnboardingState } from "@/lib/db/schema";
 import { queueWelcomeEmail } from "@/lib/email/lifecycle";
 
 /**
@@ -28,7 +28,7 @@ export async function ensureAppUser(userId: string) {
   const now = new Date();
 
   const [existing] = await db
-    .select({ id: users.id })
+    .select({ id: users.id, onboarding: users.onboarding })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
@@ -57,6 +57,24 @@ export async function ensureAppUser(userId: string) {
       },
     })
     .returning();
+
+  // Backfill ritual eligibility when `eligible` was never set (null/undefined).
+  // Do not override an explicit `eligible: false` opt-out or a completed ritual.
+  if (!isNew && existing) {
+    const onboarding = (existing.onboarding ?? null) as UserOnboardingState | null;
+    const eligibleMissing =
+      !onboarding ||
+      (onboarding.eligible !== true && onboarding.eligible !== false);
+    if (eligibleMissing && !onboarding?.firstFamilyMovieCompletedAt) {
+      await db
+        .update(users)
+        .set({
+          onboarding: { ...(onboarding ?? {}), eligible: true },
+          updatedAt: now,
+        })
+        .where(eq(users.id, userId));
+    }
+  }
 
   if (isNew) {
     queueWelcomeEmail({

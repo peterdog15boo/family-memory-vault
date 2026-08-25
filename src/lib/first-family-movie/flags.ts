@@ -1,6 +1,12 @@
 /**
- * Public feature flag for the “Your First Family Movie” first-session ritual.
- * Set NEXT_PUBLIC_FIRST_FAMILY_MOVIE_ONBOARDING=true to enable.
+ * Feature flag for the “Your First Family Movie” first-session ritual.
+ *
+ * Prefer the server-only var on Vercel (available at request time).
+ * NEXT_PUBLIC_* is also accepted for local/dev and client-visible checks,
+ * but it is inlined at build time — set it before `vercel build` / redeploy.
+ *
+ *   FIRST_FAMILY_MOVIE_ONBOARDING=true
+ *   NEXT_PUBLIC_FIRST_FAMILY_MOVIE_ONBOARDING=true
  */
 
 function isTruthyFlag(raw: string | undefined | null): boolean {
@@ -10,8 +16,11 @@ function isTruthyFlag(raw: string | undefined | null): boolean {
 }
 
 export function isFirstFamilyMovieOnboardingEnabled(): boolean {
-  return isTruthyFlag(
-    process.env.NEXT_PUBLIC_FIRST_FAMILY_MOVIE_ONBOARDING,
+  // Server-only first so Production can flip the gate without relying solely
+  // on a NEXT_PUBLIC_ value baked into the last build.
+  return (
+    isTruthyFlag(process.env.FIRST_FAMILY_MOVIE_ONBOARDING) ||
+    isTruthyFlag(process.env.NEXT_PUBLIC_FIRST_FAMILY_MOVIE_ONBOARDING)
   );
 }
 
@@ -51,7 +60,9 @@ export function isFirstFamilyMovieLocalPreviewRequest(input: {
     return true;
   }
 
-  if (isTruthyFlag(Array.isArray(input.preview) ? input.preview[0] : input.preview)) {
+  if (
+    isTruthyFlag(Array.isArray(input.preview) ? input.preview[0] : input.preview)
+  ) {
     return true;
   }
 

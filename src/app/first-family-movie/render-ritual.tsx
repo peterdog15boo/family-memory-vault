@@ -56,6 +56,9 @@ export async function renderFirstFamilyMovieRitual(options: {
   forcePreview?: boolean;
 }) {
   if (!isFirstFamilyMovieOnboardingEnabled()) {
+    console.warn(
+      "[first-family-movie] flag off — set FIRST_FAMILY_MOVIE_ONBOARDING=true (or NEXT_PUBLIC_*) on the host and redeploy",
+    );
     redirect(APP_HOME_PATH);
   }
 

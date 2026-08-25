@@ -10,9 +10,16 @@ describe("first-family-movie flags", () => {
     vi.unstubAllEnvs();
   });
 
-  it("reads the public onboarding flag", () => {
+  it("reads server or public onboarding flags", () => {
+    vi.stubEnv("FIRST_FAMILY_MOVIE_ONBOARDING", "");
     vi.stubEnv("NEXT_PUBLIC_FIRST_FAMILY_MOVIE_ONBOARDING", "true");
     expect(isFirstFamilyMovieOnboardingEnabled()).toBe(true);
+
+    vi.stubEnv("NEXT_PUBLIC_FIRST_FAMILY_MOVIE_ONBOARDING", "");
+    vi.stubEnv("FIRST_FAMILY_MOVIE_ONBOARDING", "true");
+    expect(isFirstFamilyMovieOnboardingEnabled()).toBe(true);
+
+    vi.stubEnv("FIRST_FAMILY_MOVIE_ONBOARDING", "");
     vi.stubEnv("NEXT_PUBLIC_FIRST_FAMILY_MOVIE_ONBOARDING", "");
     expect(isFirstFamilyMovieOnboardingEnabled()).toBe(false);
   });

@@ -9,7 +9,8 @@ import {
   recordTermsAcceptance,
   termsCookieOptions,
 } from "@/lib/terms";
-import { getPostAuthLandingPath } from "@/lib/routes";
+import { getPostAuthLandingPath, APP_HOME_PATH, FIRST_FAMILY_MOVIE_PATH } from "@/lib/routes";
+import { shouldEnterFirstFamilyMovie } from "@/lib/first-family-movie";
 import { ensureAppUser } from "@/lib/users";
 import {
   enforceRateLimit,
@@ -132,7 +133,17 @@ export async function POST(request: Request) {
       termsVersion: TERMS_VERSION,
     });
 
-    const redirectTo = safeRedirectPath(parsed.data.redirectTo);
+    let redirectTo = safeRedirectPath(parsed.data.redirectTo);
+    try {
+      if (
+        (redirectTo === APP_HOME_PATH || redirectTo === "/") &&
+        (await shouldEnterFirstFamilyMovie(authResult.userId))
+      ) {
+        redirectTo = FIRST_FAMILY_MOVIE_PATH;
+      }
+    } catch (error) {
+      console.warn("[terms.accept] first-family-movie gate failed", error);
+    }
     const response = NextResponse.json({
       ok: true,
       acceptedAt: row?.acceptedAt?.toISOString() ?? new Date().toISOString(),

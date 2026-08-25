@@ -1,3 +1,5 @@
+import { isFirstFamilyMovieOnboardingEnabled } from "@/lib/first-family-movie/flags";
+
 /** Default post-auth destination inside the signed-in app. */
 export const APP_HOME_PATH = "/dashboard" as const;
 
@@ -13,9 +15,7 @@ export const FIRST_FAMILY_MOVIE_PATH = "/first-family-movie" as const;
  * it enforces NDA/Terms itself and avoids a blank /dashboard wait.
  */
 export function getPostAuthLandingPath(): string {
-  const raw =
-    process.env.NEXT_PUBLIC_FIRST_FAMILY_MOVIE_ONBOARDING?.trim().toLowerCase();
-  const flagOn =
-    raw === "1" || raw === "true" || raw === "yes" || raw === "on";
-  return flagOn ? FIRST_FAMILY_MOVIE_PATH : APP_HOME_PATH;
+  return isFirstFamilyMovieOnboardingEnabled()
+    ? FIRST_FAMILY_MOVIE_PATH
+    : APP_HOME_PATH;
 }

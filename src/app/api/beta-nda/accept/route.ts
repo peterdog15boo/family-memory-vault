@@ -9,7 +9,8 @@ import {
   recordBetaNdaAcceptance,
 } from "@/lib/beta-nda";
 import { hasAcceptedTerms, isTermsRequired } from "@/lib/terms";
-import { getPostAuthLandingPath } from "@/lib/routes";
+import { getPostAuthLandingPath, APP_HOME_PATH, FIRST_FAMILY_MOVIE_PATH } from "@/lib/routes";
+import { shouldEnterFirstFamilyMovie } from "@/lib/first-family-movie";
 import { ensureAppUser } from "@/lib/users";
 import {
   enforceRateLimit,
@@ -123,6 +124,20 @@ export async function POST(request: Request) {
         if (!redirectTo.startsWith("/terms-agree")) {
           redirectTo = `/terms-agree?redirect_url=${encodeURIComponent(redirectTo)}`;
         }
+      }
+    } else {
+      // No Terms gate — send eligible new vaults straight into the ritual.
+      try {
+        if (
+          (redirectTo === APP_HOME_PATH ||
+            redirectTo === "/" ||
+            redirectTo === FIRST_FAMILY_MOVIE_PATH) &&
+          (await shouldEnterFirstFamilyMovie(authResult.userId))
+        ) {
+          redirectTo = FIRST_FAMILY_MOVIE_PATH;
+        }
+      } catch (error) {
+        console.warn("[beta-nda.accept] first-family-movie gate failed", error);
       }
     }
 
