@@ -6,12 +6,7 @@ export default function DashboardLoading() {
       aria-busy="true"
       aria-live="polite"
     >
-      <p className="font-display text-2xl tracking-tight text-ink">
-        Opening your vault…
-      </p>
-      <p className="mt-2 max-w-sm text-sm text-ink-muted">
-        This only takes a moment.
-      </p>
+      <p className="text-sm text-ink-muted">Loading…</p>
     </main>
   );
 }

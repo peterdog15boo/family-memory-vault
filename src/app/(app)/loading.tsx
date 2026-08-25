@@ -1,4 +1,4 @@
-/** App-shell loading state — avoids a white flash on slow first navigations. */
+/** Quiet shell wait — keep copy minimal so normal logins don’t feel like onboarding. */
 export default function AppLoading() {
   return (
     <main
@@ -6,12 +6,7 @@ export default function AppLoading() {
       aria-busy="true"
       aria-live="polite"
     >
-      <p className="font-display text-2xl tracking-tight text-ink">
-        Just a moment…
-      </p>
-      <p className="mt-2 max-w-sm text-sm text-ink-muted">
-        Preparing your private vault.
-      </p>
+      <p className="text-sm text-ink-muted">Loading…</p>
     </main>
   );
 }

@@ -1,5 +1,3 @@
-import { isFirstFamilyMovieOnboardingEnabled } from "@/lib/first-family-movie/flags";
-
 /** Default post-auth destination inside the signed-in app. */
 export const APP_HOME_PATH = "/dashboard" as const;
 
@@ -11,11 +9,13 @@ export const FIRST_FAMILY_MOVIE_PATH = "/first-family-movie" as const;
 
 /**
  * Where Clerk should send users after sign-in / sign-up when no deep link
- * is present. When the first-movie flag is on, prefer the ritual route —
- * combined legal acceptance runs after the ritual, before the main vault.
+ * is present.
+ *
+ * Always land on the vault home. Eligible first-movie users are redirected
+ * from the authenticated app layout *after* eligibility is computed — never
+ * send seasoned accounts to /first-family-movie first (that flashes the
+ * ritual loading screen).
  */
 export function getPostAuthLandingPath(): string {
-  return isFirstFamilyMovieOnboardingEnabled()
-    ? FIRST_FAMILY_MOVIE_PATH
-    : APP_HOME_PATH;
+  return APP_HOME_PATH;
 }
