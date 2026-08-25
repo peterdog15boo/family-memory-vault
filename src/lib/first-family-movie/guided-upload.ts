@@ -5,12 +5,15 @@
 export const FFM_SOFT_MIN_PHOTOS = 5;
 export const FFM_SOFT_TARGET_PHOTOS = 10;
 
+/** Brief pause after the 5th upload so a multi-select batch can finish. */
+export const FFM_AUTO_START_SETTLE_MS = 1_400;
+
 export type GuidedUploadProgressCopy = {
   /** Primary progress line, e.g. “3 of 5 photos added…” */
   progressLine: string;
   /** Short encouragement under the progress line. */
   encouragement: string;
-  /** Whether Continue may enable (caller still checks upload activity). */
+  /** Whether the soft minimum is met (auto-start may proceed). */
   canContinue: boolean;
 };
 
@@ -33,7 +36,7 @@ export function getGuidedUploadProgressCopy(
 
   if (n === 0) {
     return {
-      progressLine: `Add at least ${softMin} photos to continue`,
+      progressLine: `Add at least ${softMin} photos to begin`,
       encouragement: "Favorites work best — candid, smiling, everyday moments.",
       canContinue,
     };
@@ -51,15 +54,17 @@ export function getGuidedUploadProgressCopy(
 
   if (n === softMin) {
     return {
-      progressLine: `${n} of ${softMin} photos added…`,
-      encouragement: "Perfect — that’s enough to begin. Add more if you like.",
+      progressLine: `${n} photos ready`,
+      encouragement:
+        "Perfect — that’s enough. We’ll start your movie automatically.",
       canContinue,
     };
   }
 
   return {
-    progressLine: `${n} photos added`,
-    encouragement: "Wonderful collection. Add more anytime, or continue when ready.",
+    progressLine: `${n} photos ready`,
+    encouragement:
+      "Wonderful collection. We’ll start your movie as soon as uploads finish.",
     canContinue,
   };
 }

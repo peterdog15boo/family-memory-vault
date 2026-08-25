@@ -7,13 +7,13 @@ import {
 } from "@/lib/first-family-movie/guided-upload";
 
 describe("getGuidedUploadProgressCopy", () => {
-  it("blocks continue below the soft minimum", () => {
+  it("blocks auto-start below the soft minimum", () => {
     for (let n = 0; n < FFM_SOFT_MIN_PHOTOS; n++) {
       expect(getGuidedUploadProgressCopy(n).canContinue).toBe(false);
     }
   });
 
-  it("enables continue at 5 and above", () => {
+  it("enables auto-start at 5 and above", () => {
     expect(getGuidedUploadProgressCopy(5).canContinue).toBe(true);
     expect(getGuidedUploadProgressCopy(6).canContinue).toBe(true);
     expect(getGuidedUploadProgressCopy(12).canContinue).toBe(true);
@@ -25,10 +25,15 @@ describe("getGuidedUploadProgressCopy", () => {
     );
   });
 
-  it("allows more than 5 with clear copy", () => {
-    const copy = getGuidedUploadProgressCopy(8);
-    expect(copy.canContinue).toBe(true);
-    expect(copy.progressLine).toBe("8 photos added");
+  it("signals automatic start at and above the minimum", () => {
+    const atMin = getGuidedUploadProgressCopy(5);
+    expect(atMin.progressLine).toBe("5 photos ready");
+    expect(atMin.encouragement).toMatch(/automatically/i);
+
+    const more = getGuidedUploadProgressCopy(8);
+    expect(more.canContinue).toBe(true);
+    expect(more.progressLine).toBe("8 photos ready");
+    expect(more.encouragement).toMatch(/start your movie/i);
   });
 });
 

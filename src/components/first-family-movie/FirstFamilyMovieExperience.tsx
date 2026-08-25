@@ -17,7 +17,6 @@ import { cn } from "@/lib/utils";
 type Step =
   | "welcome"
   | "upload"
-  | "photos-ready"
   | "creating"
   | "people"
   | "celebrate";
@@ -34,7 +33,6 @@ type Props = {
 const COLLAGE_STEPS: ReadonlySet<Step> = new Set([
   "welcome",
   "upload",
-  "photos-ready",
   "creating",
 ]);
 
@@ -42,7 +40,8 @@ const STEP_FADE_MS = 520;
 
 /**
  * First-session “Your First Family Movie” —
- * welcome → upload → create (+ parallel faces) → reveal → people → celebration.
+ * welcome → upload (auto-starts at 5+) → create (+ parallel faces) →
+ * reveal → people → celebration.
  *
  * Collage backdrop mounts once and keeps panning across early ritual steps;
  * overlays crossfade so the experience feels continuous.
@@ -130,7 +129,6 @@ export function FirstFamilyMovieExperience({
 
   const showStepSkip =
     renderStep === "upload" ||
-    renderStep === "photos-ready" ||
     renderStep === "creating" ||
     renderStep === "people";
 
@@ -251,24 +249,9 @@ export function FirstFamilyMovieExperience({
             planName={planName}
             initialMediaIds={mediaIds}
             onBack={() => setStep("welcome")}
-            onContinue={(ids) => {
+            onReady={(ids) => {
               setMediaIds(ids);
-              setStep("photos-ready");
-            }}
-            onSkip={() => {
-              void skipRitual();
-            }}
-            skipPending={skipPending}
-          />
-        ) : renderStep === "photos-ready" ? (
-          <PhotosReadyStep
-            count={mediaIds.length}
-            onAddMore={() => setStep("upload")}
-            onCreate={() => {
-              trackFirstMovieEvent("first_movie_create_clicked", {
-                mediaCount: mediaIds.length,
-              });
-              warmPeopleDiscovery(mediaIds);
+              warmPeopleDiscovery(ids);
               setStep("creating");
             }}
             onSkip={() => {
@@ -280,7 +263,7 @@ export function FirstFamilyMovieExperience({
           <FirstFamilyMovieCreating
             mediaIds={mediaIds}
             initialMovie={resumeMovie}
-            onBack={() => setStep("photos-ready")}
+            onBack={() => setStep("upload")}
             onRenderStarted={() => warmPeopleDiscovery(mediaIds)}
             onRevealStart={() => setRevealActive(true)}
             onContinueToPeople={() => {
@@ -318,62 +301,5 @@ export function FirstFamilyMovieExperience({
         )}
       </div>
     </div>
-  );
-}
-
-function PhotosReadyStep({
-  count,
-  onAddMore,
-  onCreate,
-  onSkip,
-  skipPending,
-}: {
-  count: number;
-  onAddMore: () => void;
-  onCreate: () => void;
-  onSkip: () => void;
-  skipPending: boolean;
-}) {
-  return (
-    <main className="relative mx-auto flex min-h-dvh w-full max-w-lg flex-col justify-center px-5 py-14 sm:px-8">
-      <div className="ffm-ritual-card px-6 py-8 sm:px-8 sm:py-9">
-        <p className="font-sans text-[0.6875rem] font-semibold uppercase tracking-[0.2em] text-[color:var(--accent-deep)]">
-          Photos ready
-        </p>
-        <h1 className="mt-6 font-display text-[clamp(1.75rem,6vw,2.4rem)] leading-tight tracking-tight text-[color:var(--ink)]">
-          {count} favorite{count === 1 ? "" : "s"} are safely in your vault.
-        </h1>
-        <p className="mt-4 text-base leading-relaxed text-[color:var(--ink-muted)]">
-          We’ll arrange them with soft transitions, face-aware framing, and a
-          gentle soundtrack — no black title card.
-        </p>
-        <div className="mt-10 flex flex-col gap-3">
-          <button
-            type="button"
-            onClick={onCreate}
-            disabled={skipPending}
-            className="ui-btn ui-btn-primary inline-flex h-12 w-full items-center justify-center px-6 text-base font-semibold disabled:opacity-60"
-          >
-            Create My Movie
-          </button>
-          <button
-            type="button"
-            onClick={onAddMore}
-            disabled={skipPending}
-            className="ui-btn ui-btn-secondary inline-flex h-11 w-full items-center justify-center px-5 text-sm font-semibold disabled:opacity-60"
-          >
-            Add more photos
-          </button>
-          <button
-            type="button"
-            onClick={onSkip}
-            disabled={skipPending}
-            className="ui-btn ui-btn-ghost inline-flex h-11 w-full items-center justify-center px-5 text-sm font-semibold text-[color:var(--ink-muted)] disabled:opacity-60"
-          >
-            {skipPending ? "Skipping…" : "Skip"}
-          </button>
-        </div>
-      </div>
-    </main>
   );
 }

@@ -19,6 +19,7 @@ import { UpgradePrompt } from "@/components/billing/UpgradePrompt";
 import { userFacingApiError } from "@/lib/http/user-messages";
 import { sha256HexFromFile } from "@/lib/media/import/content-hash-client";
 import {
+  FFM_AUTO_START_SETTLE_MS,
   FFM_SOFT_MIN_PHOTOS,
   getGuidedUploadProgressCopy,
   getProcessingMicroCopy,
@@ -58,7 +59,8 @@ type Props = {
   /** Photos already accepted in this ritual (e.g. after “Add more”). */
   initialMediaIds?: string[];
   onBack: () => void;
-  onContinue: (mediaIds: string[]) => void;
+  /** Fired once when ≥5 photos are uploaded — starts movie creation. */
+  onReady: (mediaIds: string[]) => void;
   onSkip?: () => void;
   skipPending?: boolean;
 };
@@ -120,7 +122,7 @@ export function FirstFamilyMovieGuidedUpload({
   planName = "your",
   initialMediaIds = [],
   onBack,
-  onContinue,
+  onReady,
   onSkip,
   skipPending = false,
 }: Props) {
@@ -132,12 +134,16 @@ export function FirstFamilyMovieGuidedUpload({
   const [quotaBlocked, setQuotaBlocked] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [processTick, setProcessTick] = useState(0);
+  const [autoStarting, setAutoStarting] = useState(false);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const itemsRef = useRef(items);
   itemsRef.current = items;
   const uploadStartedRef = useRef(false);
   const reachedFiveRef = useRef(priorMediaIds.length >= FFM_SOFT_MIN_PHOTOS);
+  const autoStartedRef = useRef(false);
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
 
   const updateItem = useCallback((id: string, patch: Partial<GuidedItem>) => {
     setItems((prev) =>
@@ -453,6 +459,39 @@ export function FirstFamilyMovieGuidedUpload({
   /** Soft min: ≥5 successfully uploaded (in pipeline). More than 5 is fine. */
   const canContinue = progressCopy.canContinue;
 
+  /** Wait until the current batch finishes PUT/complete before leaving. */
+  const uploadsSettled = !items.some(
+    (i) => i.phase === "queued" || i.phase === "uploading",
+  );
+
+  // Auto-advance into movie creation — no Continue / Create Movie clicks.
+  useEffect(() => {
+    if (autoStartedRef.current || skipPending || storageBlocked) return;
+    if (successfulCount < FFM_SOFT_MIN_PHOTOS || !uploadsSettled) return;
+
+    setAutoStarting(true);
+    announce("Starting your first family movie.", { priority: "polite" });
+
+    const ids = successfulMediaIds;
+    const timer = window.setTimeout(() => {
+      if (autoStartedRef.current) return;
+      autoStartedRef.current = true;
+      trackFirstMovieEvent("first_movie_create_clicked", {
+        mediaCount: ids.length,
+        autoStart: true,
+      });
+      onReadyRef.current(ids);
+    }, FFM_AUTO_START_SETTLE_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    successfulCount,
+    uploadsSettled,
+    successfulMediaIds,
+    skipPending,
+    storageBlocked,
+  ]);
+
   const acceptImages =
     "image/jpeg,image/png,image/webp,image/heic,image/heif,image/*,.jpg,.jpeg,.png,.webp,.heic,.heif";
 
@@ -655,33 +694,45 @@ export function FirstFamilyMovieGuidedUpload({
       </div>
 
       <div className="sticky bottom-0 mt-8 border-t border-[color:var(--border-subtle)] bg-[color:var(--surface-elevated)]/95 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur-sm">
-        <button
-          type="button"
-          disabled={!canContinue || skipPending}
-          onClick={() => onContinue(successfulMediaIds)}
-          className="ui-btn ui-btn-primary inline-flex h-12 w-full items-center justify-center px-6 text-base font-semibold disabled:cursor-not-allowed disabled:opacity-45"
-        >
-          Continue
-        </button>
+        {autoStarting || (canContinue && uploadsSettled) ? (
+          <p
+            className="flex min-h-12 items-center justify-center gap-2 text-sm font-semibold text-[color:var(--accent-deep)]"
+            role="status"
+            aria-live="polite"
+          >
+            <LoaderCircle
+              className="size-4 shrink-0 animate-spin"
+              aria-hidden
+            />
+            Starting your first family movie…
+          </p>
+        ) : canContinue ? (
+          <p
+            className="flex min-h-12 items-center justify-center gap-2 text-sm font-medium text-[color:var(--ink-muted)]"
+            role="status"
+          >
+            <LoaderCircle
+              className="size-4 shrink-0 animate-spin"
+              aria-hidden
+            />
+            Finishing uploads — then we’ll start your movie…
+          </p>
+        ) : (
+          <p className="min-h-12 text-center text-sm leading-relaxed text-[color:var(--ink-muted)]">
+            Add at least {FFM_SOFT_MIN_PHOTOS} photos — your movie starts
+            automatically.
+          </p>
+        )}
         {onSkip ? (
           <button
             type="button"
             onClick={onSkip}
-            disabled={skipPending}
+            disabled={skipPending || autoStarting}
             className="ui-btn ui-btn-ghost mt-2 inline-flex h-11 w-full items-center justify-center px-5 text-sm font-semibold text-[color:var(--ink-muted)] disabled:opacity-60"
           >
             {skipPending ? "Skipping…" : "Skip"}
           </button>
         ) : null}
-        {!canContinue ? (
-          <p className="mt-2 text-center text-xs text-[color:var(--ink-muted)]">
-            Add at least {FFM_SOFT_MIN_PHOTOS} photos to continue
-          </p>
-        ) : (
-          <p className="mt-2 text-center text-xs text-[color:var(--ink-muted)]">
-            You can add more photos anytime — or continue when ready.
-          </p>
-        )}
       </div>
       </div>
     </main>
