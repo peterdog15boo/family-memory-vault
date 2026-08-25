@@ -540,6 +540,22 @@ body {
   }
 }
 
+.ffm-reveal {
+  opacity: 1;
+  transition: opacity 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ffm-reveal--exit {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ffm-reveal {
+    transition-duration: 0.01ms;
+  }
+}
+
 /* Step overlay crossfade */
 .ffm-step-overlay {
   position: relative;

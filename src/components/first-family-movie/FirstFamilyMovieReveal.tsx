@@ -1,9 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, Component, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  Component,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { Download, Loader2, RotateCcw, Share2 } from "lucide-react";
 import { MovieShareDialog } from "@/components/movies/MovieShareDialog";
+import { usePrefersReducedMotion } from "@/components/media-section/usePrefersReducedMotion";
 import type { SerializedMovie } from "@/lib/movies/serialize";
 import {
   downloadMovieFile,
@@ -15,16 +23,29 @@ import { cn } from "@/lib/utils";
 type Props = {
   movie: Pick<
     SerializedMovie,
-    "id" | "title" | "playUrl" | "downloadUrl" | "thumbnailUrl" | "shareUrl" | "settings" | "durationSeconds" | "status"
+    | "id"
+    | "title"
+    | "playUrl"
+    | "downloadUrl"
+    | "thumbnailUrl"
+    | "shareUrl"
+    | "settings"
+    | "durationSeconds"
+    | "status"
   > &
     Partial<SerializedMovie>;
-  /** Soft Continue — typically People Discovery (not vault home). */
+  /** After first natural playback end — People Discovery (not vault home). */
   onContinue: () => void;
 };
 
+/** Brief window after the credits so Replay is still easy to hit. */
+const AUTO_ADVANCE_GRACE_MS = 1_800;
+const EXIT_FADE_MS = 650;
+
 /**
  * Big Reveal — emotional peak after the first family movie is ready.
- * Dark, full-screen, autoplay; Replay + Download are primary. Share is optional.
+ * Dark, full-screen, autoplay; ends → soft auto-advance to People.
+ * Replay / Download stay available; Continue is no longer required.
  */
 export function FirstFamilyMovieReveal({ movie, onContinue }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -35,11 +56,25 @@ export function FirstFamilyMovieReveal({ movie, onContinue }: Props) {
   const [shareOpen, setShareOpen] = useState(false);
   const [shareAvailable, setShareAvailable] = useState(true);
   const [ended, setEnded] = useState(false);
+  const [exiting, setExiting] = useState(false);
   const [mounted, setMounted] = useState(false);
   const watchedRef = useRef(false);
+  const advancedRef = useRef(false);
+  const graceTimerRef = useRef<number | null>(null);
+  const exitTimerRef = useRef<number | null>(null);
+  const onContinueRef = useRef(onContinue);
+  onContinueRef.current = onContinue;
+  const reduceMotion = usePrefersReducedMotion();
 
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (graceTimerRef.current) window.clearTimeout(graceTimerRef.current);
+      if (exitTimerRef.current) window.clearTimeout(exitTimerRef.current);
+    };
   }, []);
 
   // Fresh signed URLs for play + download.
@@ -84,6 +119,30 @@ export function FirstFamilyMovieReveal({ movie, onContinue }: Props) {
     };
   }, [movie]);
 
+  const finishToPeople = useCallback(() => {
+    if (advancedRef.current) return;
+    advancedRef.current = true;
+    if (graceTimerRef.current) {
+      window.clearTimeout(graceTimerRef.current);
+      graceTimerRef.current = null;
+    }
+    setExiting(true);
+    const fadeMs = reduceMotion ? 0 : EXIT_FADE_MS;
+    exitTimerRef.current = window.setTimeout(() => {
+      onContinueRef.current();
+    }, fadeMs);
+  }, [reduceMotion]);
+
+  const scheduleAdvance = useCallback(() => {
+    if (advancedRef.current || exiting) return;
+    if (graceTimerRef.current) window.clearTimeout(graceTimerRef.current);
+    const grace = reduceMotion ? 200 : AUTO_ADVANCE_GRACE_MS;
+    graceTimerRef.current = window.setTimeout(() => {
+      graceTimerRef.current = null;
+      finishToPeople();
+    }, grace);
+  }, [exiting, finishToPeople, reduceMotion]);
+
   const tryPlay = useCallback(async () => {
     const el = videoRef.current;
     if (!el) return;
@@ -120,6 +179,11 @@ export function FirstFamilyMovieReveal({ movie, onContinue }: Props) {
   }, [loadingUrl, playback.playUrl, tryPlay]);
 
   function handleReplay() {
+    if (advancedRef.current || exiting) return;
+    if (graceTimerRef.current) {
+      window.clearTimeout(graceTimerRef.current);
+      graceTimerRef.current = null;
+    }
     const el = videoRef.current;
     if (!el) return;
     el.currentTime = 0;
@@ -146,15 +210,19 @@ export function FirstFamilyMovieReveal({ movie, onContinue }: Props) {
     }
   }
 
-  function handleContinue() {
-    onContinue();
+  function handleEnded() {
+    setEnded(true);
+    scheduleAdvance();
   }
 
   if (!mounted) return null;
 
   return createPortal(
     <div
-      className="ffm-reveal fixed inset-0 z-[90] flex flex-col bg-[#0c0a09] text-[#f4efe6]"
+      className={cn(
+        "ffm-reveal fixed inset-0 z-[90] flex flex-col bg-[#0c0a09] text-[#f4efe6]",
+        exiting && "ffm-reveal--exit",
+      )}
       role="dialog"
       aria-modal="true"
       aria-label="Your first family movie"
@@ -172,13 +240,13 @@ export function FirstFamilyMovieReveal({ movie, onContinue }: Props) {
         <p className="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-[#c4a87d]/90">
           Your first family movie
         </p>
-        <button
-          type="button"
-          onClick={handleContinue}
-          className="text-sm font-medium text-white/55 transition hover:text-white/90"
-        >
-          Continue
-        </button>
+        {ended && !exiting ? (
+          <p className="text-sm font-medium text-white/45" aria-live="polite">
+            Continuing to people…
+          </p>
+        ) : (
+          <span className="w-24" aria-hidden />
+        )}
       </header>
 
       <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center px-3 sm:px-6">
@@ -199,7 +267,7 @@ export function FirstFamilyMovieReveal({ movie, onContinue }: Props) {
                 controls={ended || needsTap}
                 aria-label={playback.title || "Your first family movie"}
                 className="aspect-video w-full bg-black object-contain"
-                onEnded={() => setEnded(true)}
+                onEnded={handleEnded}
                 onPlay={() => setEnded(false)}
               />
               {needsTap && !ended ? (
@@ -249,19 +317,11 @@ export function FirstFamilyMovieReveal({ movie, onContinue }: Props) {
               ended || needsTap ? "opacity-100" : "opacity-95",
             )}
           >
-            {ended ? (
-              <button
-                type="button"
-                onClick={handleContinue}
-                className="inline-flex h-14 w-full items-center justify-center rounded-xl bg-[#c4a87d] px-6 text-base font-semibold text-[#1a1612] transition hover:bg-[#d4bc96] sm:order-first sm:col-span-2"
-              >
-                Continue
-              </button>
-            ) : null}
             <button
               type="button"
               onClick={handleReplay}
-              className="inline-flex h-14 flex-1 items-center justify-center gap-2 rounded-xl bg-[#f4efe6] px-6 text-base font-semibold text-[#1a1612] transition hover:bg-white"
+              disabled={exiting}
+              className="inline-flex h-14 flex-1 items-center justify-center gap-2 rounded-xl bg-[#f4efe6] px-6 text-base font-semibold text-[#1a1612] transition hover:bg-white disabled:opacity-50"
             >
               <RotateCcw className="size-5" aria-hidden />
               Replay
@@ -269,7 +329,7 @@ export function FirstFamilyMovieReveal({ movie, onContinue }: Props) {
             <button
               type="button"
               onClick={handleDownload}
-              disabled={!playback.downloadUrl && !playback.playUrl}
+              disabled={exiting || (!playback.downloadUrl && !playback.playUrl)}
               className="inline-flex h-14 flex-1 items-center justify-center gap-2 rounded-xl border border-white/25 bg-white/5 px-6 text-base font-semibold text-[#f4efe6] transition hover:border-white/40 hover:bg-white/10 disabled:opacity-40"
             >
               <Download className="size-5" aria-hidden />
@@ -278,11 +338,14 @@ export function FirstFamilyMovieReveal({ movie, onContinue }: Props) {
           </div>
         ) : null}
 
-        {shareAvailable && !loadingUrl && (playback.downloadUrl || playback.playUrl) ? (
+        {shareAvailable &&
+        !loadingUrl &&
+        (playback.downloadUrl || playback.playUrl) ? (
           <button
             type="button"
             onClick={handleShare}
-            className="relative z-10 mt-4 inline-flex items-center gap-2 text-sm font-medium text-white/50 transition hover:text-white/85"
+            disabled={exiting}
+            className="relative z-10 mt-4 inline-flex items-center gap-2 text-sm font-medium text-white/50 transition hover:text-white/85 disabled:opacity-40"
           >
             <Share2 className="size-3.5" aria-hidden />
             Share
