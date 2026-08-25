@@ -18,8 +18,8 @@ export function FirstFamilyMovieCollageBackdrop({
   className,
   denserVeil = false,
 }: Props) {
-  // Fixed count keeps the dual-panel loop seamless (no remount on resize).
-  const tiles = useMemo(() => buildFirstFamilyMovieCollage(36), []);
+  // Enough tiles for a dense full-viewport mosaic on large desktops.
+  const tiles = useMemo(() => buildFirstFamilyMovieCollage(48), []);
 
   return (
     <div
@@ -54,7 +54,7 @@ function CollagePanel({
 }) {
   return (
     <div className="ffm-collage-panel">
-      <div className="ffm-welcome-mosaic-grid ffm-collage-grid">
+      <div className="ffm-collage-grid">
         {tiles.map((tile, i) => (
           <div
             key={`${duplicate ? "b" : "a"}-${tile.src}-${i}`}
