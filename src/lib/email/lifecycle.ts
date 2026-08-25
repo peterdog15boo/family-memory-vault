@@ -198,11 +198,35 @@ export async function sendMovieReadyLifecycle(input: {
   const { userAllowsEmail } = await import("@/lib/account-preferences");
   const contact = await getUserContact(input.userId);
   const { resolveNotificationHref } = await import("@/lib/notifications/links");
+
+  let firstFamilyMovie = false;
+  try {
+    const { getDb } = await import("@/lib/db");
+    const { users } = await import("@/lib/db/schema");
+    const { eq } = await import("drizzle-orm");
+    const { normalizeOnboardingState } = await import(
+      "@/lib/ava/onboarding-state"
+    );
+    const db = getDb();
+    const [row] = await db
+      .select({ onboarding: users.onboarding })
+      .from(users)
+      .where(eq(users.id, input.userId))
+      .limit(1);
+    const state = normalizeOnboardingState(row?.onboarding);
+    firstFamilyMovie =
+      state.firstFamilyMovieId === input.movieId &&
+      !state.firstFamilyMovieRevealSeenAt;
+  } catch {
+    // Non-fatal — fall back to normal movies deep link.
+  }
+
   const appPath = resolveNotificationHref({
     type: "movie_ready",
     metadata: {
       movieId: input.movieId,
       memoryId: input.memoryId ?? undefined,
+      firstFamilyMovie,
     },
   });
 
@@ -212,6 +236,7 @@ export async function sendMovieReadyLifecycle(input: {
       memoryId: input.memoryId ?? undefined,
       title: input.title,
       link: appPath,
+      firstFamilyMovie,
       ...(input.celebration ? { celebration: input.celebration } : {}),
     });
     if (!row && input.celebration) {

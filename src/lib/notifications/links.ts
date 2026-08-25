@@ -66,6 +66,12 @@ export function resolveNotificationHref(
   switch (type) {
     case "movie_ready": {
       const movieId = metaString(meta, "movieId");
+      const firstFamily =
+        meta.firstFamilyMovie === true ||
+        metaString(meta, "firstFamilyMovie") === "1";
+      if (movieId && firstFamily) {
+        return `/first-family-movie?movieId=${encodeURIComponent(movieId)}`;
+      }
       if (movieId) {
         return `/movies?movieId=${encodeURIComponent(movieId)}`;
       }

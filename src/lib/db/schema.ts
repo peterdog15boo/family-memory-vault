@@ -264,6 +264,15 @@ export type UserOnboardingState = {
   helperCompletedAt?: string | null;
   /** Manual step flags / celebrations. */
   helperProgress?: AvaHelperProgress;
+  /**
+   * “Your First Family Movie” first-session ritual completed (ISO timestamp).
+   * Once set, the special flow never runs again for this vault.
+   */
+  firstFamilyMovieCompletedAt?: string | null;
+  /** Movie id created during the ritual (for reveal resume / deep links). */
+  firstFamilyMovieId?: string | null;
+  /** When the theatrical Big Reveal was watched / continued. */
+  firstFamilyMovieRevealSeenAt?: string | null;
 };
 
 /**

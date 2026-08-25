@@ -4,13 +4,14 @@ import { AuthClerkMount } from "@/components/auth/AuthClerkMount";
 import { AuthPageShell } from "@/components/auth/AuthPageShell";
 import { InactivitySignInNotice } from "@/components/auth/InactivitySignInNotice";
 import { authClerkAppearance } from "@/lib/auth/clerk-appearance";
-import { APP_HOME_PATH } from "@/lib/routes";
+import { getPostAuthLandingPath } from "@/lib/routes";
 
 /**
  * Do not set forceRedirectUrl — it would ignore invite / deep-link
  * redirect_url query params (e.g. /family/accept?token=…).
  */
 export default function SignInPage() {
+  const landing = getPostAuthLandingPath();
   return (
     <AuthPageShell
       eyebrow="Welcome back"
@@ -22,7 +23,7 @@ export default function SignInPage() {
       </Suspense>
       <AuthClerkMount>
         <SignIn
-          fallbackRedirectUrl={APP_HOME_PATH}
+          fallbackRedirectUrl={landing}
           appearance={authClerkAppearance}
         />
       </AuthClerkMount>

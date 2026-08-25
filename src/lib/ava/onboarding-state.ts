@@ -29,6 +29,9 @@ export function normalizeOnboardingState(
     avatarMediaId: raw?.avatarMediaId ?? null,
     avatarUrl: raw?.avatarUrl ?? null,
     helperCompletedAt: raw?.helperCompletedAt ?? null,
+    firstFamilyMovieCompletedAt: raw?.firstFamilyMovieCompletedAt ?? null,
+    firstFamilyMovieId: raw?.firstFamilyMovieId ?? null,
+    firstFamilyMovieRevealSeenAt: raw?.firstFamilyMovieRevealSeenAt ?? null,
     helperProgress: {
       welcomeSeen: progress.welcomeSeen === true,
       screenNameSet: progress.screenNameSet === true,

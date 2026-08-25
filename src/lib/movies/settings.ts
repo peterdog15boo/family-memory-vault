@@ -418,10 +418,11 @@ export function faceAwareMovieMotionDefaults(): Pick<
 /**
  * Ensure movie settings keep face-aware Ken Burns enabled.
  * - `off` zoom/direction → panel defaults
- * - `fast` quality → standard (full framing sample path)
+ * - `fast` quality → standard (full framing sample path), unless allowFastQuality
  */
 export function ensureFaceAwareMovieSettings(
   settings: MovieSettings,
+  options?: { allowFastQuality?: boolean },
 ): MovieSettings {
   const defaults = faceAwareMovieMotionDefaults();
   const zoom =
@@ -433,7 +434,7 @@ export function ensureFaceAwareMovieSettings(
       ? defaults.zoomDirection
       : settings.zoomDirection;
   const qualityMode =
-    settings.qualityMode === "fast"
+    settings.qualityMode === "fast" && !options?.allowFastQuality
       ? defaults.qualityMode
       : (settings.qualityMode ?? defaults.qualityMode);
 

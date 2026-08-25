@@ -16,6 +16,18 @@ describe("resolveNotificationHref", () => {
     ).toBe("/movies?movieId=mov_123");
   });
 
+  it("routes first-family movie_ready back to the ritual reveal", () => {
+    expect(
+      resolveNotificationHref({
+        type: "movie_ready",
+        metadata: {
+          movieId: "mov_ffm",
+          firstFamilyMovie: true,
+        },
+      }),
+    ).toBe("/first-family-movie?movieId=mov_ffm");
+  });
+
   it("falls back to Movies library when movieId is missing", () => {
     expect(
       resolveNotificationHref({

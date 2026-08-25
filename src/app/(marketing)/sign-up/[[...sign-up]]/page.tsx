@@ -2,12 +2,13 @@ import { SignUp } from "@clerk/nextjs";
 import { AuthClerkMount } from "@/components/auth/AuthClerkMount";
 import { AuthPageShell } from "@/components/auth/AuthPageShell";
 import { authClerkAppearance } from "@/lib/auth/clerk-appearance";
-import { APP_HOME_PATH } from "@/lib/routes";
+import { getPostAuthLandingPath } from "@/lib/routes";
 
 /**
  * Do not set forceRedirectUrl — preserves redirect_url deep links after signup.
  */
 export default function SignUpPage() {
+  const landing = getPostAuthLandingPath();
   return (
     <AuthPageShell
       eyebrow="Begin your vault"
@@ -16,7 +17,7 @@ export default function SignUpPage() {
     >
       <AuthClerkMount>
         <SignUp
-          fallbackRedirectUrl={APP_HOME_PATH}
+          fallbackRedirectUrl={landing}
           appearance={authClerkAppearance}
         />
       </AuthClerkMount>

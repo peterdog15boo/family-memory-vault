@@ -298,6 +298,176 @@ body {
   }
 }
 
+/* First Family Movie welcome — soft entrance (respect reduced motion) */
+@keyframes ffm-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ffm-orb-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(122, 74, 62, 0.18);
+  }
+  50% {
+    transform: scale(1.04);
+    box-shadow: 0 0 0 14px rgba(122, 74, 62, 0);
+  }
+}
+
+@keyframes ffm-shimmer {
+  0% {
+    transform: translateX(-40%);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+.ffm-fade-in,
+.ffm-fade-in-delay-1,
+.ffm-fade-in-delay-2 {
+  animation: ffm-fade-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.ffm-fade-in-delay-1 {
+  animation-delay: 0.08s;
+}
+
+.ffm-fade-in-delay-2 {
+  animation-delay: 0.16s;
+}
+
+/* Dense collage welcome — larger tiles, mixed spans, fewer obvious repeats */
+.ffm-welcome-mosaic {
+  transform: scale(1.06);
+}
+
+.ffm-welcome-mosaic-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: minmax(4.5rem, 12vw);
+  gap: 0.4rem;
+  height: 118%;
+  width: 118%;
+  margin: -9% 0 0 -9%;
+}
+
+@media (min-width: 640px) {
+  .ffm-welcome-mosaic-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-auto-rows: minmax(5.5rem, 9vw);
+    gap: 0.45rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .ffm-welcome-mosaic-grid {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    grid-auto-rows: minmax(6rem, 7.5vw);
+    gap: 0.5rem;
+  }
+}
+
+.ffm-welcome-tile {
+  border-radius: 0.4rem;
+  background-size: cover;
+  background-repeat: no-repeat;
+  opacity: 0;
+  animation: ffm-tile-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  filter: saturate(1.06) contrast(1.03);
+  min-height: 100%;
+}
+
+.ffm-welcome-tile--wide {
+  grid-column: span 2;
+}
+
+.ffm-welcome-tile--tall {
+  grid-row: span 2;
+}
+
+@media (max-width: 639px) {
+  .ffm-welcome-tile--tall {
+    grid-row: span 1;
+  }
+}
+
+@keyframes ffm-tile-in {
+  from {
+    opacity: 0;
+    transform: scale(1.05);
+  }
+  to {
+    opacity: 0.94;
+    transform: scale(1);
+  }
+}
+
+.ffm-wait-status {
+  animation: ffm-status-pulse 2.8s ease-in-out infinite;
+}
+
+@keyframes ffm-status-pulse {
+  0%,
+  100% {
+    opacity: 0.72;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.ffm-cinematic-orb {
+  animation: ffm-orb-breathe 2.8s ease-in-out infinite;
+}
+
+.ffm-progress-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.ffm-progress-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.45),
+    transparent
+  );
+  animation: ffm-shimmer 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ffm-fade-in,
+  .ffm-fade-in-delay-1,
+  .ffm-fade-in-delay-2,
+  .ffm-welcome-tile,
+  .ffm-cinematic-orb,
+  .ffm-wait-status,
+  .ffm-progress-shimmer::after {
+    animation: none;
+  }
+
+  .ffm-welcome-tile {
+    opacity: 0.94;
+  }
+
+  .ffm-wait-status {
+    opacity: 1;
+  }
+}
+
 @keyframes reveal-frame {
   from {
     opacity: 0;

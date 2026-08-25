@@ -7,6 +7,7 @@ import {
   hasAcceptedTerms,
   isTermsRequired,
 } from "@/lib/terms";
+import { getPostAuthLandingPath } from "@/lib/routes";
 import { ensureAppUser } from "@/lib/users";
 
 export const dynamic = "force-dynamic";
@@ -22,12 +23,13 @@ type PageProps = {
 };
 
 function safeRedirect(raw: string | undefined): string {
-  if (!raw) return "/dashboard";
-  if (!raw.startsWith("/") || raw.startsWith("//")) return "/dashboard";
-  if (raw.startsWith("/terms-agree")) return "/dashboard";
-  if (raw.startsWith("/beta-agree")) return "/dashboard";
+  const fallback = getPostAuthLandingPath();
+  if (!raw) return fallback;
+  if (!raw.startsWith("/") || raw.startsWith("//")) return fallback;
+  if (raw.startsWith("/terms-agree")) return fallback;
+  if (raw.startsWith("/beta-agree")) return fallback;
   if (raw.startsWith("/sign-in") || raw.startsWith("/sign-up")) {
-    return "/dashboard";
+    return fallback;
   }
   return raw;
 }
@@ -39,7 +41,7 @@ function safeRedirect(raw: string | undefined): string {
  */
 export default async function TermsAgreePage({ searchParams }: PageProps) {
   if (!isTermsRequired()) {
-    redirect("/dashboard");
+    redirect(getPostAuthLandingPath());
   }
 
   const { isAuthenticated, userId } = await auth();

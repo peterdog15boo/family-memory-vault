@@ -28,6 +28,7 @@ const isProtectedRoute = createRouteMatcher([
   "/suspended",
   "/beta-agree",
   "/terms-agree",
+  "/first-family-movie(.*)",
   "/api/beta-nda(.*)",
   "/api/terms(.*)",
   "/api/upload-url",
@@ -47,6 +48,7 @@ const isProtectedRoute = createRouteMatcher([
   "/api/movies(.*)",
   "/api/notifications(.*)",
   "/api/onboarding(.*)",
+  "/api/first-family-movie(.*)",
   "/api/journey(.*)",
   "/api/ava(.*)",
   "/api/assistant(.*)",
@@ -86,6 +88,8 @@ export default clerkMiddleware(async (auth, request) => {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-request-id", requestId);
   requestHeaders.set("x-pathname", path);
+  // Preserve query for server pages that need it (e.g. local ritual preview).
+  requestHeaders.set("x-search", request.nextUrl.search);
 
   const response = NextResponse.next({
     request: { headers: requestHeaders },

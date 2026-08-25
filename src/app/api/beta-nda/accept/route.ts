@@ -8,6 +8,8 @@ import {
   isBetaNdaRequired,
   recordBetaNdaAcceptance,
 } from "@/lib/beta-nda";
+import { hasAcceptedTerms, isTermsRequired } from "@/lib/terms";
+import { getPostAuthLandingPath } from "@/lib/routes";
 import { ensureAppUser } from "@/lib/users";
 import {
   enforceRateLimit,
@@ -38,12 +40,13 @@ function clientIp(request: Request): string | null {
 }
 
 function safeRedirectPath(raw: string | undefined): string {
-  if (!raw) return "/dashboard";
-  if (!raw.startsWith("/") || raw.startsWith("//")) return "/dashboard";
-  if (raw.startsWith("/beta-agree")) return "/dashboard";
+  const fallback = getPostAuthLandingPath();
+  if (!raw) return fallback;
+  if (!raw.startsWith("/") || raw.startsWith("//")) return fallback;
+  if (raw.startsWith("/beta-agree")) return fallback;
   // Allow /terms-agree so post-NDA flow can continue to Terms acceptance.
   if (raw.startsWith("/sign-in") || raw.startsWith("/sign-up")) {
-    return "/dashboard";
+    return fallback;
   }
   return raw;
 }
@@ -54,7 +57,7 @@ function safeRedirectPath(raw: string | undefined): string {
 export async function POST(request: Request) {
   if (!isBetaNdaRequired()) {
     return NextResponse.json(
-      { ok: true, skipped: true, redirectTo: "/dashboard" },
+      { ok: true, skipped: true, redirectTo: getPostAuthLandingPath() },
       { status: 200 },
     );
   }
@@ -106,7 +109,23 @@ export async function POST(request: Request) {
       ndaVersion: BETA_NDA_VERSION,
     });
 
-    const redirectTo = safeRedirectPath(parsed.data.redirectTo);
+    let redirectTo = safeRedirectPath(parsed.data.redirectTo);
+
+    // Skip the /first-family-movie → /terms-agree bounce (white flash).
+    if (isTermsRequired()) {
+      try {
+        const accepted = await hasAcceptedTerms(authResult.userId);
+        if (!accepted && !redirectTo.startsWith("/terms-agree")) {
+          redirectTo = `/terms-agree?redirect_url=${encodeURIComponent(redirectTo)}`;
+        }
+      } catch (error) {
+        console.warn("[beta-nda.accept] terms check failed", error);
+        if (!redirectTo.startsWith("/terms-agree")) {
+          redirectTo = `/terms-agree?redirect_url=${encodeURIComponent(redirectTo)}`;
+        }
+      }
+    }
+
     const response = NextResponse.json({
       ok: true,
       acceptedAt: row?.acceptedAt?.toISOString() ?? new Date().toISOString(),

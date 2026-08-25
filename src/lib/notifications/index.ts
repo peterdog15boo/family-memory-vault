@@ -43,6 +43,8 @@ export type NotificationData = {
     memoryId?: string;
     title?: string;
     link?: string;
+    /** Deep-link back into the first-session Big Reveal. */
+    firstFamilyMovie?: boolean;
     celebration?: import("@/lib/gamification/types").JourneyCelebrationPayload | null;
     celebrationShown?: boolean;
   };
@@ -204,7 +206,11 @@ export async function notifyMovieReady(
   const movieLink = resolveNotificationHref({
     type: "movie_ready",
     link: data.link,
-    metadata: { movieId: data.movieId, memoryId: data.memoryId },
+    metadata: {
+      movieId: data.movieId,
+      memoryId: data.memoryId,
+      firstFamilyMovie: data.firstFamilyMovie === true,
+    },
   });
   return createNotification({
     userId,

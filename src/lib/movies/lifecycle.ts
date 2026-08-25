@@ -41,6 +41,11 @@ export type CreateMovieJobInput = {
   settings?: MovieSettings;
   /** Allocate sequential "Movie 001" titles (Simple Mode). */
   autoTitle?: boolean;
+  /**
+   * First-session fast path: keep qualityMode "fast" through face-aware
+   * normalization (720p / veryfast) for lower first-movie latency.
+   */
+  allowFastQuality?: boolean;
 };
 
 export type UpdateMovieStatusData = {
@@ -208,7 +213,9 @@ export async function createMovieJob(
   // quality/filter/transition upgrades must not land as zoom-off / center stills.
   const { ensureFaceAwareMovieSettings } = await import("@/lib/movies/settings");
   const normalized = normalizeMovieSettings(
-    ensureFaceAwareMovieSettings(settingsOnly),
+    ensureFaceAwareMovieSettings(settingsOnly, {
+      allowFastQuality: input.allowFastQuality === true,
+    }),
   );
 
   // Simple Mode (autoTitle): pick a random on-disk library track and avoid

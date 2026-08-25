@@ -20,6 +20,8 @@ export const LogEvents = {
   movieReady: "movie.ready",
   movieFailed: "movie.failed",
   movieJobFailed: "movie.job_failed",
+  /** First Family Movie onboarding funnel (payload.funnelEvent = step name). */
+  firstMovieFunnel: "first_movie.funnel",
   facesJobFailed: "faces.job_failed",
   sceneJobFailed: "scene.job_failed",
   plaidJobFailed: "plaid.job_failed",

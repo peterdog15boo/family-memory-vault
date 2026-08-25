@@ -22,6 +22,8 @@ import {
   journeyBoardFromJourney,
 } from "@/lib/gamification";
 import { ensureAppUser } from "@/lib/users";
+import { shouldEnterFirstFamilyMovie } from "@/lib/first-family-movie";
+import { FIRST_FAMILY_MOVIE_PATH } from "@/lib/routes";
 
 export default async function DashboardPage() {
   const { userId, isAuthenticated } = await auth();
@@ -31,6 +33,11 @@ export default async function DashboardPage() {
 
   await ensureAppUser(userId);
   await ensureFreeSubscription(userId);
+
+  // First-session ritual (after NDA/Terms, enforced in (app)/layout).
+  if (await shouldEnterFirstFamilyMovie(userId)) {
+    redirect(FIRST_FAMILY_MOVIE_PATH);
+  }
 
   const [
     mediaLibrary,

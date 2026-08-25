@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  createContext,
   useCallback,
   useContext,
   useEffect,
@@ -9,6 +8,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import {
+  ThemeContext,
+  type ThemeContextValue,
+} from "@/components/theme/theme-context";
 import {
   APP_THEME_DEFAULT,
   APP_THEME_STORAGE_KEY,
@@ -20,22 +23,20 @@ import {
   type AppTheme,
 } from "@/lib/theme/types";
 
-type ThemeContextValue = {
-  theme: AppTheme;
-  setTheme: (theme: AppTheme) => void;
-  /** Switch to Original. */
-  restoreOriginal: () => void;
-  /** Switch to Modern (site default). */
-  applyModernDefault: () => void;
-  toggleTheme: () => void;
-  ready: boolean;
-  isModern: boolean;
-};
-
-const ThemeContext = createContext<ThemeContextValue | null>(null);
-
 function persistTheme(theme: AppTheme) {
   persistThemePreference(theme);
+}
+
+function fallbackThemeValue(theme: AppTheme): ThemeContextValue {
+  return {
+    theme,
+    setTheme: () => {},
+    restoreOriginal: () => {},
+    applyModernDefault: () => {},
+    toggleTheme: () => {},
+    ready: false,
+    isModern: theme === "modern",
+  };
 }
 
 /**
@@ -115,10 +116,19 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * Theme hook. Falls back to the DOM / default theme if the Provider identity
+ * was duplicated across chunks (dev HMR) instead of blanking the app.
+ */
 export function useTheme(): ThemeContextValue {
   const ctx = useContext(ThemeContext);
-  if (!ctx) {
-    throw new Error("useTheme must be used within ThemeProvider");
+  if (ctx) return ctx;
+
+  if (process.env.NODE_ENV !== "production") {
+    console.warn(
+      "[theme] useTheme called outside ThemeProvider — using DOM fallback",
+    );
   }
-  return ctx;
+
+  return fallbackThemeValue(readDomTheme() ?? APP_THEME_DEFAULT);
 }

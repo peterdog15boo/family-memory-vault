@@ -12,7 +12,7 @@ import {
   LOCALE_STORAGE_KEY,
 } from "@/lib/i18n/locales";
 import { getLocale, getTranslations } from "@/lib/i18n/server";
-import { APP_HOME_PATH } from "@/lib/routes";
+import { getPostAuthLandingPath } from "@/lib/routes";
 import {
   APP_THEME_DEFAULT,
   APP_THEME_STORAGE_KEY,
@@ -119,8 +119,8 @@ export default async function RootLayout({
       </head>
       <body className="page-atmosphere min-h-full font-sans">
         <ClerkProvider
-          signInFallbackRedirectUrl={APP_HOME_PATH}
-          signUpFallbackRedirectUrl={APP_HOME_PATH}
+          signInFallbackRedirectUrl={getPostAuthLandingPath()}
+          signUpFallbackRedirectUrl={getPostAuthLandingPath()}
         >
           <ThemeProvider>
             <LocaleProvider initialLocale={locale}>

@@ -6,6 +6,7 @@ import {
   isBetaNdaRequired,
 } from "@/lib/beta-nda";
 import { isUserSuspended } from "@/lib/admin/users";
+import { getPostAuthLandingPath } from "@/lib/routes";
 import { ensureAppUser } from "@/lib/users";
 
 export const dynamic = "force-dynamic";
@@ -21,9 +22,10 @@ type PageProps = {
 };
 
 function safeRedirect(raw: string | undefined): string {
-  if (!raw) return "/dashboard";
-  if (!raw.startsWith("/") || raw.startsWith("//")) return "/dashboard";
-  if (raw.startsWith("/beta-agree")) return "/dashboard";
+  const fallback = getPostAuthLandingPath();
+  if (!raw) return fallback;
+  if (!raw.startsWith("/") || raw.startsWith("//")) return fallback;
+  if (raw.startsWith("/beta-agree")) return fallback;
   // Allow /terms-agree so NDA → Terms chaining preserves the final destination.
   return raw;
 }
@@ -34,7 +36,7 @@ function safeRedirect(raw: string | undefined): string {
  */
 export default async function BetaAgreePage({ searchParams }: PageProps) {
   if (!isBetaNdaRequired()) {
-    redirect("/dashboard");
+    redirect(getPostAuthLandingPath());
   }
 
   const { isAuthenticated, userId } = await auth();
