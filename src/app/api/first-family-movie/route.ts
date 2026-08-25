@@ -81,7 +81,12 @@ export async function POST(request: Request) {
   const originBlock = rejectUntrustedOrigin(request);
   if (originBlock) return originBlock;
 
-  const authResult = await requireApiUser();
+  // Ritual-only endpoint: always allow before combined legal clickwrap.
+  // (Gate still sends users to /legal-agree after complete/skip.)
+  const authResult = await requireApiUser({
+    skipBetaNda: true,
+    skipTerms: true,
+  });
   if (!authResult.ok) return authResult.response;
   const { userId } = authResult;
 

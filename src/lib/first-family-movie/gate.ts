@@ -65,13 +65,14 @@ export function evaluateFirstFamilyMovieEligibility(input: {
   const complete = input.complete;
   const enabled = input.flagOn;
   const skipped = input.skipped === true;
-  const pendingRevealMovieId =
-    !complete &&
-    !skipped &&
-    !input.revealSeen &&
+  const ritualMovieId =
     typeof input.firstFamilyMovieId === "string" &&
     input.firstFamilyMovieId.trim().length > 0
       ? input.firstFamilyMovieId.trim()
+      : null;
+  const pendingRevealMovieId =
+    !complete && !skipped && !input.revealSeen && ritualMovieId
+      ? ritualMovieId
       : null;
 
   if (!enabled || complete || skipped) {
@@ -86,8 +87,10 @@ export function evaluateFirstFamilyMovieEligibility(input: {
     };
   }
 
-  // Movie finished but theatrical reveal not seen — keep them in the ritual.
-  if (pendingRevealMovieId) {
+  // Mid-ritual: movie created (and possibly reveal already seen) but People /
+  // celebration not finished — stay in the ritual until complete/skip.
+  // Without this, post-reveal People APIs trip the legal gate.
+  if (ritualMovieId) {
     return {
       enabled,
       complete,
@@ -99,7 +102,7 @@ export function evaluateFirstFamilyMovieEligibility(input: {
     };
   }
 
-  // Anyone who already has a movie never enters (except pending reveal above).
+  // Anyone who already has a movie (outside this ritual) never enters.
   if (input.movieCount > 0) {
     return {
       enabled,
@@ -356,16 +359,33 @@ export async function markFirstFamilyMovieSkipped(
 }
 
 /**
- * Only stamp complete when the reveal was already seen (or no pending climax).
- * Prevents dumping users into the vault before the theatrical peak.
+ * Stamp complete for accounts that already have movies but never entered /
+ * finished this ritual (seasoned vaults). Never auto-completes mid-ritual —
+ * once `firstFamilyMovieId` is set, People + celebration must finish or skip.
  */
 export async function completeFirstFamilyMovieIfMovieExists(
   userId: string,
 ): Promise<boolean> {
   const eligibility = await getFirstFamilyMovieEligibility(userId);
+  if (!eligibility.enabled || eligibility.complete || eligibility.skipped) {
+    return false;
+  }
   if (eligibility.pendingRevealMovieId) {
     return false;
   }
+
+  const db = getDb();
+  const [current] = await db
+    .select({ onboarding: users.onboarding })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  const state = normalizeOnboardingState(current?.onboarding);
+  // Ritual already started — leave People / celebration alone.
+  if (state.firstFamilyMovieId?.trim()) {
+    return false;
+  }
+
   const movieCount = await countUserMovies(userId);
   if (movieCount <= 0) return false;
   await markFirstFamilyMovieComplete(userId);

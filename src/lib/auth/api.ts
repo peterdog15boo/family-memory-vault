@@ -76,7 +76,9 @@ export async function requireApiUser(
   }
 
   if (!options.skipBetaNda || !options.skipTerms) {
-    // Welcome ritual may run before combined legal clickwrap; allow its APIs.
+    // First Family Movie ritual runs before combined legal clickwrap. Skip NDA /
+    // Terms for the whole mid-ritual window (upload → reveal → people → close),
+    // not only before the first movie exists.
     let inFirstMovieRitual = false;
     try {
       const { shouldEnterFirstFamilyMovie } = await import(

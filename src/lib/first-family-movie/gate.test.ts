@@ -89,6 +89,20 @@ describe("evaluateFirstFamilyMovieEligibility", () => {
     expect(result.pendingRevealMovieId).toBe("movie_abc");
   });
 
+  it("keeps users in the ritual after reveal until completion (People step)", () => {
+    const result = evaluateFirstFamilyMovieEligibility({
+      flagOn: true,
+      complete: false,
+      eligibleNewUser: true,
+      mediaCount: 5,
+      movieCount: 1,
+      firstFamilyMovieId: "movie_abc",
+      revealSeen: true,
+    });
+    expect(result.shouldEnter).toBe(true);
+    expect(result.pendingRevealMovieId).toBeNull();
+  });
+
   it("does not force users who already have a movie", () => {
     expect(
       evaluateFirstFamilyMovieEligibility({
