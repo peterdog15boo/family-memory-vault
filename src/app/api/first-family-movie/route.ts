@@ -5,7 +5,12 @@ import {
   FirstFamilyMovieCreateError,
   startFirstFamilyMovieCreate,
 } from "@/lib/first-family-movie/create";
-import { markFirstFamilyMovieComplete, saveFirstFamilyMovieId, markFirstFamilyMovieRevealSeen } from "@/lib/first-family-movie";
+import {
+  markFirstFamilyMovieComplete,
+  markFirstFamilyMovieRevealSeen,
+  markFirstFamilyMovieSkipped,
+  saveFirstFamilyMovieId,
+} from "@/lib/first-family-movie";
 import { FFM_SOFT_MIN_PHOTOS } from "@/lib/first-family-movie/guided-upload";
 import { discoverPeopleFromMediaIds } from "@/lib/first-family-movie/people-discovery";
 import {
@@ -14,6 +19,7 @@ import {
 import { logFirstMovieFunnelEvent } from "@/lib/first-family-movie/track-server";
 import { MovieError } from "@/lib/movies/errors";
 import { MemoryError } from "@/lib/memories/errors";
+import { LEGAL_AGREE_PATH, shouldRedirectToLegalAgree } from "@/lib/legal-agree/gate";
 import { APP_HOME_PATH } from "@/lib/routes";
 import { rejectUntrustedOrigin } from "@/lib/security/origin";
 import {
@@ -24,6 +30,13 @@ import { drainUntilMovieTerminal } from "@/workers/movies";
 
 export const runtime = "nodejs";
 
+async function postRitualRedirect(userId: string): Promise<string> {
+  if (await shouldRedirectToLegalAgree(userId)) {
+    return `${LEGAL_AGREE_PATH}?redirect_url=${encodeURIComponent(APP_HOME_PATH)}`;
+  }
+  return APP_HOME_PATH;
+}
+
 const funnelPropsSchema = z
   .record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))
   .optional();
@@ -33,6 +46,9 @@ const bodySchema = z.discriminatedUnion("action", [
     action: z.literal("complete"),
     /** When true, emit first_movie_completed (celebration close only). */
     trackFunnel: z.boolean().optional(),
+  }),
+  z.object({
+    action: z.literal("skip"),
   }),
   z.object({
     action: z.literal("reveal-seen"),
@@ -89,7 +105,22 @@ export async function POST(request: Request) {
     if (parsed.data.trackFunnel === true) {
       logFirstMovieFunnelEvent("first_movie_completed", { userId });
     }
-    return NextResponse.json({ ok: true, redirectTo: APP_HOME_PATH });
+    return NextResponse.json({
+      ok: true,
+      redirectTo: await postRitualRedirect(userId),
+    });
+  }
+
+  if (parsed.data.action === "skip") {
+    await markFirstFamilyMovieSkipped(userId);
+    logFirstMovieFunnelEvent("first_movie_completed", {
+      userId,
+      skipped: true,
+    });
+    return NextResponse.json({
+      ok: true,
+      redirectTo: await postRitualRedirect(userId),
+    });
   }
 
   if (parsed.data.action === "reveal-seen") {

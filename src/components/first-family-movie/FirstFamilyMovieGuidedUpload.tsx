@@ -59,6 +59,8 @@ type Props = {
   initialMediaIds?: string[];
   onBack: () => void;
   onContinue: (mediaIds: string[]) => void;
+  onSkip?: () => void;
+  skipPending?: boolean;
 };
 
 const DIRECT_UPLOAD_REQUIRED_MESSAGE =
@@ -119,6 +121,8 @@ export function FirstFamilyMovieGuidedUpload({
   initialMediaIds = [],
   onBack,
   onContinue,
+  onSkip,
+  skipPending = false,
 }: Props) {
   const [priorMediaIds] = useState(() =>
     Array.from(new Set(initialMediaIds.filter(Boolean))),
@@ -652,12 +656,22 @@ export function FirstFamilyMovieGuidedUpload({
       <div className="sticky bottom-0 mt-8 border-t border-[color:var(--border-subtle)] bg-[color:var(--canvas)]/90 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur-sm">
         <button
           type="button"
-          disabled={!canContinue}
+          disabled={!canContinue || skipPending}
           onClick={() => onContinue(successfulMediaIds)}
           className="ui-btn ui-btn-primary inline-flex h-12 w-full items-center justify-center px-6 text-base font-semibold disabled:cursor-not-allowed disabled:opacity-45"
         >
           Continue
         </button>
+        {onSkip ? (
+          <button
+            type="button"
+            onClick={onSkip}
+            disabled={skipPending}
+            className="ui-btn ui-btn-ghost mt-2 inline-flex h-11 w-full items-center justify-center px-5 text-sm font-semibold text-[color:var(--ink-muted)] disabled:opacity-60"
+          >
+            {skipPending ? "Skipping…" : "Skip"}
+          </button>
+        ) : null}
         {!canContinue ? (
           <p className="mt-2 text-center text-xs text-[color:var(--ink-muted)]">
             Add at least {FFM_SOFT_MIN_PHOTOS} photos to continue

@@ -34,7 +34,7 @@ export default async function DashboardPage() {
   await ensureAppUser(userId);
   await ensureFreeSubscription(userId);
 
-  // First-session ritual (after NDA/Terms, enforced in (app)/layout).
+  // First-session ritual (legal agree is enforced after, in (app)/layout).
   if (await shouldEnterFirstFamilyMovie(userId)) {
     redirect(FIRST_FAMILY_MOVIE_PATH);
   }

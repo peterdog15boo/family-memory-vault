@@ -3,8 +3,10 @@ import { redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { isUserSuspended } from "@/lib/admin/users";
 import { requireAdmin } from "@/lib/auth/admin";
-import { shouldRedirectToBetaNda } from "@/lib/beta-nda/gate";
-import { shouldRedirectToTerms } from "@/lib/terms/gate";
+import {
+  LEGAL_AGREE_PATH,
+  shouldRedirectToLegalAgree,
+} from "@/lib/legal-agree/gate";
 
 export const dynamic = "force-dynamic";
 
@@ -20,11 +22,10 @@ export default async function AdminLayout({
   if (await isUserSuspended(userId)) {
     redirect("/suspended");
   }
-  if (await shouldRedirectToBetaNda(userId)) {
-    redirect(`/beta-agree?redirect_url=${encodeURIComponent("/admin")}`);
-  }
-  if (await shouldRedirectToTerms(userId)) {
-    redirect(`/terms-agree?redirect_url=${encodeURIComponent("/admin")}`);
+  if (await shouldRedirectToLegalAgree(userId)) {
+    redirect(
+      `${LEGAL_AGREE_PATH}?redirect_url=${encodeURIComponent("/admin")}`,
+    );
   }
 
   let displayName = "Admin";

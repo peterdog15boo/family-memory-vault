@@ -1,91 +1,22 @@
-import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { BetaNdaAgreeForm } from "@/components/beta/BetaNdaAgreeForm";
-import {
-  hasAcceptedBetaNda,
-  isBetaNdaRequired,
-} from "@/lib/beta-nda";
-import { isUserSuspended } from "@/lib/admin/users";
-import { getPostAuthLandingPath } from "@/lib/routes";
-import { ensureAppUser } from "@/lib/users";
+import { LEGAL_AGREE_PATH } from "@/lib/legal-agree/gate";
 
 export const dynamic = "force-dynamic";
-
-export const metadata = {
-  title: "Beta Tester Agreement — Family Memory Vault",
-  description:
-    "Review and accept the Beta Tester Non-Disclosure Agreement to continue.",
-};
 
 type PageProps = {
   searchParams: Promise<{ redirect_url?: string; redirectTo?: string }>;
 };
 
-function safeRedirect(raw: string | undefined): string {
-  const fallback = getPostAuthLandingPath();
-  if (!raw) return fallback;
-  if (!raw.startsWith("/") || raw.startsWith("//")) return fallback;
-  if (raw.startsWith("/beta-agree")) return fallback;
-  // Allow /terms-agree so NDA → Terms chaining preserves the final destination.
-  return raw;
-}
-
 /**
- * Clickwrap gate for temporary beta NDA acceptance.
- * Outside (app) so DashboardShell does not wrap it.
+ * Legacy Beta NDA route — permanently redirected to the combined legal gate.
  */
-export default async function BetaAgreePage({ searchParams }: PageProps) {
-  if (!isBetaNdaRequired()) {
-    redirect(getPostAuthLandingPath());
-  }
-
-  const { isAuthenticated, userId } = await auth();
-  if (!isAuthenticated || !userId) {
-    const params = await searchParams;
-    const next = safeRedirect(params.redirect_url || params.redirectTo);
+export default async function BetaAgreeRedirectPage({ searchParams }: PageProps) {
+  const params = await searchParams;
+  const next = params.redirect_url || params.redirectTo;
+  if (next?.startsWith("/") && !next.startsWith("//")) {
     redirect(
-      `/sign-in?redirect_url=${encodeURIComponent(`/beta-agree?redirect_url=${encodeURIComponent(next)}`)}`,
+      `${LEGAL_AGREE_PATH}?redirect_url=${encodeURIComponent(next)}`,
     );
   }
-
-  if (await isUserSuspended(userId)) {
-    redirect("/suspended");
-  }
-
-  try {
-    await ensureAppUser(userId);
-  } catch (error) {
-    console.warn("[beta-agree] ensureAppUser failed", error);
-  }
-
-  if (await hasAcceptedBetaNda(userId)) {
-    const params = await searchParams;
-    redirect(safeRedirect(params.redirect_url || params.redirectTo));
-  }
-
-  const params = await searchParams;
-  const redirectTo = safeRedirect(params.redirect_url || params.redirectTo);
-
-  let initialFullName = "";
-  let initialEmail = "";
-  try {
-    const user = await currentUser();
-    initialFullName =
-      user?.fullName ||
-      [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
-      "";
-    initialEmail = user?.primaryEmailAddress?.emailAddress || "";
-  } catch {
-    // Prefill is optional.
-  }
-
-  return (
-    <main className="beta-nda-shell">
-      <BetaNdaAgreeForm
-        initialFullName={initialFullName}
-        initialEmail={initialEmail}
-        redirectTo={redirectTo}
-      />
-    </main>
-  );
+  redirect(LEGAL_AGREE_PATH);
 }

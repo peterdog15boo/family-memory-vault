@@ -14,7 +14,7 @@ describe("evaluateFirstFamilyMovieEligibility", () => {
     ).toBe(false);
   });
 
-  it("sends new empty vaults into the ritual when the flag is on", () => {
+  it("sends empty vaults into the ritual when the flag is on", () => {
     expect(
       evaluateFirstFamilyMovieEligibility({
         flagOn: true,
@@ -26,12 +26,24 @@ describe("evaluateFirstFamilyMovieEligibility", () => {
     ).toBe(true);
   });
 
-  it("keeps eligible new users in the ritual after they upload photos", () => {
+  it("includes existing users who were never marked eligible", () => {
     expect(
       evaluateFirstFamilyMovieEligibility({
         flagOn: true,
         complete: false,
-        eligibleNewUser: true,
+        eligibleNewUser: false,
+        mediaCount: 0,
+        movieCount: 0,
+      }).shouldEnter,
+    ).toBe(true);
+  });
+
+  it("keeps users in the ritual after they upload photos (still zero movies)", () => {
+    expect(
+      evaluateFirstFamilyMovieEligibility({
+        flagOn: true,
+        complete: false,
+        eligibleNewUser: false,
         mediaCount: 5,
         movieCount: 0,
       }).shouldEnter,
@@ -44,6 +56,19 @@ describe("evaluateFirstFamilyMovieEligibility", () => {
         flagOn: true,
         complete: true,
         eligibleNewUser: true,
+        mediaCount: 0,
+        movieCount: 0,
+      }).shouldEnter,
+    ).toBe(false);
+  });
+
+  it("never re-enters after an explicit skip / opt-out", () => {
+    expect(
+      evaluateFirstFamilyMovieEligibility({
+        flagOn: true,
+        complete: false,
+        skipped: true,
+        eligibleNewUser: false,
         mediaCount: 0,
         movieCount: 0,
       }).shouldEnter,
@@ -64,7 +89,7 @@ describe("evaluateFirstFamilyMovieEligibility", () => {
     expect(result.pendingRevealMovieId).toBe("movie_abc");
   });
 
-  it("does not force users who already had movies outside the ritual", () => {
+  it("does not force users who already have a movie", () => {
     expect(
       evaluateFirstFamilyMovieEligibility({
         flagOn: true,
@@ -72,18 +97,6 @@ describe("evaluateFirstFamilyMovieEligibility", () => {
         eligibleNewUser: true,
         mediaCount: 0,
         movieCount: 1,
-      }).shouldEnter,
-    ).toBe(false);
-  });
-
-  it("skips legacy accounts that were never marked eligible", () => {
-    expect(
-      evaluateFirstFamilyMovieEligibility({
-        flagOn: true,
-        complete: false,
-        eligibleNewUser: false,
-        mediaCount: 0,
-        movieCount: 0,
       }).shouldEnter,
     ).toBe(false);
   });

@@ -2,9 +2,12 @@
  * “Your First Family Movie” first-session gate.
  *
  * Order of intercepts (handled by callers):
- * 1. Beta NDA / Terms
- * 2. This ritual (when flag on + incomplete + eligible / pending reveal)
- * 3. Normal app home
+ * 1. This ritual (when flag on + incomplete + zero movies / pending reveal)
+ * 2. Combined Beta NDA + Terms acceptance (/legal-agree)
+ * 3. Normal app home / vault
+ *
+ * Eligibility: any signed-in user with no movies who has not completed or
+ * skipped the ritual — including existing vaults that only have photos.
  */
 
 import { count, eq } from "drizzle-orm";
@@ -31,9 +34,15 @@ export type FirstFamilyMovieEligibility = {
   complete: boolean;
   /** True when this account should enter / stay in the ritual. */
   shouldEnter: boolean;
-  /** Existing vault activity — we never force the ritual on these users. */
+  /** Existing vault activity — media and/or movies already present. */
   hasVaultActivity: boolean;
+  /**
+   * Legacy: onboarding.eligible === true (new-account mark).
+   * No longer required to enter; kept for diagnostics / older callers.
+   */
   eligibleNewUser: boolean;
+  /** Explicit opt-out (`onboarding.eligible === false`) or skip stamp. */
+  skipped: boolean;
   /** Resume Big Reveal for a movie that finished while the user was away. */
   pendingRevealMovieId: string | null;
 };
@@ -44,6 +53,8 @@ export type FirstFamilyMovieEligibility = {
 export function evaluateFirstFamilyMovieEligibility(input: {
   flagOn: boolean;
   complete: boolean;
+  /** Explicit skip / admin opt-out — never force the ritual. */
+  skipped?: boolean;
   eligibleNewUser: boolean;
   mediaCount: number;
   movieCount: number;
@@ -53,21 +64,24 @@ export function evaluateFirstFamilyMovieEligibility(input: {
   const hasVaultActivity = input.mediaCount > 0 || input.movieCount > 0;
   const complete = input.complete;
   const enabled = input.flagOn;
+  const skipped = input.skipped === true;
   const pendingRevealMovieId =
     !complete &&
+    !skipped &&
     !input.revealSeen &&
     typeof input.firstFamilyMovieId === "string" &&
     input.firstFamilyMovieId.trim().length > 0
       ? input.firstFamilyMovieId.trim()
       : null;
 
-  if (!enabled || complete) {
+  if (!enabled || complete || skipped) {
     return {
       enabled,
       complete,
       shouldEnter: false,
       hasVaultActivity,
       eligibleNewUser: input.eligibleNewUser,
+      skipped,
       pendingRevealMovieId: null,
     };
   }
@@ -80,11 +94,12 @@ export function evaluateFirstFamilyMovieEligibility(input: {
       shouldEnter: true,
       hasVaultActivity,
       eligibleNewUser: input.eligibleNewUser,
+      skipped,
       pendingRevealMovieId,
     };
   }
 
-  // Existing active vaults (already had movies): never force.
+  // Anyone who already has a movie never enters (except pending reveal above).
   if (input.movieCount > 0) {
     return {
       enabled,
@@ -92,30 +107,20 @@ export function evaluateFirstFamilyMovieEligibility(input: {
       shouldEnter: false,
       hasVaultActivity,
       eligibleNewUser: input.eligibleNewUser,
+      skipped,
       pendingRevealMovieId: null,
     };
   }
 
-  // Mid-ritual uploads: eligible new users may already have media and must stay.
-  if (input.mediaCount > 0 && input.eligibleNewUser !== true) {
-    return {
-      enabled,
-      complete,
-      shouldEnter: false,
-      hasVaultActivity,
-      eligibleNewUser: input.eligibleNewUser,
-      pendingRevealMovieId: null,
-    };
-  }
-
-  const shouldEnter = input.eligibleNewUser === true;
-
+  // Zero movies + not complete/skipped → play once (new or existing accounts).
+  // Media alone does not block — existing photo-only vaults still qualify.
   return {
     enabled,
     complete,
-    shouldEnter,
+    shouldEnter: true,
     hasVaultActivity,
     eligibleNewUser: input.eligibleNewUser,
+    skipped,
     pendingRevealMovieId: null,
   };
 }
@@ -149,6 +154,7 @@ export async function getFirstFamilyMovieEligibility(
       shouldEnter: false,
       hasVaultActivity: false,
       eligibleNewUser: false,
+      skipped: false,
       pendingRevealMovieId: null,
     };
   }
@@ -160,7 +166,10 @@ export async function getFirstFamilyMovieEligibility(
     .where(eq(users.id, userId))
     .limit(1);
 
-  const state = normalizeOnboardingState(user?.onboarding);
+  const rawOnboarding = user?.onboarding ?? null;
+  const state = normalizeOnboardingState(rawOnboarding);
+  // `eligible: false` is an explicit opt-out (admin / skip). Missing stays open.
+  const skipped = rawOnboarding?.eligible === false;
   const [mediaCount, movieCount] = await Promise.all([
     countUserMedia(userId),
     countUserMovies(userId),
@@ -169,7 +178,8 @@ export async function getFirstFamilyMovieEligibility(
   return evaluateFirstFamilyMovieEligibility({
     flagOn,
     complete: isFirstFamilyMovieComplete(state),
-    eligibleNewUser: state.eligible === true,
+    skipped,
+    eligibleNewUser: rawOnboarding?.eligible === true,
     mediaCount,
     movieCount,
     firstFamilyMovieId: state.firstFamilyMovieId,
@@ -196,9 +206,21 @@ async function patchOnboarding(
     .where(eq(users.id, userId))
     .limit(1);
 
+  const raw = (current?.onboarding ?? null) as UserOnboardingState | null;
+  const normalized = normalizeOnboardingState(raw);
+  // Preserve tri-state `eligible` (true / false / unset) unless the patch sets it.
+  // normalizeOnboardingState collapses unset → false, which would wrongly opt people out.
   const next: UserOnboardingState = {
-    ...normalizeOnboardingState(current?.onboarding),
+    ...normalized,
     ...patch,
+    eligible:
+      patch.eligible !== undefined
+        ? patch.eligible
+        : raw?.eligible === true
+          ? true
+          : raw?.eligible === false
+            ? false
+            : undefined,
   };
 
   await db
@@ -237,8 +259,8 @@ export async function markFirstFamilyMovieRevealSeen(
 }
 
 /** Persist one-time completion so the ritual never runs again.
- * Also advances Ava past first-run goals this ritual already covered
- * so she doesn’t reopen a conflicting welcome / photos / movie tip.
+ * Also advances Ava past first-upload / first-movie goals the ritual covered,
+ * while leaving username, invite, people, etc. available when still useful.
  */
 export async function markFirstFamilyMovieComplete(
   userId: string,
@@ -254,6 +276,14 @@ export async function markFirstFamilyMovieComplete(
 
   const now = new Date().toISOString();
   const hp = state.helperProgress ?? {};
+  const [mediaCount, movieCount] = await Promise.all([
+    countUserMedia(userId),
+    countUserMovies(userId),
+  ]);
+  const hadUploads = mediaCount > 0;
+  const hadMovie =
+    movieCount > 0 || Boolean(state.firstFamilyMovieId?.trim());
+
   await patchOnboarding(userId, {
     firstFamilyMovieCompletedAt: now,
     firstFamilyMovieRevealSeenAt: state.firstFamilyMovieRevealSeenAt ?? now,
@@ -262,12 +292,65 @@ export async function markFirstFamilyMovieComplete(
     helperProgress: {
       ...hp,
       welcomeSeen: true,
-      photosReadyCelebrated: true,
-      encourageMemoryPrompted: true,
-      memoryCelebrated: true,
-      peopleExplained: true,
-      inviteAfterFirstMovieReady: true,
-      inviteAfterFirstMoviePrompted: true,
+      // Ritual always covers first-photo / photos-ready when uploads exist.
+      ...(hadUploads
+        ? {
+            photosReadyCelebrated: true,
+            ...(mediaCount >= 5 ? { encourageMemoryPrompted: true } : {}),
+          }
+        : {}),
+      // Ritual movie satisfies the first-movie milestone (even if still rendering).
+      ...(hadMovie
+        ? {
+            inviteAfterFirstMovieReady: true,
+          }
+        : {}),
+    },
+  });
+}
+
+/**
+ * Persist a one-time skip so the ritual is never forced again.
+ * Sets completion timestamp + eligible:false (explicit opt-out).
+ * Stamps photo/movie milestones already earned so Ava won’t re-ask.
+ */
+export async function markFirstFamilyMovieSkipped(
+  userId: string,
+): Promise<void> {
+  const db = getDb();
+  const [current] = await db
+    .select({ onboarding: users.onboarding })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  const state = normalizeOnboardingState(current?.onboarding);
+  if (state.firstFamilyMovieCompletedAt) return;
+
+  const now = new Date().toISOString();
+  const hp = state.helperProgress ?? {};
+  const [mediaCount, movieCount] = await Promise.all([
+    countUserMedia(userId),
+    countUserMovies(userId),
+  ]);
+  const hadUploads = mediaCount > 0;
+  const hadMovie =
+    movieCount > 0 || Boolean(state.firstFamilyMovieId?.trim());
+
+  await patchOnboarding(userId, {
+    eligible: false,
+    firstFamilyMovieCompletedAt: now,
+    firstFamilyMovieRevealSeenAt: state.firstFamilyMovieRevealSeenAt ?? now,
+    helperStep: null,
+    helperProgress: {
+      ...hp,
+      welcomeSeen: true,
+      ...(hadUploads
+        ? {
+            photosReadyCelebrated: true,
+            ...(mediaCount >= 5 ? { encourageMemoryPrompted: true } : {}),
+          }
+        : {}),
+      ...(hadMovie ? { inviteAfterFirstMovieReady: true } : {}),
     },
   });
 }

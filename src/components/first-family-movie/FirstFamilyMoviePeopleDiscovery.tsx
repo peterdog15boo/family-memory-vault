@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils";
 type Props = {
   mediaIds: string[];
   onContinue: () => void;
+  onSkip?: () => void;
+  skipPending?: boolean;
 };
 
 type RowState = {
@@ -27,6 +29,8 @@ type RowState = {
 export function FirstFamilyMoviePeopleDiscovery({
   mediaIds,
   onContinue,
+  onSkip,
+  skipPending = false,
 }: Props) {
   const [rows, setRows] = useState<RowState[]>([]);
   const [loading, setLoading] = useState(true);
@@ -304,12 +308,23 @@ export function FirstFamilyMoviePeopleDiscovery({
         <button
           type="button"
           onClick={onContinue}
+          disabled={skipPending}
           className={cn(
-            "ui-btn ui-btn-primary inline-flex h-12 w-full items-center justify-center px-6 text-base font-semibold",
+            "ui-btn ui-btn-primary inline-flex h-12 w-full items-center justify-center px-6 text-base font-semibold disabled:opacity-60",
           )}
         >
           Continue
         </button>
+        {onSkip ? (
+          <button
+            type="button"
+            onClick={onSkip}
+            disabled={skipPending}
+            className="ui-btn ui-btn-ghost mt-2 inline-flex h-11 w-full items-center justify-center px-5 text-sm font-semibold text-[color:var(--ink-muted)] disabled:opacity-60"
+          >
+            {skipPending ? "Skipping…" : "Skip"}
+          </button>
+        ) : null}
         <p className="mt-2 text-center text-xs text-[color:var(--ink-muted)]">
           {rows.length === 0
             ? "You can skip naming for now."

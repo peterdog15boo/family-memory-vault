@@ -72,8 +72,8 @@ export {
 };
 
 const CORE_DONE_IDS: AvaStepId[] = [
-  "welcome",
   "screen_name",
+  "welcome",
   "avatar",
   "upload",
   "create_memory",
@@ -167,6 +167,31 @@ async function countMovies(userId: string): Promise<number> {
   return Number(row?.value ?? 0);
 }
 
+/** True when the vault already has uploads (First Family Movie or otherwise). */
+function isFirstUploadMilestoneDone(
+  state: UserOnboardingState,
+  signals: AvaSignals,
+): boolean {
+  if (signals.mediaCount > 0) return true;
+  // Ritual completion always included guided uploads.
+  return Boolean(state.firstFamilyMovieCompletedAt);
+}
+
+/**
+ * True when a first movie already exists — ready vault movies, an explicit
+ * skip, or a movie created during the First Family Movie ritual (even if still
+ * processing).
+ */
+function isFirstMovieMilestoneDone(
+  state: UserOnboardingState,
+  signals: AvaSignals,
+): boolean {
+  if (signals.movieCount > 0) return true;
+  if (state.helperProgress?.movieSkipped === true) return true;
+  if (state.firstFamilyMovieId?.trim()) return true;
+  return false;
+}
+
 async function countInvitesSent(userId: string): Promise<number> {
   const db = getDb();
   const [row] = await db
@@ -249,12 +274,27 @@ function hasLiveAvatar(imageUrl: string | null | undefined): boolean {
   return isRealAvatarUrl(imageUrl);
 }
 
+/**
+ * Username step is satisfied when:
+ * - a real live display name already exists (Google / OAuth / Settings), or
+ * - the user set one with Ava.
+ * Missing, blank, and placeholder names still require the Ava prompt first.
+ */
+function isAvaScreenNameConfirmed(
+  state: UserOnboardingState,
+  displayName?: string | null,
+): boolean {
+  if (hasLiveScreenName(displayName)) return true;
+  if (state.helperProgress?.screenNameSet === true) return true;
+  return Boolean(state.screenName?.trim());
+}
+
 function identitySetupComplete(
-  _state: UserOnboardingState,
+  state: UserOnboardingState,
   signals: AvaSignals,
 ): boolean {
   return (
-    hasLiveScreenName(signals.displayName) &&
+    isAvaScreenNameConfirmed(state, signals.displayName) &&
     hasLiveAvatar(signals.imageUrl)
   );
 }
@@ -312,16 +352,17 @@ function reconcileHelperProgress(
     dirty = true;
   };
 
-  const screenNameDone = hasLiveScreenName(signals.displayName);
+  const screenNameDone = isAvaScreenNameConfirmed(state, signals.displayName);
   const avatarDone = hasLiveAvatar(signals.imageUrl);
-  const uploadDone = signals.mediaCount > 0;
-  const photosReady = signals.cleanPhotoCount >= 1;
+  const uploadDone = isFirstUploadMilestoneDone(state, signals);
+  const photosReady = signals.cleanPhotoCount >= 1 || uploadDone;
   const memoryDone = signals.memoryCount > 0;
+  const movieDone = isFirstMovieMilestoneDone(state, signals);
   const pastBasics =
     uploadDone ||
     photosReady ||
     memoryDone ||
-    signals.movieCount > 0 ||
+    movieDone ||
     signals.peopleCount > 0 ||
     signals.inviteCount > 0 ||
     signals.assistantConversationCount > 0;
@@ -330,18 +371,23 @@ function reconcileHelperProgress(
   if (pastBasics || Boolean(state.welcomeSeenAt)) {
     mark("welcomeSeen", true);
   }
+  // OAuth / live display names count — stamp so resume stays consistent.
   if (screenNameDone) {
     mark("screenNameSet", true);
   }
   if (avatarDone && !hp.avatarSkipped) {
     mark("avatarSet", true);
   }
+  // Ritual / existing library: never re-nudge “add your first photo”.
+  if (uploadDone && (signals.mediaCount >= 5 || state.firstFamilyMovieCompletedAt)) {
+    mark("photosReadyCelebrated", true);
+  }
   // Clean photos alone keep a one-shot quiet tip available; stamp celebrated
   // once the user has clearly moved on.
   if (
     photosReady &&
     (memoryDone ||
-      signals.movieCount > 0 ||
+      movieDone ||
       signals.peopleCount > 0 ||
       signals.inviteCount > 0 ||
       signals.assistantConversationCount > 0)
@@ -361,6 +407,10 @@ function reconcileHelperProgress(
   if (signals.inviteCount > 0) {
     mark("inviteAfterFirstMoviePrompted", true);
   }
+  // Ritual movie (or any first movie): enable invite tip without forcing it done.
+  if (movieDone && !hp.inviteAfterFirstMovieReady) {
+    mark("inviteAfterFirstMovieReady", true);
+  }
 
   // Advance helperStep off completed early steps.
   let helperStep = (state.helperStep as AvaStepId | null) ?? null;
@@ -371,7 +421,7 @@ function reconcileHelperProgress(
   if (uploadDone) earlyDone.push("upload");
   if (photosReady) earlyDone.push("moderation", "photos_ready");
   if (memoryDone) earlyDone.push("encourage_memory", "create_memory");
-  if (signals.movieCount > 0) earlyDone.push("create_movie");
+  if (movieDone) earlyDone.push("create_movie");
   if (signals.assistantConversationCount > 0) earlyDone.push("ask_ai");
   if (signals.inviteCount > 0) earlyDone.push("invite");
 
@@ -417,18 +467,20 @@ function buildSteps(
   const hasLegacyPlus = Boolean(options.legacyPlus);
   const betaMode = Boolean(options.betaMode);
   const hp = state.helperProgress ?? emptyProgress();
+  const screenNameDone = isAvaScreenNameConfirmed(state, signals.displayName);
   const welcomeDone =
     Boolean(hp.welcomeSeen) || Boolean(state.welcomeSeenAt);
-  const screenNameDone = hasLiveScreenName(signals.displayName);
   const avatarDone = hasLiveAvatar(signals.imageUrl);
-  const identityDone = welcomeDone && screenNameDone && avatarDone;
-  const uploadDone = signals.mediaCount > 0;
+  const identityDone = screenNameDone && welcomeDone && avatarDone;
+  const uploadDone = isFirstUploadMilestoneDone(state, signals);
   const waitingModeration =
     identityDone &&
     uploadDone &&
     signals.cleanPhotoCount === 0 &&
     (signals.pendingModerationCount > 0 || signals.mediaCount > 0);
-  const photosReadyDone = signals.cleanPhotoCount >= 1;
+  const photosReadyDone =
+    signals.cleanPhotoCount >= 1 ||
+    (uploadDone && Boolean(state.firstFamilyMovieCompletedAt));
   const memoryDone = signals.memoryCount > 0;
   /** Five+ clean/ready photos owned by the user. */
   const encourageMemoryEligible =
@@ -439,7 +491,7 @@ function buildSteps(
     signals.peopleCount > 0 ||
     Boolean(hp.peopleExplained) ||
     Boolean(hp.peopleSkipped);
-  const movieDone = signals.movieCount > 0 || Boolean(hp.movieSkipped);
+  const movieDone = isFirstMovieMilestoneDone(state, signals);
   /** Movies need enough clean/ready library media to be worth encouraging. */
   const moviePromptEligible = signals.cleanUsableMediaCount >= 5;
   const askAiDone =
@@ -471,28 +523,28 @@ function buildSteps(
 
   const steps: AvaStep[] = [
     step({
-      id: "welcome",
-      title: t("ava.steps.welcomeTitle"),
-      description: t("ava.steps.welcomeDescription"),
-      href: null,
-      ctaLabel: t("ava.steps.welcomeCta"),
-      optional: false,
-      status: welcomeDone ? "done" : "available",
-      inline: "acknowledge",
-    }),
-    step({
       id: "screen_name",
       title: t("ava.steps.screenNameTitle"),
       description: t("ava.steps.screenNameDescription"),
       href: null,
       ctaLabel: t("ava.steps.screenNameCta"),
       optional: false,
-      status: !welcomeDone
+      status: screenNameDone ? "done" : "available",
+      inline: "screen_name",
+    }),
+    step({
+      id: "welcome",
+      title: t("ava.steps.welcomeTitle"),
+      description: t("ava.steps.welcomeDescription"),
+      href: null,
+      ctaLabel: t("ava.steps.welcomeCta"),
+      optional: false,
+      status: !screenNameDone
         ? "locked"
-        : screenNameDone
+        : welcomeDone
           ? "done"
           : "available",
-      inline: "screen_name",
+      inline: "acknowledge",
     }),
     step({
       id: "avatar",
@@ -501,7 +553,7 @@ function buildSteps(
       href: null,
       ctaLabel: t("ava.steps.avatarCta"),
       optional: false,
-      status: !welcomeDone || !screenNameDone
+      status: !screenNameDone
         ? "locked"
         : avatarDone
           ? "done"
@@ -683,10 +735,10 @@ function pickActiveStep(
     const match = available.find((s) => s.id === preferred);
     if (match) return match.id;
   }
-  // Identity first, then upload path, then later milestones.
+  // Identity first (username before welcome/avatar), then upload path, then later milestones.
   const priority: AvaStepId[] = [
-    "welcome",
     "screen_name",
+    "welcome",
     "avatar",
     "upload",
     "moderation",
@@ -771,18 +823,24 @@ export async function getAvaProgress(userId: string): Promise<AvaProgress> {
   };
 
   // Quiet-tip detection from raw flags (before auto-complete stamps).
-  // Never interrupt identity setup with photo / Memory tips.
+  // Never interrupt username / identity setup with photo / Memory tips.
   const rawHp = state.helperProgress ?? emptyProgress();
+  const screenNameConfirmed = isAvaScreenNameConfirmed(
+    state,
+    signals.displayName,
+  );
   const identityReady =
+    screenNameConfirmed &&
     (Boolean(rawHp.welcomeSeen) || Boolean(state.welcomeSeenAt)) &&
-    hasLiveScreenName(signals.displayName) &&
     hasLiveAvatar(signals.imageUrl);
   const photosReadyTip =
     identityReady &&
     signals.cleanPhotoCount >= 1 &&
     !rawHp.photosReadyCelebrated &&
+    !state.firstFamilyMovieCompletedAt &&
     signals.memoryCount === 0 &&
     signals.movieCount === 0 &&
+    !state.firstFamilyMovieId &&
     signals.peopleCount === 0 &&
     signals.inviteCount === 0 &&
     signals.assistantConversationCount === 0;
@@ -798,7 +856,7 @@ export async function getAvaProgress(userId: string): Promise<AvaProgress> {
     identityReady &&
     Boolean(rawHp.inviteAfterFirstMovieReady) &&
     !rawHp.inviteAfterFirstMoviePrompted &&
-    signals.movieCount >= 1 &&
+    (signals.movieCount >= 1 || Boolean(state.firstFamilyMovieId?.trim())) &&
     signals.inviteCount === 0 &&
     !rawHp.inviteSkipped;
 
@@ -823,7 +881,7 @@ export async function getAvaProgress(userId: string): Promise<AvaProgress> {
   const completedCount = steps.filter((s) => s.status === "done").length;
   const percent = Math.round((completedCount / Math.max(steps.length, 1)) * 100);
 
-  const uploadDone = signals.mediaCount > 0;
+  const uploadDone = isFirstUploadMilestoneDone(liveState, signals);
   const identityLive = identitySetupComplete(liveState, signals);
   const welcomeLive =
     Boolean(liveState.helperProgress?.welcomeSeen) ||
@@ -855,25 +913,55 @@ export async function getAvaProgress(userId: string): Promise<AvaProgress> {
     }).catch(() => undefined);
   }
 
-  const preferredStep =
-    !welcomeLive
-      ? "welcome"
-      : !hasLiveScreenName(signals.displayName)
-        ? "screen_name"
-        : !hasLiveAvatar(signals.imageUrl)
-          ? "avatar"
-          : photosReadyTip
-            ? "photos_ready"
-            : encourageMemoryPrompt
-              ? "encourage_memory"
-              : inviteAfterMoviePrompt
-                ? "invite"
-                : waitingModeration
-                  ? "moderation"
-                  : liveState.helperStep;
+  const uploadDoneLive = isFirstUploadMilestoneDone(liveState, signals);
+  const movieDoneLive = isFirstMovieMilestoneDone(liveState, signals);
+  const rawHelperStep = liveState.helperStep as AvaStepId | null;
+  const sanitizedHelperStep =
+    rawHelperStep === "upload" && uploadDoneLive
+      ? null
+      : rawHelperStep === "create_movie" && movieDoneLive
+        ? null
+        : rawHelperStep === "photos_ready" &&
+            (liveState.helperProgress?.photosReadyCelebrated ||
+              Boolean(liveState.firstFamilyMovieCompletedAt))
+          ? null
+          : rawHelperStep;
+
+  let preferredStep: AvaStepId | string | null;
+  if (!isAvaScreenNameConfirmed(liveState, signals.displayName)) {
+    preferredStep = "screen_name";
+  } else if (!welcomeLive) {
+    preferredStep = "welcome";
+  } else if (!hasLiveAvatar(signals.imageUrl)) {
+    preferredStep = "avatar";
+  } else if (photosReadyTip) {
+    preferredStep = "photos_ready";
+  } else if (encourageMemoryPrompt) {
+    preferredStep = "encourage_memory";
+  } else if (inviteAfterMoviePrompt) {
+    preferredStep = "invite";
+  } else if (waitingModeration) {
+    preferredStep = "moderation";
+  } else if (sanitizedHelperStep) {
+    preferredStep = sanitizedHelperStep;
+  } else if (!uploadDoneLive) {
+    preferredStep = "upload";
+  } else if (signals.memoryCount === 0 && signals.cleanPhotoCount >= 1) {
+    // Ritual already covered first upload — continue with Memory, not re-upload.
+    preferredStep = "create_memory";
+  } else {
+    preferredStep = null;
+  }
 
   // Align helperStep with live signals — do NOT clear soft-dismiss here.
-  if (photosReadyTip && liveState.helperStep !== "photos_ready") {
+  // Never advance tip steps while username is still unset.
+  if (!isAvaScreenNameConfirmed(liveState, signals.displayName)) {
+    if (liveState.helperStep !== "screen_name") {
+      void patchAvaState(userId, { helperStep: "screen_name" }).catch(
+        () => undefined,
+      );
+    }
+  } else if (photosReadyTip && liveState.helperStep !== "photos_ready") {
     void patchAvaState(userId, { helperStep: "photos_ready" }).catch(
       () => undefined,
     );
@@ -910,16 +998,20 @@ export async function getAvaProgress(userId: string): Promise<AvaProgress> {
     Boolean(liveState.helperProgress?.welcomeSeen) ||
     Boolean(liveState.welcomeSeenAt);
 
-  const hasScreenName = hasLiveScreenName(signals.displayName);
+  const hasScreenName = isAvaScreenNameConfirmed(
+    liveState,
+    signals.displayName,
+  );
   const hasAvatar = hasLiveAvatar(signals.imageUrl);
   /**
    * Live profile only — do not trust helper_step alone.
    * Soft-dismiss must NOT block identity when either field is missing.
+   * Username (Ava screen name) always comes before avatar / later tips.
    */
   const identityIncomplete =
     helperEnabled &&
     !(completed && celebrated) &&
-    (!welcomeSeen || !hasScreenName || !hasAvatar);
+    (!hasScreenName || !welcomeSeen || !hasAvatar);
 
   /** Prompt identity on load even after a soft dismiss (client opens once/session). */
   const identityAutoOpen = identityIncomplete;
@@ -968,7 +1060,7 @@ export async function getAvaProgress(userId: string): Promise<AvaProgress> {
     if (tip) tip.status = "active";
   } else if (autoOpenReason === "identity_setup") {
     // Keep preferred identity step active for the forced setup flow.
-    const identityIds: AvaStepId[] = ["welcome", "screen_name", "avatar"];
+    const identityIds: AvaStepId[] = ["screen_name", "welcome", "avatar"];
     if (!activeStepId || !identityIds.includes(activeStepId)) {
       activeStepId =
         identityIds.find((id) =>
@@ -1186,7 +1278,7 @@ export async function acknowledgeAvaStep(
     await patchAvaState(userId, {
       welcomeSeenAt: now,
       helperProgress: { welcomeSeen: true },
-      helperStep: "screen_name",
+      helperStep: "avatar",
     });
     return;
   }
@@ -1322,7 +1414,8 @@ export async function setAvaScreenName(
   await patchAvaState(userId, {
     screenName: live.displayName,
     helperProgress: { screenNameSet: true },
-    helperStep: "avatar",
+    // Prefer welcome next when still unseen; getAvaProgress will advance past it.
+    helperStep: "welcome",
   });
 }
 
@@ -1334,10 +1427,14 @@ export async function setAvaAvatar(
     skip?: boolean;
   },
 ): Promise<void> {
+  const mediaCount = await countAnyMedia(userId);
+  const nextAfterAvatar: AvaStepId | null =
+    mediaCount > 0 ? "create_memory" : "upload";
+
   if (input.skip) {
     await patchAvaState(userId, {
       helperProgress: { avatarSkipped: true },
-      helperStep: "upload",
+      helperStep: nextAfterAvatar,
     });
     return;
   }
@@ -1387,7 +1484,7 @@ export async function setAvaAvatar(
       avatarMediaId: input.avatarMediaId,
       avatarUrl: live.imageUrl,
       helperProgress: { avatarSet: true },
-      helperStep: "upload",
+      helperStep: nextAfterAvatar,
     });
     return;
   }
@@ -1419,7 +1516,7 @@ export async function setAvaAvatar(
       avatarUrl: live.imageUrl,
       avatarMediaId: null,
       helperProgress: { avatarSet: true },
-      helperStep: "upload",
+      helperStep: nextAfterAvatar,
     });
     return;
   }

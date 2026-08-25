@@ -27,6 +27,7 @@ export {
   isFirstFamilyMovieComplete,
   markFirstFamilyMovieComplete,
   markFirstFamilyMovieRevealSeen,
+  markFirstFamilyMovieSkipped,
   saveFirstFamilyMovieId,
   shouldEnterFirstFamilyMovie,
 } from "@/lib/first-family-movie/gate";

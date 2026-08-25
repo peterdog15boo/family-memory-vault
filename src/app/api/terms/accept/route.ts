@@ -9,8 +9,7 @@ import {
   recordTermsAcceptance,
   termsCookieOptions,
 } from "@/lib/terms";
-import { getPostAuthLandingPath, APP_HOME_PATH, FIRST_FAMILY_MOVIE_PATH } from "@/lib/routes";
-import { shouldEnterFirstFamilyMovie } from "@/lib/first-family-movie";
+import { APP_HOME_PATH, FIRST_FAMILY_MOVIE_PATH } from "@/lib/routes";
 import { ensureAppUser } from "@/lib/users";
 import {
   enforceRateLimit,
@@ -39,11 +38,13 @@ function clientIp(request: Request): string | null {
 }
 
 function safeRedirectPath(raw: string | undefined): string {
-  const fallback = getPostAuthLandingPath();
+  const fallback = APP_HOME_PATH;
   if (!raw) return fallback;
   if (!raw.startsWith("/") || raw.startsWith("//")) return fallback;
   if (raw.startsWith("/terms-agree")) return fallback;
   if (raw.startsWith("/beta-agree")) return fallback;
+  if (raw.startsWith("/legal-agree")) return fallback;
+  if (raw.startsWith(FIRST_FAMILY_MOVIE_PATH)) return fallback;
   if (raw.startsWith("/sign-in") || raw.startsWith("/sign-up")) {
     return fallback;
   }
@@ -57,7 +58,7 @@ function safeRedirectPath(raw: string | undefined): string {
 export async function POST(request: Request) {
   if (!isTermsRequired()) {
     return NextResponse.json(
-      { ok: true, skipped: true, redirectTo: getPostAuthLandingPath() },
+      { ok: true, skipped: true, redirectTo: APP_HOME_PATH },
       { status: 200 },
     );
   }
@@ -134,16 +135,6 @@ export async function POST(request: Request) {
     });
 
     let redirectTo = safeRedirectPath(parsed.data.redirectTo);
-    try {
-      if (
-        (redirectTo === APP_HOME_PATH || redirectTo === "/") &&
-        (await shouldEnterFirstFamilyMovie(authResult.userId))
-      ) {
-        redirectTo = FIRST_FAMILY_MOVIE_PATH;
-      }
-    } catch (error) {
-      console.warn("[terms.accept] first-family-movie gate failed", error);
-    }
     const response = NextResponse.json({
       ok: true,
       acceptedAt: row?.acceptedAt?.toISOString() ?? new Date().toISOString(),

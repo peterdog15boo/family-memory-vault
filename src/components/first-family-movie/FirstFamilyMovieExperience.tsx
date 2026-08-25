@@ -6,9 +6,11 @@ import { FirstFamilyMovieCelebration } from "@/components/first-family-movie/Fir
 import { FirstFamilyMovieCreating } from "@/components/first-family-movie/FirstFamilyMovieCreating";
 import { FirstFamilyMovieGuidedUpload } from "@/components/first-family-movie/FirstFamilyMovieGuidedUpload";
 import { FirstFamilyMoviePeopleDiscovery } from "@/components/first-family-movie/FirstFamilyMoviePeopleDiscovery";
+import { FirstFamilyMovieSkipButton } from "@/components/first-family-movie/FirstFamilyMovieSkipButton";
 import { FirstFamilyMovieWelcome } from "@/components/first-family-movie/FirstFamilyMovieWelcome";
 import { trackFirstMovieEvent } from "@/lib/first-family-movie/track-client";
 import type { SerializedMovie } from "@/lib/movies/serialize";
+import { cn } from "@/lib/utils";
 
 type Step =
   | "welcome"
@@ -42,6 +44,7 @@ export function FirstFamilyMovieExperience({
     resumeMovie?.status === "ready" ? "creating" : "welcome",
   );
   const [mediaIds, setMediaIds] = useState<string[]>([]);
+  const [skipPending, setSkipPending] = useState(false);
   const completionSent = useRef(false);
   const peopleWarmRef = useRef(false);
 
@@ -58,6 +61,41 @@ export function FirstFamilyMovieExperience({
       completionSent.current = false;
     }
   }, [localPreview]);
+
+  const skipRitual = useCallback(async () => {
+    if (skipPending) return;
+    setSkipPending(true);
+    try {
+      if (localPreview) {
+        router.replace("/dashboard");
+        router.refresh();
+        return;
+      }
+      const res = await fetch("/api/first-family-movie", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "skip" }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        redirectTo?: string;
+      };
+      if (!res.ok) {
+        setSkipPending(false);
+        return;
+      }
+      router.replace(data.redirectTo || "/dashboard");
+      router.refresh();
+    } catch {
+      setSkipPending(false);
+    }
+  }, [localPreview, router, skipPending]);
+
+  const showStepSkip =
+    step === "upload" ||
+    step === "photos-ready" ||
+    step === "creating" ||
+    step === "people";
 
   useEffect(() => {
     if (step !== "celebrate") return;
@@ -97,6 +135,24 @@ export function FirstFamilyMovieExperience({
         </p>
       ) : null}
 
+      {showStepSkip ? (
+        <div
+          className={cn(
+            "absolute z-50",
+            localPreview ? "right-3 top-12 sm:right-5" : "right-3 top-3 sm:right-5 sm:top-5",
+          )}
+        >
+          <FirstFamilyMovieSkipButton
+            variant="header"
+            onClick={() => {
+              void skipRitual();
+            }}
+            pending={skipPending}
+            className="border-[color:var(--border-strong)] bg-[color:var(--surface-elevated)]/95 text-[color:var(--ink)] hover:bg-[color:var(--surface-elevated)]"
+          />
+        </div>
+      ) : null}
+
       {step !== "welcome" ? (
         <>
           <div
@@ -115,7 +171,13 @@ export function FirstFamilyMovieExperience({
       ) : null}
 
       {step === "welcome" ? (
-        <FirstFamilyMovieWelcome onStart={() => setStep("upload")} />
+        <FirstFamilyMovieWelcome
+          onStart={() => setStep("upload")}
+          onSkip={() => {
+            void skipRitual();
+          }}
+          skipPending={skipPending}
+        />
       ) : step === "upload" ? (
         <FirstFamilyMovieGuidedUpload
           storageBlocked={storageBlocked}
@@ -126,6 +188,10 @@ export function FirstFamilyMovieExperience({
             setMediaIds(ids);
             setStep("photos-ready");
           }}
+          onSkip={() => {
+            void skipRitual();
+          }}
+          skipPending={skipPending}
         />
       ) : step === "photos-ready" ? (
         <PhotosReadyStep
@@ -138,6 +204,10 @@ export function FirstFamilyMovieExperience({
             warmPeopleDiscovery(mediaIds);
             setStep("creating");
           }}
+          onSkip={() => {
+            void skipRitual();
+          }}
+          skipPending={skipPending}
         />
       ) : step === "creating" ? (
         <FirstFamilyMovieCreating
@@ -146,11 +216,19 @@ export function FirstFamilyMovieExperience({
           onBack={() => setStep("photos-ready")}
           onRenderStarted={() => warmPeopleDiscovery(mediaIds)}
           onContinueToPeople={() => setStep("people")}
+          onSkip={() => {
+            void skipRitual();
+          }}
+          skipPending={skipPending}
         />
       ) : step === "people" ? (
         <FirstFamilyMoviePeopleDiscovery
           mediaIds={mediaIds}
           onContinue={() => setStep("celebrate")}
+          onSkip={() => {
+            void skipRitual();
+          }}
+          skipPending={skipPending}
         />
       ) : (
         <FirstFamilyMovieCelebration
@@ -175,10 +253,14 @@ function PhotosReadyStep({
   count,
   onAddMore,
   onCreate,
+  onSkip,
+  skipPending,
 }: {
   count: number;
   onAddMore: () => void;
   onCreate: () => void;
+  onSkip: () => void;
+  skipPending: boolean;
 }) {
   return (
     <main className="relative mx-auto flex min-h-dvh w-full max-w-lg flex-col justify-center px-6 py-14 sm:px-8">
@@ -196,16 +278,26 @@ function PhotosReadyStep({
         <button
           type="button"
           onClick={onCreate}
-          className="ui-btn ui-btn-primary inline-flex h-12 w-full items-center justify-center px-6 text-base font-semibold"
+          disabled={skipPending}
+          className="ui-btn ui-btn-primary inline-flex h-12 w-full items-center justify-center px-6 text-base font-semibold disabled:opacity-60"
         >
           Create My Movie
         </button>
         <button
           type="button"
           onClick={onAddMore}
-          className="ui-btn ui-btn-secondary inline-flex h-11 w-full items-center justify-center px-5 text-sm font-semibold"
+          disabled={skipPending}
+          className="ui-btn ui-btn-secondary inline-flex h-11 w-full items-center justify-center px-5 text-sm font-semibold disabled:opacity-60"
         >
           Add more photos
+        </button>
+        <button
+          type="button"
+          onClick={onSkip}
+          disabled={skipPending}
+          className="ui-btn ui-btn-ghost inline-flex h-11 w-full items-center justify-center px-5 text-sm font-semibold text-[color:var(--ink-muted)] disabled:opacity-60"
+        >
+          {skipPending ? "Skipping…" : "Skip"}
         </button>
       </div>
     </main>

@@ -22,6 +22,7 @@ function shouldHideFloatingFab(pathname: string, modalOpen: boolean): boolean {
   const path = pathname.split("?")[0] || "/";
   // Legal / beta gates + first-session ritual: keep primary CTAs unobstructed.
   if (
+    path.startsWith("/legal-agree") ||
     path.startsWith("/terms-agree") ||
     path.startsWith("/beta-agree") ||
     path.startsWith("/first-family-movie")

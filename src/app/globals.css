@@ -8201,6 +8201,26 @@ html {
   cursor: not-allowed;
 }
 
+/* Combined /legal-agree: stack both scrollable documents */
+.legal-agree-docs {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-height: 0;
+}
+
+.legal-agree-docs .beta-nda-scroll,
+.legal-agree-docs .legal-doc.beta-nda-scroll {
+  max-height: min(38vh, 22rem);
+}
+
+@media (min-width: 768px) {
+  .legal-agree-docs .beta-nda-scroll,
+  .legal-agree-docs .legal-doc.beta-nda-scroll {
+    max-height: min(42vh, 26rem);
+  }
+}
+
 /* Shared legal document body (/terms + /terms-agree) */
 .legal-doc-title {
   margin: 0 0 0.5rem;

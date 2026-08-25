@@ -18,6 +18,8 @@ type Props = {
   onContinueToPeople: (movieId: string) => void;
   /** Kick people discovery in parallel while rendering. */
   onRenderStarted?: (movieId: string) => void;
+  onSkip?: () => void;
+  skipPending?: boolean;
 };
 
 type UiPhase = "working" | "ready" | "failed";
@@ -32,6 +34,8 @@ export function FirstFamilyMovieCreating({
   onBack,
   onContinueToPeople,
   onRenderStarted,
+  onSkip,
+  skipPending = false,
 }: Props) {
   const [uiPhase, setUiPhase] = useState<UiPhase>(
     initialMovie?.status === "ready" ? "ready" : "working",
@@ -273,16 +277,18 @@ export function FirstFamilyMovieCreating({
           Your photos are safe. You can try again — we’ll pick up where you
           left off.
         </p>
-        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+        <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
           <button
             type="button"
             onClick={onBack}
-            className="ui-btn ui-btn-primary inline-flex h-11 items-center justify-center px-5 text-sm font-semibold"
+            disabled={skipPending}
+            className="ui-btn ui-btn-primary inline-flex h-11 items-center justify-center px-5 text-sm font-semibold disabled:opacity-60"
           >
             Back to photos
           </button>
           <button
             type="button"
+            disabled={skipPending}
             onClick={() => {
               setError(null);
               setProgress(8);
@@ -290,10 +296,20 @@ export function FirstFamilyMovieCreating({
               setUiPhase("working");
               setRunKey((k) => k + 1);
             }}
-            className="ui-btn ui-btn-secondary inline-flex h-11 items-center justify-center px-5 text-sm font-semibold"
+            className="ui-btn ui-btn-secondary inline-flex h-11 items-center justify-center px-5 text-sm font-semibold disabled:opacity-60"
           >
             Try again
           </button>
+          {onSkip ? (
+            <button
+              type="button"
+              onClick={onSkip}
+              disabled={skipPending}
+              className="ui-btn ui-btn-ghost inline-flex h-11 items-center justify-center px-5 text-sm font-semibold text-[color:var(--ink-muted)] disabled:opacity-60"
+            >
+              {skipPending ? "Skipping…" : "Skip"}
+            </button>
+          ) : null}
         </div>
       </main>
     );

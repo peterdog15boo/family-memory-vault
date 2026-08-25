@@ -143,6 +143,8 @@ const ROUTE_CATEGORY_RULES: readonly RouteRule[] = [
       "/terms",
       "/contact",
       "/beta-agree",
+      "/terms-agree",
+      "/legal-agree",
       "/suspended",
     ],
   },

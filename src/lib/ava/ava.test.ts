@@ -31,6 +31,24 @@ function emptySignals(partial: Partial<AvaSignals> = {}): AvaSignals {
   };
 }
 
+/** Identity complete for Ava: username confirmed with Ava + live profile. */
+function confirmedNameState(
+  partial: Parameters<typeof normalizeOnboardingState>[0] = {},
+) {
+  const base = partial ?? {};
+  return normalizeOnboardingState({
+    eligible: true,
+    ...base,
+    screenName: base.screenName ?? "Jeff",
+    welcomeSeenAt: base.welcomeSeenAt ?? new Date().toISOString(),
+    helperProgress: {
+      screenNameSet: true,
+      welcomeSeen: true,
+      ...(base.helperProgress ?? {}),
+    },
+  });
+}
+
 describe("validateAvaScreenName", () => {
   it("accepts a simple name", () => {
     expect(validateAvaScreenName("  Jeff  ")).toEqual({
@@ -62,12 +80,13 @@ describe("live profile identity", () => {
     expect(isRealDisplayName(null)).toBe(false);
     expect(isRealDisplayName("")).toBe(false);
     expect(isRealDisplayName("Family member")).toBe(false);
+    expect(isRealDisplayName("jeff@gmail.com")).toBe(false);
     expect(avaHasRealScreenName(null)).toBe(false);
   });
 
   it("treats real avatar URLs as complete", () => {
     expect(isRealAvatarUrl("https://img.clerk.com/abc.png")).toBe(true);
-    expect(avaHasAvatarSet("https://img.clerk.com/abc.png")).toBe(true);
+    expect(avaHasAvatarSet("https://img.clerk.com/avatar.png")).toBe(true);
   });
 
   it("rejects missing avatars", () => {
@@ -76,10 +95,10 @@ describe("live profile identity", () => {
     expect(avaHasAvatarSet(null)).toBe(false);
   });
 
-  it("skips identity when live name + avatar exist", () => {
+  it("skips username when Google/OAuth already provided a real display name", () => {
     const state = normalizeOnboardingState({ eligible: true });
     const signals = emptySignals({
-      displayName: "Jeff",
+      displayName: "Jeff Roberts",
       imageUrl: "https://img.clerk.com/avatar.png",
     });
     expect(avaIdentitySetupComplete(state, signals)).toBe(true);
@@ -96,14 +115,68 @@ describe("live profile identity", () => {
     expect(steps.find((s) => s.id === "upload")?.status).toBe("available");
   });
 
-  it("adds a Legacy+ upgrade note on documents step when plan lacks access", () => {
+  it("asks for username first when display name is missing or a placeholder", () => {
     const state = normalizeOnboardingState({
       eligible: true,
+      helperProgress: { welcomeSeen: true },
+      welcomeSeenAt: new Date().toISOString(),
+    });
+    const missing = avaBuildSteps(
+      state,
+      emptySignals({
+        displayName: null,
+        imageUrl: "https://img.clerk.com/avatar.png",
+      }),
+    );
+    expect(missing.find((s) => s.id === "screen_name")?.status).toBe(
+      "available",
+    );
+    expect(missing.find((s) => s.id === "avatar")?.status).toBe("locked");
+
+    const placeholder = avaBuildSteps(
+      state,
+      emptySignals({
+        displayName: "Family member",
+        imageUrl: "https://img.clerk.com/avatar.png",
+      }),
+    );
+    expect(placeholder.find((s) => s.id === "screen_name")?.status).toBe(
+      "available",
+    );
+
+    const emailFallback = avaBuildSteps(
+      state,
+      emptySignals({
+        displayName: "jeff@gmail.com",
+        imageUrl: "https://img.clerk.com/avatar.png",
+      }),
+    );
+    expect(emailFallback.find((s) => s.id === "screen_name")?.status).toBe(
+      "available",
+    );
+  });
+
+  it("unlocks later steps after Ava username is confirmed", () => {
+    const state = confirmedNameState();
+    const signals = emptySignals({
+      displayName: "Jeff",
+      imageUrl: "https://img.clerk.com/avatar.png",
+    });
+    expect(avaIdentitySetupComplete(state, signals)).toBe(true);
+    const steps = avaBuildSteps(state, signals);
+    expect(steps.find((s) => s.id === "screen_name")?.status).toBe("done");
+    expect(steps.find((s) => s.id === "welcome")?.status).toBe("done");
+    expect(steps.find((s) => s.id === "avatar")?.status).toBe("done");
+    expect(steps.find((s) => s.id === "upload")?.status).toBe("available");
+  });
+
+  it("adds a Legacy+ upgrade note on documents step when plan lacks access", () => {
+    const state = confirmedNameState({
       helperProgress: {
+        screenNameSet: true,
         welcomeSeen: true,
         peopleExplained: true,
       },
-      welcomeSeenAt: new Date().toISOString(),
     });
     const signals = emptySignals({
       displayName: "Jeff",
@@ -126,11 +199,7 @@ describe("live profile identity", () => {
   });
 
   it("locks create_movie until 5 clean/ready library media exist", () => {
-    const state = normalizeOnboardingState({
-      eligible: true,
-      helperProgress: { welcomeSeen: true },
-      welcomeSeenAt: new Date().toISOString(),
-    });
+    const state = confirmedNameState();
     const base = {
       displayName: "Jeff",
       imageUrl: "https://img.clerk.com/avatar.png",
@@ -160,11 +229,7 @@ describe("live profile identity", () => {
   });
 
   it("marks create_movie done after a movie exists without re-prompting", () => {
-    const state = normalizeOnboardingState({
-      eligible: true,
-      helperProgress: { welcomeSeen: true },
-      welcomeSeenAt: new Date().toISOString(),
-    });
+    const state = confirmedNameState();
     const steps = avaBuildSteps(
       state,
       emptySignals({
@@ -181,11 +246,7 @@ describe("live profile identity", () => {
   });
 
   it("deep-links create_movie into the memory movie panel", () => {
-    const state = normalizeOnboardingState({
-      eligible: true,
-      helperProgress: { welcomeSeen: true },
-      welcomeSeenAt: new Date().toISOString(),
-    });
+    const state = confirmedNameState();
     const steps = avaBuildSteps(
       state,
       emptySignals({
@@ -204,13 +265,12 @@ describe("live profile identity", () => {
   });
 
   it("uses invite-after-movie copy when the first movie is ready", () => {
-    const state = normalizeOnboardingState({
-      eligible: true,
+    const state = confirmedNameState({
       helperProgress: {
+        screenNameSet: true,
         welcomeSeen: true,
         inviteAfterFirstMovieReady: true,
       },
-      welcomeSeenAt: new Date().toISOString(),
     });
     const steps = avaBuildSteps(
       state,
@@ -229,12 +289,8 @@ describe("live profile identity", () => {
     expect(invite?.description).toMatch(/first movie/i);
   });
 
-  it("keeps identity incomplete when avatar is missing", () => {
-    const state = normalizeOnboardingState({
-      eligible: true,
-      helperProgress: { welcomeSeen: true },
-      welcomeSeenAt: new Date().toISOString(),
-    });
+  it("keeps identity incomplete when avatar is missing after username", () => {
+    const state = confirmedNameState();
     const signals = emptySignals({ displayName: "Jeff", imageUrl: null });
     expect(avaIdentitySetupComplete(state, signals)).toBe(false);
     const steps = avaBuildSteps(state, signals);
@@ -243,19 +299,56 @@ describe("live profile identity", () => {
     expect(steps.find((s) => s.id === "upload")?.status).toBe("locked");
   });
 
-  it("keeps identity incomplete when name is missing", () => {
-    const state = normalizeOnboardingState({
-      eligible: true,
-      helperProgress: { welcomeSeen: true },
-      welcomeSeenAt: new Date().toISOString(),
+  it("skips first-upload prompt when ritual already added photos", () => {
+    const state = confirmedNameState({
+      firstFamilyMovieCompletedAt: new Date().toISOString(),
+      helperProgress: {
+        screenNameSet: true,
+        welcomeSeen: true,
+        photosReadyCelebrated: true,
+      },
     });
-    const signals = emptySignals({
-      displayName: null,
-      imageUrl: "https://img.clerk.com/avatar.png",
+    const steps = avaBuildSteps(
+      state,
+      emptySignals({
+        displayName: "Jeff",
+        imageUrl: "https://img.clerk.com/avatar.png",
+        mediaCount: 5,
+        cleanPhotoCount: 5,
+        cleanUsableMediaCount: 5,
+      }),
+    );
+    expect(steps.find((s) => s.id === "upload")?.status).toBe("done");
+    expect(steps.find((s) => s.id === "create_memory")?.status).toBe(
+      "available",
+    );
+  });
+
+  it("skips first-movie prompt when ritual already created a movie", () => {
+    const state = confirmedNameState({
+      firstFamilyMovieCompletedAt: new Date().toISOString(),
+      firstFamilyMovieId: "mov_ritual",
+      helperProgress: {
+        screenNameSet: true,
+        welcomeSeen: true,
+        photosReadyCelebrated: true,
+        inviteAfterFirstMovieReady: true,
+      },
     });
-    expect(avaIdentitySetupComplete(state, signals)).toBe(false);
-    const steps = avaBuildSteps(state, signals);
-    expect(steps.find((s) => s.id === "screen_name")?.status).toBe("available");
-    expect(steps.find((s) => s.id === "avatar")?.status).toBe("locked");
+    const steps = avaBuildSteps(
+      state,
+      emptySignals({
+        displayName: "Jeff",
+        imageUrl: "https://img.clerk.com/avatar.png",
+        mediaCount: 5,
+        cleanPhotoCount: 5,
+        cleanUsableMediaCount: 5,
+        memoryCount: 1,
+        movieCount: 0,
+      }),
+    );
+    expect(steps.find((s) => s.id === "create_movie")?.status).toBe("done");
+    expect(steps.find((s) => s.id === "invite")?.status).toBe("available");
+    expect(steps.find((s) => s.id === "people")?.status).toBe("available");
   });
 });

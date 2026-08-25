@@ -1503,6 +1503,26 @@ export const enUS = {
     errorNetwork: "Network error. Please try again.",
     submit: "I Agree – Continue",
   },
+  legalAgree: {
+    eyebrow: "Before you continue",
+    title: "Agreements",
+    lead:
+      "Please review the agreements below. One checkbox covers everything required to enter your vault.",
+    ndaVersion: "Beta NDA: {version}",
+    termsVersion: "Terms: {version}",
+    ndaAria: "Beta Tester NDA",
+    termsAria: "Terms of Service",
+    fullName: "Full Name",
+    email: "Email address",
+    agreeCheckboxBoth:
+      "I have read and agree to the Beta Tester Non-Disclosure Agreement and the Terms of Service",
+    agreeCheckboxNda:
+      "I have read and agree to the Beta Tester Non-Disclosure Agreement",
+    agreeCheckboxTerms: "I have read and agree to the Terms of Service",
+    errorSave: "Could not save your agreement.",
+    errorNetwork: "Network error. Please try again.",
+    submit: "I Agree – Continue",
+  },
   memoryBox: {
     promoAria: "Family Memory Box digitizing",
     promoTitle: "Have boxes of old photos or tapes?",

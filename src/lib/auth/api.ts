@@ -75,55 +75,70 @@ export async function requireApiUser(
     };
   }
 
-  if (!options.skipBetaNda) {
+  if (!options.skipBetaNda || !options.skipTerms) {
+    // Welcome ritual may run before combined legal clickwrap; allow its APIs.
+    let inFirstMovieRitual = false;
     try {
-      if (!(await checkBetaNdaCached(userId))) {
-        return {
-          ok: false,
-          response: NextResponse.json(
-            {
-              error: "Beta NDA acceptance required",
-              code: "beta_nda_required",
-            },
-            { status: 403 },
-          ),
-        };
-      }
+      const { shouldEnterFirstFamilyMovie } = await import(
+        "@/lib/first-family-movie"
+      );
+      inFirstMovieRitual = await shouldEnterFirstFamilyMovie(userId);
     } catch (error) {
-      console.error("[auth.api] beta NDA check failed", error);
-      return {
-        ok: false,
-        response: NextResponse.json(
-          { error: "Unable to verify beta agreement status" },
-          { status: 503 },
-        ),
-      };
+      console.warn("[auth.api] first-family-movie gate failed", error);
     }
-  }
 
-  if (!options.skipTerms) {
-    try {
-      if (!(await checkTermsCached(userId))) {
-        return {
-          ok: false,
-          response: NextResponse.json(
-            {
-              error: "Terms of Service acceptance required",
-              code: "terms_required",
-            },
-            { status: 403 },
-          ),
-        };
+    if (!inFirstMovieRitual) {
+      if (!options.skipBetaNda) {
+        try {
+          if (!(await checkBetaNdaCached(userId))) {
+            return {
+              ok: false,
+              response: NextResponse.json(
+                {
+                  error: "Beta NDA acceptance required",
+                  code: "beta_nda_required",
+                },
+                { status: 403 },
+              ),
+            };
+          }
+        } catch (error) {
+          console.error("[auth.api] beta NDA check failed", error);
+          return {
+            ok: false,
+            response: NextResponse.json(
+              { error: "Unable to verify beta agreement status" },
+              { status: 503 },
+            ),
+          };
+        }
       }
-    } catch (error) {
-      console.error("[auth.api] terms check failed", error);
-      return {
-        ok: false,
-        response: NextResponse.json(
-          { error: "Unable to verify terms acceptance status" },
-          { status: 503 },
-        ),
-      };
+
+      if (!options.skipTerms) {
+        try {
+          if (!(await checkTermsCached(userId))) {
+            return {
+              ok: false,
+              response: NextResponse.json(
+                {
+                  error: "Terms of Service acceptance required",
+                  code: "terms_required",
+                },
+                { status: 403 },
+              ),
+            };
+          }
+        } catch (error) {
+          console.error("[auth.api] terms check failed", error);
+          return {
+            ok: false,
+            response: NextResponse.json(
+              { error: "Unable to verify terms acceptance status" },
+              { status: 503 },
+            ),
+          };
+        }
+      }
     }
   }
 

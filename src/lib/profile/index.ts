@@ -29,6 +29,8 @@ export function isRealDisplayName(name: string | null | undefined): boolean {
   const trimmed = name?.trim() ?? "";
   if (trimmed.length < 2) return false;
   if (PLACEHOLDER_NAMES.has(trimmed.toLowerCase())) return false;
+  // Clerk may fall back to email when OAuth has no given name — still ask Ava.
+  if (trimmed.includes("@")) return false;
   return true;
 }
 

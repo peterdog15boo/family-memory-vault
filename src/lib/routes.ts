@@ -12,7 +12,7 @@ export const FIRST_FAMILY_MOVIE_PATH = "/first-family-movie" as const;
 /**
  * Where Clerk should send users after sign-in / sign-up when no deep link
  * is present. When the first-movie flag is on, prefer the ritual route —
- * it enforces NDA/Terms itself and avoids a blank /dashboard wait.
+ * combined legal acceptance runs after the ritual, before the main vault.
  */
 export function getPostAuthLandingPath(): string {
   return isFirstFamilyMovieOnboardingEnabled()

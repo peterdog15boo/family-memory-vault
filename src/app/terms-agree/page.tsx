@@ -1,106 +1,24 @@
-import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { TermsAgreeForm } from "@/components/legal/TermsAgreeForm";
-import { isUserSuspended } from "@/lib/admin/users";
-import { shouldRedirectToBetaNda } from "@/lib/beta-nda/gate";
-import {
-  hasAcceptedTerms,
-  isTermsRequired,
-} from "@/lib/terms";
-import { getPostAuthLandingPath } from "@/lib/routes";
-import { ensureAppUser } from "@/lib/users";
+import { LEGAL_AGREE_PATH } from "@/lib/legal-agree/gate";
 
 export const dynamic = "force-dynamic";
-
-export const metadata = {
-  title: "Terms of Service — Family Memory Vault",
-  description:
-    "Review and accept the Family Memory Vault Terms of Service to continue.",
-};
 
 type PageProps = {
   searchParams: Promise<{ redirect_url?: string; redirectTo?: string }>;
 };
 
-function safeRedirect(raw: string | undefined): string {
-  const fallback = getPostAuthLandingPath();
-  if (!raw) return fallback;
-  if (!raw.startsWith("/") || raw.startsWith("//")) return fallback;
-  if (raw.startsWith("/terms-agree")) return fallback;
-  if (raw.startsWith("/beta-agree")) return fallback;
-  if (raw.startsWith("/sign-in") || raw.startsWith("/sign-up")) {
-    return fallback;
-  }
-  return raw;
-}
-
 /**
- * Clickwrap gate for Terms of Service.
- * Shown after Beta NDA (when required). Outside (app) so DashboardShell
- * does not wrap it.
+ * Legacy Terms route — permanently redirected to the combined legal gate.
  */
-export default async function TermsAgreePage({ searchParams }: PageProps) {
-  if (!isTermsRequired()) {
-    redirect(getPostAuthLandingPath());
-  }
-
-  const { isAuthenticated, userId } = await auth();
-  if (!isAuthenticated || !userId) {
-    const params = await searchParams;
-    const next = safeRedirect(params.redirect_url || params.redirectTo);
-    redirect(
-      `/sign-in?redirect_url=${encodeURIComponent(`/terms-agree?redirect_url=${encodeURIComponent(next)}`)}`,
-    );
-  }
-
-  if (await isUserSuspended(userId)) {
-    redirect("/suspended");
-  }
-
-  try {
-    await ensureAppUser(userId);
-  } catch (error) {
-    console.warn("[terms-agree] ensureAppUser failed", error);
-  }
-
-  // NDA first during beta.
-  if (await shouldRedirectToBetaNda(userId)) {
-    const params = await searchParams;
-    const next = safeRedirect(params.redirect_url || params.redirectTo);
-    redirect(
-      `/beta-agree?redirect_url=${encodeURIComponent(`/terms-agree?redirect_url=${encodeURIComponent(next)}`)}`,
-    );
-  }
-
-  if (await hasAcceptedTerms(userId)) {
-    const params = await searchParams;
-    redirect(safeRedirect(params.redirect_url || params.redirectTo));
-  }
-
+export default async function TermsAgreeRedirectPage({
+  searchParams,
+}: PageProps) {
   const params = await searchParams;
-  const redirectTo = safeRedirect(params.redirect_url || params.redirectTo);
-
-  let displayName = "";
-  let email = "";
-  try {
-    const user = await currentUser();
-    displayName =
-      user?.fullName ||
-      [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
-      user?.username ||
-      "";
-    email = user?.primaryEmailAddress?.emailAddress || "";
-  } catch {
-    // Prefill is optional.
+  const next = params.redirect_url || params.redirectTo;
+  if (next?.startsWith("/") && !next.startsWith("//")) {
+    redirect(
+      `${LEGAL_AGREE_PATH}?redirect_url=${encodeURIComponent(next)}`,
+    );
   }
-
-  return (
-    <main className="beta-nda-shell">
-      <TermsAgreeForm
-        displayName={displayName}
-        email={email}
-        redirectTo={redirectTo}
-      />
-    </main>
-  );
+  redirect(LEGAL_AGREE_PATH);
 }

@@ -5,9 +5,8 @@ import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { isUserSuspended } from "@/lib/admin/users";
 import { getAvaProgress } from "@/lib/ava";
 import { isAdmin } from "@/lib/auth/admin";
-import { shouldRedirectToBetaNda } from "@/lib/beta-nda/gate";
+import { shouldRedirectToLegalAgree, LEGAL_AGREE_PATH } from "@/lib/legal-agree/gate";
 import { shouldEnterFirstFamilyMovie } from "@/lib/first-family-movie";
-import { shouldRedirectToTerms } from "@/lib/terms/gate";
 import { getUnreadCount } from "@/lib/notifications";
 import type { AvaProgress } from "@/lib/ava/types";
 import { getIdleTimeoutPolicyForUser } from "@/lib/account-preferences";
@@ -15,31 +14,17 @@ import { canUseLegacyPlusFeatures } from "@/lib/plans/gates";
 import { APP_HOME_PATH, FIRST_FAMILY_MOVIE_PATH } from "@/lib/routes";
 import { ensureAppUser } from "@/lib/users";
 
-/** Prefer the first-movie ritual after NDA/Terms when the vault is eligible. */
-async function postAgreeDestination(
-  userId: string,
-  pathFromRequest: string,
-): Promise<string> {
+/** Safe in-app destination after legal accept (never re-enter the ritual). */
+function postLegalDestination(pathFromRequest: string): string {
   const safe =
     pathFromRequest.startsWith("/") &&
     !pathFromRequest.startsWith("//") &&
     !pathFromRequest.startsWith("/beta-agree") &&
-    !pathFromRequest.startsWith("/terms-agree")
+    !pathFromRequest.startsWith("/terms-agree") &&
+    !pathFromRequest.startsWith(LEGAL_AGREE_PATH) &&
+    !pathFromRequest.startsWith(FIRST_FAMILY_MOVIE_PATH)
       ? pathFromRequest
       : APP_HOME_PATH;
-
-  // Deep links (invite accept, settings, …) win over the welcome ritual.
-  if (safe !== APP_HOME_PATH && safe !== "/") {
-    return safe;
-  }
-
-  try {
-    if (await shouldEnterFirstFamilyMovie(userId)) {
-      return FIRST_FAMILY_MOVIE_PATH;
-    }
-  } catch (error) {
-    console.warn("[app.layout] first-family-movie gate failed", error);
-  }
   return safe === "/" ? APP_HOME_PATH : safe;
 }
 
@@ -136,18 +121,16 @@ export default async function AppLayout({
     }
   }
 
-  if (userId && (await shouldRedirectToBetaNda(userId))) {
-    const hdrs = await headers();
-    const path = hdrs.get("x-pathname")?.trim() || APP_HOME_PATH;
-    const next = await postAgreeDestination(userId, path);
-    redirect(`/beta-agree?redirect_url=${encodeURIComponent(next)}`);
+  // Order: First Family Movie (if eligible) → combined legal agree → vault.
+  if (userId && (await shouldEnterFirstFamilyMovie(userId))) {
+    redirect(FIRST_FAMILY_MOVIE_PATH);
   }
 
-  if (userId && (await shouldRedirectToTerms(userId))) {
+  if (userId && (await shouldRedirectToLegalAgree(userId))) {
     const hdrs = await headers();
     const path = hdrs.get("x-pathname")?.trim() || APP_HOME_PATH;
-    const next = await postAgreeDestination(userId, path);
-    redirect(`/terms-agree?redirect_url=${encodeURIComponent(next)}`);
+    const next = postLegalDestination(path);
+    redirect(`${LEGAL_AGREE_PATH}?redirect_url=${encodeURIComponent(next)}`);
   }
 
   const [

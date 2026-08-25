@@ -4,7 +4,6 @@ import { redirect } from "next/navigation";
 import { FirstFamilyMovieExperience } from "@/components/first-family-movie/FirstFamilyMovieExperience";
 import { isUserSuspended } from "@/lib/admin/users";
 import { getAccountUsageSummary } from "@/lib/billing/account-usage";
-import { shouldRedirectToBetaNda } from "@/lib/beta-nda/gate";
 import {
   completeFirstFamilyMovieIfMovieExists,
   getFirstFamilyMovieEligibility,
@@ -12,8 +11,11 @@ import {
   isFirstFamilyMovieOnboardingEnabled,
   shouldEnterFirstFamilyMovie,
 } from "@/lib/first-family-movie";
+import {
+  LEGAL_AGREE_PATH,
+  shouldRedirectToLegalAgree,
+} from "@/lib/legal-agree/gate";
 import { APP_HOME_PATH, FIRST_FAMILY_MOVIE_PATH } from "@/lib/routes";
-import { shouldRedirectToTerms } from "@/lib/terms/gate";
 import { ensureAppUser } from "@/lib/users";
 import { getDb } from "@/lib/db";
 import { movies } from "@/lib/db/schema";
@@ -24,6 +26,16 @@ export type FirstFamilyMoviePageParams = {
   movieId?: string;
   preview?: string;
 };
+
+/** After ritual skip / ineligibility: legal agree (if needed), then vault. */
+async function redirectAfterRitual(userId: string): Promise<never> {
+  if (await shouldRedirectToLegalAgree(userId)) {
+    redirect(
+      `${LEGAL_AGREE_PATH}?redirect_url=${encodeURIComponent(APP_HOME_PATH)}`,
+    );
+  }
+  redirect(APP_HOME_PATH);
+}
 
 async function resolveLocalPreview(
   params: FirstFamilyMoviePageParams,
@@ -91,18 +103,6 @@ export async function renderFirstFamilyMovieRitual(options: {
     console.warn("[first-family-movie] ensureAppUser failed", error);
   }
 
-  if (await shouldRedirectToBetaNda(userId)) {
-    redirect(
-      `/beta-agree?redirect_url=${encodeURIComponent(ritualPath)}`,
-    );
-  }
-
-  if (await shouldRedirectToTerms(userId)) {
-    redirect(
-      `/terms-agree?redirect_url=${encodeURIComponent(ritualPath)}`,
-    );
-  }
-
   const eligibility = await getFirstFamilyMovieEligibility(userId);
 
   if (!localPreview) {
@@ -110,14 +110,14 @@ export async function renderFirstFamilyMovieRitual(options: {
       console.info(
         "[first-family-movie] redirect home: auto-complete (existing movies)",
       );
-      redirect(APP_HOME_PATH);
+      await redirectAfterRitual(userId);
     }
 
     if (!(await shouldEnterFirstFamilyMovie(userId))) {
       console.info(
         "[first-family-movie] redirect home: not eligible — open /first-family-movie/preview locally",
       );
-      redirect(APP_HOME_PATH);
+      await redirectAfterRitual(userId);
     }
   } else {
     console.info("[first-family-movie] local preview — eligibility bypassed");

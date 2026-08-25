@@ -1,21 +1,37 @@
 "use client";
 
 import { useMemo } from "react";
+import { FirstFamilyMovieSkipButton } from "@/components/first-family-movie/FirstFamilyMovieSkipButton";
 import { buildFirstFamilyMovieCollage } from "@/content/first-family-movie-collage";
 import { cn } from "@/lib/utils";
 
 type Props = {
   onStart: () => void;
+  /** Persist skip and leave the ritual. */
+  onSkip: () => void;
+  skipPending?: boolean;
 };
 
 /**
  * Premium full-bleed collage welcome for the first-session ritual.
  */
-export function FirstFamilyMovieWelcome({ onStart }: Props) {
+export function FirstFamilyMovieWelcome({
+  onStart,
+  onSkip,
+  skipPending = false,
+}: Props) {
   const tiles = useMemo(() => buildFirstFamilyMovieCollage(48), []);
 
   return (
     <main className="ffm-welcome relative min-h-dvh overflow-hidden bg-[#0c0a09] text-[#f7f0e8]">
+      <div className="absolute right-3 top-3 z-20 sm:right-5 sm:top-5">
+        <FirstFamilyMovieSkipButton
+          variant="header"
+          onClick={onSkip}
+          pending={skipPending}
+        />
+      </div>
+
       <div
         className="ffm-welcome-mosaic pointer-events-none absolute inset-0"
         aria-hidden
@@ -58,17 +74,22 @@ export function FirstFamilyMovieWelcome({ onStart }: Props) {
           few minutes.
         </h1>
 
-        <div className="ffm-fade-in-delay-2 mt-9 flex flex-col gap-4">
+        <div className="ffm-fade-in-delay-2 mt-9 flex flex-col gap-3">
           <button
             type="button"
             onClick={onStart}
-            className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-[#b56f5e] px-6 text-base font-semibold text-white shadow-[0_12px_40px_rgba(181,111,94,0.35)] transition hover:bg-[#9d5d4e] sm:h-[3.25rem] sm:w-auto sm:min-w-[15rem] sm:self-start"
+            disabled={skipPending}
+            className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-[#b56f5e] px-6 text-base font-semibold text-white shadow-[0_12px_40px_rgba(181,111,94,0.35)] transition hover:bg-[#9d5d4e] sm:h-[3.25rem] sm:w-auto sm:min-w-[15rem] sm:self-start disabled:opacity-60"
           >
             Start My First Movie
           </button>
+          <FirstFamilyMovieSkipButton
+            onClick={onSkip}
+            pending={skipPending}
+          />
           <p className="max-w-sm text-xs leading-relaxed text-white/60">
             We’ll only use these photos for this experience. You stay in full
-            control.
+            control. Skip anytime — you can make a movie later from your vault.
           </p>
         </div>
       </div>

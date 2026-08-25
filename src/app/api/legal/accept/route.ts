@@ -4,12 +4,20 @@ import { requireApiUser } from "@/lib/auth/api";
 import {
   BETA_NDA_COOKIE,
   BETA_NDA_VERSION,
-  betaNdaCookieOptions,
   isBetaNdaRequired,
   recordBetaNdaAcceptance,
+  betaNdaCookieOptions,
+  hasAcceptedBetaNda,
 } from "@/lib/beta-nda";
+import {
+  TERMS_COOKIE,
+  TERMS_VERSION,
+  isTermsRequired,
+  recordTermsAcceptance,
+  termsCookieOptions,
+  hasAcceptedTerms,
+} from "@/lib/terms";
 import { LEGAL_AGREE_PATH } from "@/lib/legal-agree/gate";
-import { hasAcceptedTerms, isTermsRequired } from "@/lib/terms";
 import { APP_HOME_PATH, FIRST_FAMILY_MOVIE_PATH } from "@/lib/routes";
 import { ensureAppUser } from "@/lib/users";
 import {
@@ -25,7 +33,7 @@ const bodySchema = z.object({
   agreed: z
     .boolean()
     .refine((v) => v === true, {
-      message: "You must agree to the NDA to continue.",
+      message: "You must agree to continue.",
     }),
   redirectTo: z.string().trim().max(500).optional(),
 });
@@ -45,9 +53,9 @@ function safeRedirectPath(raw: string | undefined): string {
   if (!raw) return fallback;
   if (!raw.startsWith("/") || raw.startsWith("//")) return fallback;
   if (
+    raw.startsWith(LEGAL_AGREE_PATH) ||
     raw.startsWith("/beta-agree") ||
     raw.startsWith("/terms-agree") ||
-    raw.startsWith("/legal-agree") ||
     raw.startsWith(FIRST_FAMILY_MOVIE_PATH) ||
     raw.startsWith("/sign-in") ||
     raw.startsWith("/sign-up")
@@ -58,10 +66,10 @@ function safeRedirectPath(raw: string | undefined): string {
 }
 
 /**
- * POST /api/beta-nda/accept — record Beta Tester NDA clickwrap acceptance.
+ * POST /api/legal/accept — record Beta NDA and/or Terms in one clickwrap step.
  */
 export async function POST(request: Request) {
-  if (!isBetaNdaRequired()) {
+  if (!isBetaNdaRequired() && !isTermsRequired()) {
     return NextResponse.json(
       { ok: true, skipped: true, redirectTo: APP_HOME_PATH },
       { status: 200 },
@@ -75,9 +83,9 @@ export async function POST(request: Request) {
   if (!authResult.ok) return authResult.response;
 
   const limited = enforceRateLimit(
-    `beta-nda:${authResult.userId}`,
-    RATE_LIMITS.betaNdaAccept.limit,
-    RATE_LIMITS.betaNdaAccept.windowMs,
+    `legal-accept:${authResult.userId}`,
+    RATE_LIMITS.termsAccept.limit,
+    RATE_LIMITS.termsAccept.windowMs,
   );
   if (limited) return limited;
 
@@ -102,64 +110,70 @@ export async function POST(request: Request) {
   try {
     await ensureAppUser(authResult.userId);
   } catch (error) {
-    console.warn("[beta-nda.accept] ensureAppUser failed", error);
+    console.warn("[legal.accept] ensureAppUser failed", error);
   }
 
+  const ip = clientIp(request);
+  const ua = request.headers.get("user-agent");
+  const fullName = parsed.data.fullName;
+  const email = parsed.data.email;
+
   try {
-    const row = await recordBetaNdaAcceptance({
-      userId: authResult.userId,
-      fullName: parsed.data.fullName,
-      email: parsed.data.email,
-      ipAddress: clientIp(request),
-      userAgent: request.headers.get("user-agent"),
-      ndaVersion: BETA_NDA_VERSION,
-    });
+    const needNda =
+      isBetaNdaRequired() &&
+      !(await hasAcceptedBetaNda(authResult.userId));
+    const needTerms =
+      isTermsRequired() && !(await hasAcceptedTerms(authResult.userId));
+
+    if (needNda) {
+      await recordBetaNdaAcceptance({
+        userId: authResult.userId,
+        fullName,
+        email,
+        ipAddress: ip,
+        userAgent: ua,
+        ndaVersion: BETA_NDA_VERSION,
+      });
+    }
+
+    if (needTerms) {
+      await recordTermsAcceptance({
+        userId: authResult.userId,
+        fullName,
+        email,
+        ipAddress: ip,
+        userAgent: ua,
+        termsVersion: TERMS_VERSION,
+      });
+    }
 
     let redirectTo = safeRedirectPath(parsed.data.redirectTo);
 
-    // Legacy endpoint: if Terms still outstanding, send to combined gate.
-    let needsTermsGate = false;
-    if (isTermsRequired()) {
-      try {
-        needsTermsGate = !(await hasAcceptedTerms(authResult.userId));
-      } catch (error) {
-        console.warn("[beta-nda.accept] terms check failed", error);
-        needsTermsGate = true;
-      }
-    }
-
-    if (needsTermsGate) {
-      redirectTo = `${LEGAL_AGREE_PATH}?redirect_url=${encodeURIComponent(
-        redirectTo.startsWith(FIRST_FAMILY_MOVIE_PATH)
-          ? APP_HOME_PATH
-          : redirectTo,
-      )}`;
-    } else if (
-      redirectTo.startsWith(FIRST_FAMILY_MOVIE_PATH) ||
-      redirectTo === "/"
-    ) {
-      redirectTo = APP_HOME_PATH;
-    }
-
     const response = NextResponse.json({
       ok: true,
-      acceptedAt: row?.acceptedAt?.toISOString() ?? new Date().toISOString(),
-      ndaVersion: BETA_NDA_VERSION,
+      ndaVersion: needNda || isBetaNdaRequired() ? BETA_NDA_VERSION : null,
+      termsVersion: needTerms || isTermsRequired() ? TERMS_VERSION : null,
       redirectTo,
     });
 
-    response.cookies.set(
-      BETA_NDA_COOKIE,
-      BETA_NDA_VERSION,
-      betaNdaCookieOptions(),
-    );
+    if (isBetaNdaRequired()) {
+      response.cookies.set(
+        BETA_NDA_COOKIE,
+        BETA_NDA_VERSION,
+        betaNdaCookieOptions(),
+      );
+    }
+    if (isTermsRequired()) {
+      response.cookies.set(TERMS_COOKIE, TERMS_VERSION, termsCookieOptions());
+    }
 
     return response;
   } catch (error) {
-    console.error("[beta-nda.accept] failed", error);
+    console.error("[legal.accept] failed", error);
     return NextResponse.json(
       { error: "Could not save your agreement. Please try again." },
       { status: 500 },
     );
   }
 }
+
