@@ -2,6 +2,7 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { LogEvents } from "@/lib/observability/events";
 import { logger } from "@/lib/observability/logger";
+import { resolvePostAuthPath } from "@/lib/routes";
 
 /**
  * Protect the authenticated app surfaces.
@@ -58,6 +59,12 @@ const isProtectedRoute = createRouteMatcher([
   "/api/push(.*)",
 ]);
 
+/**
+ * Auth entry URLs only — not Clerk step paths like /sign-in/sso-callback or
+ * /sign-in/factor-one, which must still render to finish the handshake.
+ */
+const isAuthEntryRoute = createRouteMatcher(["/sign-in", "/sign-up"]);
+
 function makeRequestId(): string {
   return `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -78,6 +85,19 @@ export default clerkMiddleware(async (auth, request) => {
   const isApi = path.startsWith("/api/");
   const requestId =
     request.headers.get("x-request-id")?.trim() || makeRequestId();
+
+  // Already signed in on /sign-in or /sign-up → vault (or deep link) before
+  // any marketing login UI can paint (OAuth return + refresh cases).
+  // Skip pending sessions (MFA / tasks) so Clerk can finish on the auth page.
+  if (isAuthEntryRoute(request)) {
+    const { userId, sessionStatus } = await auth();
+    if (userId && sessionStatus !== "pending") {
+      const dest = resolvePostAuthPath(
+        request.nextUrl.searchParams.get("redirect_url"),
+      );
+      return NextResponse.redirect(new URL(dest, request.url));
+    }
+  }
 
   if (isProtectedRoute(request)) {
     await auth.protect({

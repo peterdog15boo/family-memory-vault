@@ -19,3 +19,29 @@ export const FIRST_FAMILY_MOVIE_PATH = "/first-family-movie" as const;
 export function getPostAuthLandingPath(): string {
   return APP_HOME_PATH;
 }
+
+/**
+ * Safe in-app destination after auth when a `redirect_url` query may be present.
+ * Falls back to the vault home. Never returns another auth URL.
+ */
+export function resolvePostAuthPath(raw?: string | null): string {
+  const fallback = APP_HOME_PATH;
+  if (!raw) return fallback;
+
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith("/") || trimmed.startsWith("//")) return fallback;
+
+  const pathOnly = (trimmed.split("#")[0] ?? trimmed).trim();
+  if (!pathOnly.startsWith("/") || pathOnly.startsWith("//")) return fallback;
+
+  if (
+    pathOnly === "/" ||
+    pathOnly.startsWith("/sign-in") ||
+    pathOnly.startsWith("/sign-up") ||
+    pathOnly.startsWith("/sso-callback")
+  ) {
+    return fallback;
+  }
+
+  return pathOnly;
+}
