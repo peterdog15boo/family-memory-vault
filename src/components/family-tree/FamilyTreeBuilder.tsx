@@ -13,7 +13,7 @@ import type {
   SerializedFamilyTreeGraph,
   SerializedFamilyTreePerson,
 } from "@/lib/family-tree/serialize";
-import { preferredExistingCoParentId } from "@/lib/family-tree/co-parents";
+import { preferredExistingCoParentId } from "@/lib/family-tree/genealogy-iq";
 import type { FamilyTreeRelationType } from "@/lib/db/schema";
 import { useOverlayA11y } from "@/hooks/useOverlayA11y";
 
@@ -38,6 +38,7 @@ type ApiTreeResponse = {
   tree?: SerializedFamilyTreeGraph;
   availablePeople?: SerializedFamilyTreePerson[];
   node?: { id: string };
+  notices?: Array<{ kind?: string; message: string }>;
   scaffold?: {
     message?: string | null;
     createdNodeIds?: string[];
@@ -67,14 +68,24 @@ export function FamilyTreeBuilder({
   const [scaffoldNotice, setScaffoldNotice] = useState<ScaffoldNotice | null>(
     null,
   );
+  const [iqNotice, setIqNotice] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState(false);
   const [viewMounted, setViewMounted] = useState(false);
   const viewContainerRef = useRef<HTMLDivElement>(null);
+  const iqNoticeTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     setViewMounted(true);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (iqNoticeTimerRef.current != null) {
+        window.clearTimeout(iqNoticeTimerRef.current);
+      }
+    };
   }, []);
 
   useOverlayA11y({
@@ -131,6 +142,21 @@ export function FamilyTreeBuilder({
     });
   }
 
+  function applyIqNotices(data: ApiTreeResponse) {
+    const messages = (data.notices ?? [])
+      .map((n) => n.message?.trim())
+      .filter((m): m is string => Boolean(m));
+    if (messages.length === 0) return;
+    setIqNotice(messages.join(" "));
+    if (iqNoticeTimerRef.current != null) {
+      window.clearTimeout(iqNoticeTimerRef.current);
+    }
+    iqNoticeTimerRef.current = window.setTimeout(() => {
+      setIqNotice(null);
+      iqNoticeTimerRef.current = null;
+    }, 6000);
+  }
+
   async function createNode(body: {
     label: string;
     personId?: string | null;
@@ -150,6 +176,8 @@ export function FamilyTreeBuilder({
       throw new Error(data.error || "Could not add someone to the tree.");
     }
     if (data.tree) setTree(data.tree);
+    applyIqNotices(data);
+    applyScaffoldNotice(data);
     return { id: data.node.id, tree: data.tree };
   }
 
@@ -168,6 +196,7 @@ export function FamilyTreeBuilder({
       throw new Error(data.error || "Could not save that connection.");
     }
     if (data.tree) setTree(data.tree);
+    applyIqNotices(data);
     applyScaffoldNotice(data);
     return data.tree;
   }
@@ -208,6 +237,15 @@ export function FamilyTreeBuilder({
         setSelectedNodeId(spouseId);
         await refreshAvailable();
         return;
+      }
+
+      const parentCount = tree.relationships.filter(
+        (r) => r.type === "parent_of" && r.toNodeId === childId,
+      ).length;
+      if (parentCount >= 2) {
+        throw new Error(
+          "This person already has two parents. Link an existing relative instead of adding another parent.",
+        );
       }
 
       const created = await createNode({
@@ -392,6 +430,23 @@ export function FamilyTreeBuilder({
       </div>
     ) : null;
 
+  const iqBanner = iqNotice ? (
+    <div
+      className="inline-flex max-w-full items-center gap-2 rounded-full border border-ink/10 bg-canvas px-3 py-1.5 text-sm text-ink shadow-sm"
+      role="status"
+    >
+      <span className="min-w-0 truncate">{iqNotice}</span>
+      <button
+        type="button"
+        className="rounded-full p-0.5 text-ink-muted hover:bg-ink/5 hover:text-ink"
+        aria-label="Dismiss"
+        onClick={() => setIqNotice(null)}
+      >
+        <X className="size-3.5" aria-hidden />
+      </button>
+    </div>
+  ) : null;
+
   const completeness = (
     <FamilyTreeCompleteness
       tree={tree}
@@ -502,6 +557,7 @@ export function FamilyTreeBuilder({
           </p>
         ) : null}
         {scaffoldBanner}
+        {iqBanner}
         {completeness}
         {toolkit}
       </div>
@@ -547,6 +603,7 @@ export function FamilyTreeBuilder({
         </p>
       ) : null}
       {scaffoldBanner}
+      {iqBanner}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-ink-muted">

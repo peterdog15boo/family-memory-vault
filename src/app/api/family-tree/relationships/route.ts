@@ -56,6 +56,7 @@ export async function POST(request: Request) {
       {
         relationship: serializeFamilyTreeRelationship(result.relationship),
         tree: serializeFamilyTreeGraph(graph),
+        notices: result.notices,
         scaffold:
           result.scaffold.message ||
           result.scaffold.createdNodeIds.length > 0

@@ -44,13 +44,14 @@ export async function POST(request: Request) {
     }
 
     const treeOwnerId = authResult.treeOwnerId;
-    const node = await createFamilyTreeNode({
+    const created = await createFamilyTreeNode({
       userId: treeOwnerId,
       label: parsed.data.label,
       personId: parsed.data.personId ?? null,
       notes: parsed.data.notes ?? null,
       link: parsed.data.link,
     });
+    const node = created.node;
 
     const graph = await getFamilyTreeGraph(treeOwnerId);
     const enriched = graph.nodes.find((n) => n.id === node.id);
@@ -68,6 +69,7 @@ export async function POST(request: Request) {
               updatedAt: node.updatedAt.toISOString(),
             },
         tree: serializeFamilyTreeGraph(graph),
+        notices: created.notices,
       },
       { status: 201 },
     );

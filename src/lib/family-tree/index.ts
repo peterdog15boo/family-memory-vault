@@ -31,6 +31,12 @@ import {
 } from "@/lib/family-tree/scaffold";
 import { missingCoParentSpouseIds } from "@/lib/family-tree/co-parents";
 import {
+  coParentLinkNotice,
+  coParentsToAutoSpouse,
+  spouseLinkNotice,
+  type GenealogyIqNotice,
+} from "@/lib/family-tree/genealogy-iq";
+import {
   FAMILY_TREE_CIRCULAR_RELATIONSHIP_MESSAGE,
   validateFamilyTreeRelationship,
   validateFamilyTreeRelationshipBatch,
@@ -115,9 +121,15 @@ export type CreateFamilyTreeNodeInput = {
   };
 };
 
+export type CreateFamilyTreeNodeResult = {
+  node: FamilyTreeNode;
+  /** Genealogy IQ auto-link confirmations (e.g. co-parents linked as spouses). */
+  notices: GenealogyIqNotice[];
+};
+
 export async function createFamilyTreeNode(
   input: CreateFamilyTreeNodeInput,
-): Promise<FamilyTreeNode> {
+): Promise<CreateFamilyTreeNodeResult> {
   await assertFamilyTreeAllowed(input.userId);
 
   const label = labelSchema.parse(input.label);
@@ -164,6 +176,9 @@ export async function createFamilyTreeNode(
     }
   }
 
+  // Snapshot existing members — Genealogy IQ never deletes them as a side effect.
+  const preservedNodeIds = await listFamilyTreeNodeIds(input.userId);
+
   const now = new Date();
   const [row] = await db
     .insert(familyTreeNodes)
@@ -184,19 +199,22 @@ export async function createFamilyTreeNode(
     });
   }
 
+  let notices: GenealogyIqNotice[] = [];
+
   if (input.link) {
     const fromNodeId =
       input.link.newNodeIs === "from" ? row.id : input.link.otherNodeId;
     const toNodeId =
       input.link.newNodeIs === "to" ? row.id : input.link.otherNodeId;
     try {
-      await createFamilyTreeRelationship({
+      const linked = await createFamilyTreeRelationshipWithScaffold({
         userId: input.userId,
         fromNodeId,
         toNodeId,
         type: input.link.type,
         scaffold: false,
       });
+      notices = linked.notices;
     } catch (error) {
       await db
         .delete(familyTreeNodes)
@@ -210,7 +228,9 @@ export async function createFamilyTreeNode(
     }
   }
 
-  return row;
+  await assertPreservedFamilyTreeNodes(input.userId, preservedNodeIds);
+
+  return { node: row, notices };
 }
 
 export type UpdateFamilyTreeNodeInput = {
@@ -321,6 +341,11 @@ export type CreateFamilyTreeRelationshipInput = {
    * Defaults to true for parent_of edges.
    */
   linkSpousesAsCoParents?: boolean;
+  /**
+   * When false, do not auto-link the new parent with existing parents of the
+   * child as spouses. Defaults to true for parent_of edges.
+   */
+  linkCoParentsAsSpouses?: boolean;
 };
 
 export type FamilyTreeRelationshipScaffoldResult = {
@@ -333,6 +358,8 @@ export type FamilyTreeRelationshipScaffoldResult = {
     undoNodeIds: string[];
     undoRelationshipIds: string[];
   };
+  /** Short Genealogy IQ confirmations for auto-links. */
+  notices: GenealogyIqNotice[];
 };
 
 export async function createFamilyTreeRelationship(
@@ -402,11 +429,14 @@ export async function createFamilyTreeRelationshipWithScaffold(
     toNodeId: r.toNodeId,
     type: r.type,
   }));
+  const preservedNodeIds = graph.nodes.map((n) => n.id);
+  const labelById = new Map(graph.nodes.map((n) => [n.id, n.label] as const));
 
   const shouldScaffold = input.scaffold !== false;
   const createdNodeIds: string[] = [];
   const createdRelationshipIds: string[] = [];
   let scaffoldMessage: string | null = null;
+  const notices: GenealogyIqNotice[] = [];
 
   if (shouldScaffold) {
     const plan = planFamilyTreeScaffold(
@@ -452,13 +482,14 @@ export async function createFamilyTreeRelationshipWithScaffold(
     keyToId.set(endpoints.toNodeId, endpoints.toNodeId);
 
     for (const planned of plan.nodes) {
-      const node = await createFamilyTreeNode({
+      const created = await createFamilyTreeNode({
         userId: input.userId,
         label: planned.label,
         personId: null,
       });
-      keyToId.set(planned.key, node.id);
-      createdNodeIds.push(node.id);
+      keyToId.set(planned.key, created.node.id);
+      createdNodeIds.push(created.node.id);
+      labelById.set(created.node.id, created.node.label);
     }
 
     for (const planned of plan.relationships) {
@@ -473,8 +504,9 @@ export async function createFamilyTreeRelationshipWithScaffold(
         toNodeId: toId,
         type: planned.type,
         scaffold: false,
-        // Scaffold plans already list every parent link; don't auto-expand.
+        // Scaffold plans already list every parent/spouse link; don't auto-expand.
         linkSpousesAsCoParents: false,
+        linkCoParentsAsSpouses: false,
       });
       createdRelationshipIds.push(bridge.relationship.id);
     }
@@ -496,33 +528,83 @@ export async function createFamilyTreeRelationshipWithScaffold(
     type: input.type,
   });
 
-  const coParentIds: string[] = [];
-  if (
-    input.type === "parent_of" &&
-    input.linkSpousesAsCoParents !== false
-  ) {
-    const linked = await linkExistingSpousesAsCoParents({
-      userId: input.userId,
-      parentNodeId: endpoints.fromNodeId,
-      childNodeId: endpoints.toNodeId,
-    });
-    coParentIds.push(...linked);
+  const autoLinkedIds: string[] = [];
+  if (input.type === "parent_of") {
+    if (input.linkSpousesAsCoParents !== false) {
+      const linked = await linkExistingSpousesAsCoParents({
+        userId: input.userId,
+        parentNodeId: endpoints.fromNodeId,
+        childNodeId: endpoints.toNodeId,
+        labelById,
+      });
+      autoLinkedIds.push(...linked.relationshipIds);
+      notices.push(...linked.notices);
+    }
+    if (input.linkCoParentsAsSpouses !== false) {
+      const linked = await linkCoParentsAsSpouses({
+        userId: input.userId,
+        parentNodeId: endpoints.fromNodeId,
+        childNodeId: endpoints.toNodeId,
+        labelById,
+      });
+      autoLinkedIds.push(...linked.relationshipIds);
+      notices.push(...linked.notices);
+    }
   }
+
+  await assertPreservedFamilyTreeNodes(input.userId, preservedNodeIds);
 
   return {
     relationship,
     scaffold: {
       message: scaffoldMessage,
       createdNodeIds,
-      createdRelationshipIds: [...createdRelationshipIds, ...coParentIds],
+      createdRelationshipIds: [...createdRelationshipIds, ...autoLinkedIds],
       undoNodeIds: createdNodeIds,
       undoRelationshipIds: [
         relationship.id,
         ...createdRelationshipIds,
-        ...coParentIds,
+        ...autoLinkedIds,
       ],
     },
+    notices,
   };
+}
+
+async function listFamilyTreeNodeIds(userId: string): Promise<string[]> {
+  const db = getDb();
+  const rows = await db
+    .select({ id: familyTreeNodes.id })
+    .from(familyTreeNodes)
+    .where(eq(familyTreeNodes.userId, userId));
+  return rows.map((r) => r.id);
+}
+
+/**
+ * Genealogy IQ anti-deletion guard: relationship edits must never remove
+ * people who already existed on the tree.
+ */
+async function assertPreservedFamilyTreeNodes(
+  userId: string,
+  requiredIds: string[],
+): Promise<void> {
+  if (requiredIds.length === 0) return;
+  const db = getDb();
+  const rows = await db
+    .select({ id: familyTreeNodes.id })
+    .from(familyTreeNodes)
+    .where(
+      and(
+        eq(familyTreeNodes.userId, userId),
+        inArray(familyTreeNodes.id, requiredIds),
+      ),
+    );
+  if (rows.length < requiredIds.length) {
+    throw new FamilyTreeError(
+      "That change would remove people from your tree. It was blocked to keep your family intact.",
+      { code: "validation" },
+    );
+  }
 }
 
 /**
@@ -533,7 +615,8 @@ async function linkExistingSpousesAsCoParents(input: {
   userId: string;
   parentNodeId: string;
   childNodeId: string;
-}): Promise<string[]> {
+  labelById: Map<string, string>;
+}): Promise<{ relationshipIds: string[]; notices: GenealogyIqNotice[] }> {
   const db = getDb();
   const rows = await db
     .select({
@@ -549,9 +632,15 @@ async function linkExistingSpousesAsCoParents(input: {
     input.parentNodeId,
     input.childNodeId,
   );
-  if (spouseIds.length === 0) return [];
+  if (spouseIds.length === 0) {
+    return { relationshipIds: [], notices: [] };
+  }
 
-  const createdIds: string[] = [];
+  const relationshipIds: string[] = [];
+  const notices: GenealogyIqNotice[] = [];
+  const childLabel =
+    input.labelById.get(input.childNodeId) ?? "this relative";
+
   for (const spouseId of spouseIds) {
     try {
       const bridge = await createFamilyTreeRelationshipWithScaffold({
@@ -561,8 +650,15 @@ async function linkExistingSpousesAsCoParents(input: {
         type: "parent_of",
         scaffold: false,
         linkSpousesAsCoParents: false,
+        linkCoParentsAsSpouses: false,
       });
-      createdIds.push(bridge.relationship.id);
+      relationshipIds.push(bridge.relationship.id);
+      notices.push(
+        coParentLinkNotice(
+          input.labelById.get(spouseId) ?? "Spouse",
+          childLabel,
+        ),
+      );
     } catch (error) {
       // Skip invalid/duplicate co-parent links; the primary parent link stands.
       if (
@@ -574,7 +670,72 @@ async function linkExistingSpousesAsCoParents(input: {
       throw error;
     }
   }
-  return createdIds;
+  return { relationshipIds, notices };
+}
+
+/**
+ * When a second parent is added to a child, safely link that parent with the
+ * existing parent(s) as spouses — e.g. adding Father to Wife when Mother exists.
+ */
+async function linkCoParentsAsSpouses(input: {
+  userId: string;
+  parentNodeId: string;
+  childNodeId: string;
+  labelById: Map<string, string>;
+}): Promise<{ relationshipIds: string[]; notices: GenealogyIqNotice[] }> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      fromNodeId: familyTreeRelationships.fromNodeId,
+      toNodeId: familyTreeRelationships.toNodeId,
+      type: familyTreeRelationships.type,
+    })
+    .from(familyTreeRelationships)
+    .where(eq(familyTreeRelationships.userId, input.userId));
+
+  const otherParents = coParentsToAutoSpouse(
+    rows,
+    input.parentNodeId,
+    input.childNodeId,
+  );
+  if (otherParents.length === 0) {
+    return { relationshipIds: [], notices: [] };
+  }
+
+  const relationshipIds: string[] = [];
+  const notices: GenealogyIqNotice[] = [];
+  const newLabel =
+    input.labelById.get(input.parentNodeId) ?? "Parent";
+
+  for (const otherId of otherParents) {
+    try {
+      const bridge = await createFamilyTreeRelationshipWithScaffold({
+        userId: input.userId,
+        fromNodeId: input.parentNodeId,
+        toNodeId: otherId,
+        type: "partner_of",
+        scaffold: false,
+        linkSpousesAsCoParents: false,
+        linkCoParentsAsSpouses: false,
+      });
+      relationshipIds.push(bridge.relationship.id);
+      notices.push(
+        spouseLinkNotice(
+          newLabel,
+          input.labelById.get(otherId) ?? "Parent",
+        ),
+      );
+    } catch (error) {
+      if (
+        error instanceof FamilyTreeError &&
+        (error.code === "conflict" || error.code === "validation")
+      ) {
+        continue;
+      }
+      throw error;
+    }
+  }
+  return { relationshipIds, notices };
 }
 
 async function insertFamilyTreeRelationship(input: {

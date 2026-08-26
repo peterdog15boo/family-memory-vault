@@ -1,21 +1,24 @@
 import { describe, expect, it } from "vitest";
 import {
+  canAutoSpouseCoParents,
+  coParentsToAutoSpouse,
+  inferredCoParentPairs,
   missingCoParentSpouseIds,
   preferredExistingCoParentId,
   spouseIdsOf,
-} from "@/lib/family-tree/co-parents";
-import type { CoParentEdge } from "@/lib/family-tree/co-parents";
+  type GenealogyEdge,
+} from "@/lib/family-tree/genealogy-iq";
 
 const edges = (
-  rows: Array<[string, string, CoParentEdge["type"]]>,
-): CoParentEdge[] =>
+  rows: Array<[string, string, GenealogyEdge["type"]]>,
+): GenealogyEdge[] =>
   rows.map(([fromNodeId, toNodeId, type]) => ({
     fromNodeId,
     toNodeId,
     type,
   }));
 
-describe("co-parents helpers", () => {
+describe("genealogy IQ helpers", () => {
   it("lists spouses of a node", () => {
     expect(
       spouseIdsOf(
@@ -71,5 +74,40 @@ describe("co-parents helpers", () => {
         "kid",
       ),
     ).toBeNull();
+  });
+
+  it("auto-spouses Father with existing Mother when adding Father to Wife", () => {
+    const rels = edges([["mom", "wife", "parent_of"]]);
+    expect(coParentsToAutoSpouse(rels, "dad", "wife")).toEqual(["mom"]);
+    expect(canAutoSpouseCoParents(rels, "dad", "mom")).toBe(true);
+  });
+
+  it("does not invent a competing spouse when Mother is already married", () => {
+    const rels = edges([
+      ["mom", "wife", "parent_of"],
+      ["mom", "stepdad", "partner_of"],
+    ]);
+    expect(coParentsToAutoSpouse(rels, "dad", "wife")).toEqual([]);
+    expect(canAutoSpouseCoParents(rels, "dad", "mom")).toBe(false);
+  });
+
+  it("skips auto-spouse when parents are already spouses", () => {
+    const rels = edges([
+      ["mom", "wife", "parent_of"],
+      ["dad", "wife", "parent_of"],
+      ["dad", "mom", "partner_of"],
+    ]);
+    expect(coParentsToAutoSpouse(rels, "dad", "wife")).toEqual([]);
+  });
+
+  it("infers a soft co-parent pair for layout when no spouse edge exists", () => {
+    expect(
+      inferredCoParentPairs(
+        edges([
+          ["mom", "wife", "parent_of"],
+          ["dad", "wife", "parent_of"],
+        ]),
+      ),
+    ).toEqual([["dad", "mom"]]);
   });
 });

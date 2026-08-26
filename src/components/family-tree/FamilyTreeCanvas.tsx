@@ -77,6 +77,7 @@ export function FamilyTreeCanvas({
   const [isPanning, setIsPanning] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const hasFittedRef = useRef(false);
+  const prevNodeCountRef = useRef(0);
 
   const layout = useMemo(() => {
     const edges = tree.relationships
@@ -137,15 +138,26 @@ export function FamilyTreeCanvas({
     });
   }, [clampZoom, layout.height, layout.width]);
 
-  // Fit once when the canvas first has content — don't steal zoom on every edit.
+  // Fit once when the canvas first has content.
   useEffect(() => {
     if (layout.nodes.length === 0) {
       hasFittedRef.current = false;
+      prevNodeCountRef.current = 0;
       return;
     }
     if (hasFittedRef.current) return;
     fitToView();
     hasFittedRef.current = true;
+    prevNodeCountRef.current = layout.nodes.length;
+  }, [fitToView, layout.nodes.length]);
+
+  // When the tree grows, soft-recenter so new parents/children aren't off-screen.
+  useEffect(() => {
+    if (!hasFittedRef.current) return;
+    if (layout.nodes.length > prevNodeCountRef.current) {
+      fitToView();
+    }
+    prevNodeCountRef.current = layout.nodes.length;
   }, [fitToView, layout.nodes.length]);
 
   useEffect(() => {

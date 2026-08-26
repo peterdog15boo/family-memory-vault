@@ -46,7 +46,7 @@ type Props = {
     fromNodeId: string,
     toNodeId: string,
     type: FamilyTreeRelationType,
-  ) => void;
+  ) => void | Promise<void>;
 };
 
 /**
@@ -96,7 +96,7 @@ export function FamilyTreeToolkit({
     setPlaceholderLabel("");
   }
 
-  function submitConnect() {
+  async function submitConnect() {
     if (!connectFromId || !connectToId || !connectChoice) return;
     if (connectFromId === connectToId) return;
 
@@ -105,10 +105,14 @@ export function FamilyTreeToolkit({
       connectFromId,
       connectToId,
     );
-    onConnect(resolved.fromNodeId, resolved.toNodeId, resolved.type);
-    setConnectFromId("");
-    setConnectChoice("");
-    setConnectToId("");
+    try {
+      await onConnect(resolved.fromNodeId, resolved.toNodeId, resolved.type);
+      setConnectFromId("");
+      setConnectChoice("");
+      setConnectToId("");
+    } catch {
+      // Keep the form filled; the builder surfaces the error.
+    }
   }
 
   const connectReady =

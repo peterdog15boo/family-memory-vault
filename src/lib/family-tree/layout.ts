@@ -5,6 +5,7 @@
  */
 
 import type { FamilyTreeRelationType } from "@/lib/db/schema";
+import { inferredCoParentPairs } from "@/lib/family-tree/genealogy-iq";
 import { edgeLabelForRelation } from "@/lib/family-tree/relations";
 import { assignGenerationRanks } from "@/lib/family-tree/types";
 
@@ -168,6 +169,15 @@ export function computeFamilyTreeLayout(
       const b = siblingAdj.get(edge.toNodeId) ?? new Set<string>();
       b.add(edge.fromNodeId);
       siblingAdj.set(edge.toNodeId, b);
+    }
+  }
+
+  // Soft-pair co-parents who share a child but lack a spouse edge yet, so the
+  // child still sits under the couple visually (Genealogy IQ layout assist).
+  for (const [a, b] of inferredCoParentPairs(validEdges)) {
+    if (!partnerOf.has(a) && !partnerOf.has(b)) {
+      partnerOf.set(a, b);
+      partnerOf.set(b, a);
     }
   }
 
