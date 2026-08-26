@@ -133,6 +133,11 @@ export function FamilyTreeBuilder({
   async function createNode(body: {
     label: string;
     personId?: string | null;
+    link?: {
+      type: FamilyTreeRelationType;
+      otherNodeId: string;
+      newNodeIs: "from" | "to";
+    };
   }): Promise<{ id: string; tree?: SerializedFamilyTreeGraph }> {
     const res = await fetch("/api/family-tree/nodes", {
       method: "POST",
@@ -191,8 +196,14 @@ export function FamilyTreeBuilder({
 
   function addParentForChild(childId: string) {
     runMutation(async () => {
-      const created = await createNode({ label: "Parent" });
-      await createRel(created.id, childId, "parent_of");
+      const created = await createNode({
+        label: "Parent",
+        link: {
+          type: "parent_of",
+          otherNodeId: childId,
+          newNodeIs: "from",
+        },
+      });
       setSelectedNodeId(created.id);
       await refreshAvailable();
     });
@@ -200,8 +211,14 @@ export function FamilyTreeBuilder({
 
   function addChildForParent(parentId: string) {
     runMutation(async () => {
-      const created = await createNode({ label: "Child" });
-      await createRel(parentId, created.id, "parent_of");
+      const created = await createNode({
+        label: "Child",
+        link: {
+          type: "parent_of",
+          otherNodeId: parentId,
+          newNodeIs: "to",
+        },
+      });
       setSelectedNodeId(created.id);
       await refreshAvailable();
     });
@@ -209,8 +226,14 @@ export function FamilyTreeBuilder({
 
   function addPartnerForNode(nodeId: string) {
     runMutation(async () => {
-      const created = await createNode({ label: "Partner" });
-      await createRel(nodeId, created.id, "partner_of");
+      const created = await createNode({
+        label: "Partner",
+        link: {
+          type: "partner_of",
+          otherNodeId: nodeId,
+          newNodeIs: "from",
+        },
+      });
       setSelectedNodeId(created.id);
       await refreshAvailable();
     });

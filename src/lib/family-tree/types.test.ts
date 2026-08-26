@@ -72,6 +72,16 @@ describe("assignGenerationRanks", () => {
     expect(ranks.p).toBe(1);
     expect(ranks.c).toBe(2);
   });
+
+  it("keeps partners on the same generation", () => {
+    const ranks = assignGenerationRanks(
+      ["jeff", "kathy", "dad"],
+      [{ fromNodeId: "dad", toNodeId: "jeff" }],
+      { partnerPairs: [["jeff", "kathy"]] },
+    );
+    expect(ranks.jeff).toBe(ranks.kathy);
+    expect(ranks.dad).toBeLessThan(ranks.jeff);
+  });
 });
 
 describe("isFamilyTreeRelationType", () => {

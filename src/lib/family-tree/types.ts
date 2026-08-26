@@ -112,13 +112,21 @@ export function deriveFamilyTreeEdges(
 /**
  * Assign generation ranks for a simple visual layout.
  * Roots (no parents) are generation 0; children increase by 1.
+ * Partners and explicit siblings are forced onto the same generation so
+ * spouse-side and blood-side people do not drift onto the wrong row.
  */
 export function assignGenerationRanks(
   nodeIds: string[],
   parentEdges: Array<{ fromNodeId: string; toNodeId: string }>,
+  options?: {
+    partnerPairs?: Array<readonly [string, string]>;
+    siblingPairs?: Array<readonly [string, string]>;
+  },
 ): Record<string, number> {
+  const idSet = new Set(nodeIds);
   const parentsByChild = new Map<string, string[]>();
   for (const edge of parentEdges) {
+    if (!idSet.has(edge.fromNodeId) || !idSet.has(edge.toNodeId)) continue;
     const list = parentsByChild.get(edge.toNodeId) ?? [];
     list.push(edge.fromNodeId);
     parentsByChild.set(edge.toNodeId, list);
@@ -129,7 +137,7 @@ export function assignGenerationRanks(
 
   function rankOf(id: string): number {
     if (ranks[id] != null) return ranks[id]!;
-    if (visiting.has(id)) return 0; // cycle guard
+    if (visiting.has(id)) return 0;
     visiting.add(id);
     const parents = parentsByChild.get(id) ?? [];
     const rank =
@@ -142,5 +150,69 @@ export function assignGenerationRanks(
   }
 
   for (const id of nodeIds) rankOf(id);
+
+  // Union-find for same-generation constraints (partners + siblings).
+  const parent = new Map<string, string>();
+  function find(id: string): string {
+    const p = parent.get(id) ?? id;
+    if (p !== id) {
+      const root = find(p);
+      parent.set(id, root);
+      return root;
+    }
+    return id;
+  }
+  function union(a: string, b: string) {
+    if (!idSet.has(a) || !idSet.has(b)) return;
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent.set(ra, rb);
+  }
+  for (const id of nodeIds) parent.set(id, id);
+  for (const [a, b] of options?.partnerPairs ?? []) union(a, b);
+  for (const [a, b] of options?.siblingPairs ?? []) union(a, b);
+
+  const componentMembers = new Map<string, string[]>();
+  for (const id of nodeIds) {
+    const root = find(id);
+    const list = componentMembers.get(root) ?? [];
+    list.push(id);
+    componentMembers.set(root, list);
+  }
+
+  for (const members of componentMembers.values()) {
+    const maxRank = Math.max(...members.map((id) => ranks[id] ?? 0));
+    for (const id of members) ranks[id] = maxRank;
+  }
+
+  // Keep parent rows strictly above children after same-gen merges.
+  let changed = true;
+  let guard = 0;
+  while (changed && guard < nodeIds.length * 4) {
+    changed = false;
+    guard += 1;
+    for (const edge of parentEdges) {
+      if (!idSet.has(edge.fromNodeId) || !idSet.has(edge.toNodeId)) continue;
+      const parentRank = ranks[edge.fromNodeId] ?? 0;
+      const childRank = ranks[edge.toNodeId] ?? 0;
+      if (childRank <= parentRank) {
+        const next = parentRank + 1;
+        const childRoot = find(edge.toNodeId);
+        for (const id of componentMembers.get(childRoot) ?? [edge.toNodeId]) {
+          if ((ranks[id] ?? 0) < next) {
+            ranks[id] = next;
+            changed = true;
+          }
+        }
+      }
+    }
+  }
+
+  const values = nodeIds.map((id) => ranks[id] ?? 0);
+  const min = values.length > 0 ? Math.min(...values) : 0;
+  if (min !== 0) {
+    for (const id of nodeIds) ranks[id] = (ranks[id] ?? 0) - min;
+  }
+
   return ranks;
 }

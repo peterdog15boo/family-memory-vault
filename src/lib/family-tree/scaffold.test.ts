@@ -59,6 +59,44 @@ describe("planFamilyTreeScaffold", () => {
     ).toBe(true);
   });
 
+  it("does not reuse a partner's parents when scaffolding a cousin", () => {
+    const plan = planFamilyTreeScaffold(
+      graph(
+        ["jeff", "kathy", "jeff-dad", "scott"],
+        [
+          { fromNodeId: "jeff", toNodeId: "kathy", type: "partner_of" },
+          { fromNodeId: "jeff-dad", toNodeId: "jeff", type: "parent_of" },
+        ],
+      ),
+      {
+        fromNodeId: "kathy",
+        toNodeId: "scott",
+        type: "cousin_of",
+      },
+    );
+
+    // Two new parents (Kathy + Scott) — never attach Scott through Jeff's dad.
+    expect(plan.nodes.length).toBeGreaterThanOrEqual(2);
+    const parentLinks = plan.relationships.filter((r) => r.type === "parent_of");
+    expect(
+      parentLinks.some(
+        (r) =>
+          (r.fromKey === "jeff-dad" || r.toKey === "jeff-dad") &&
+          (r.fromKey === "scott" ||
+            r.toKey === "scott" ||
+            r.fromKey === "kathy" ||
+            r.toKey === "kathy"),
+      ),
+    ).toBe(false);
+    expect(
+      plan.relationships.some(
+        (r) =>
+          r.type === "sibling_of" &&
+          (r.fromKey === "jeff-dad" || r.toKey === "jeff-dad"),
+      ),
+    ).toBe(false);
+  });
+
   it("does nothing when cousin parents are already siblings", () => {
     const plan = planFamilyTreeScaffold(
       graph(

@@ -101,6 +101,16 @@ export type CreateFamilyTreeNodeInput = {
   /** Link to an existing People identity in this vault. */
   personId?: string | null;
   notes?: string | null;
+  /**
+   * Atomically attach the new node to an existing member.
+   * If the relationship fails, the new node is removed.
+   */
+  link?: {
+    type: FamilyTreeRelationType;
+    otherNodeId: string;
+    /** Whether the new node is the relationship `from` or `to` endpoint. */
+    newNodeIs: "from" | "to";
+  };
 };
 
 export async function createFamilyTreeNode(
@@ -171,6 +181,33 @@ export async function createFamilyTreeNode(
       code: "validation",
     });
   }
+
+  if (input.link) {
+    const fromNodeId =
+      input.link.newNodeIs === "from" ? row.id : input.link.otherNodeId;
+    const toNodeId =
+      input.link.newNodeIs === "to" ? row.id : input.link.otherNodeId;
+    try {
+      await createFamilyTreeRelationship({
+        userId: input.userId,
+        fromNodeId,
+        toNodeId,
+        type: input.link.type,
+        scaffold: false,
+      });
+    } catch (error) {
+      await db
+        .delete(familyTreeNodes)
+        .where(
+          and(
+            eq(familyTreeNodes.id, row.id),
+            eq(familyTreeNodes.userId, input.userId),
+          ),
+        );
+      throw error;
+    }
+  }
+
   return row;
 }
 
@@ -699,9 +736,18 @@ export async function getFamilyTreeGraph(
     .filter((r) => r.type === "parent_of")
     .map((r) => ({ fromNodeId: r.fromNodeId, toNodeId: r.toNodeId }));
 
+  const partnerPairs: Array<readonly [string, string]> = relationships
+    .filter((r) => r.type === "partner_of")
+    .map((r) => [r.fromNodeId, r.toNodeId] as const);
+
+  const siblingPairs: Array<readonly [string, string]> = relationships
+    .filter((r) => r.type === "sibling_of")
+    .map((r) => [r.fromNodeId, r.toNodeId] as const);
+
   const generations = assignGenerationRanks(
     nodes.map((n) => n.id),
     parentEdges,
+    { partnerPairs, siblingPairs },
   );
 
   const derivedAll = deriveFamilyTreeEdges(parentEdges);

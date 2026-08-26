@@ -10,10 +10,20 @@ import {
   serializeFamilyTreeNode,
 } from "@/lib/family-tree/serialize";
 
+import { FAMILY_TREE_RELATION_TYPES } from "@/lib/db/schema";
+
 const createBodySchema = z.object({
   label: z.string().trim().min(1).max(120),
   personId: z.string().trim().min(1).nullable().optional(),
   notes: z.string().trim().max(2000).nullable().optional(),
+  /** Atomically create a relationship with this new node. */
+  link: z
+    .object({
+      type: z.enum(FAMILY_TREE_RELATION_TYPES),
+      otherNodeId: z.string().trim().min(1),
+      newNodeIs: z.enum(["from", "to"]),
+    })
+    .optional(),
 });
 
 /**
@@ -39,6 +49,7 @@ export async function POST(request: Request) {
       label: parsed.data.label,
       personId: parsed.data.personId ?? null,
       notes: parsed.data.notes ?? null,
+      link: parsed.data.link,
     });
 
     const graph = await getFamilyTreeGraph(treeOwnerId);

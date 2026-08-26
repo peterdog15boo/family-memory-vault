@@ -62,8 +62,6 @@ export function FamilyTreeCanvas({
   } | null>(null);
   const [isPanning, setIsPanning] = useState(false);
 
-  const branchGradientId = useId().replace(/:/g, "");
-
   const layout = useMemo(() => {
     const edges = tree.relationships
       .filter((r) => isFamilyTreeRelationType(r.type))
@@ -231,12 +229,6 @@ export function FamilyTreeCanvas({
             height={layout.height}
             aria-hidden
           >
-            <defs>
-              <linearGradient id={branchGradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="rgba(166, 124, 82, 0.55)" />
-                <stop offset="100%" stopColor="rgba(166, 124, 82, 0.22)" />
-              </linearGradient>
-            </defs>
             {layout.edges.map((edge) => (
               <g key={edge.id}>
                 <path
@@ -249,7 +241,11 @@ export function FamilyTreeCanvas({
                   )}
                   style={
                     edge.type === "parent_of"
-                      ? { stroke: `url(#${branchGradientId})` }
+                      ? {
+                          stroke: "#a67c52",
+                          strokeOpacity: 0.85,
+                          strokeWidth: 3.5,
+                        }
                       : undefined
                   }
                   fill="none"

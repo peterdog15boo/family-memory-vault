@@ -35,6 +35,51 @@ describe("computeFamilyTreeLayout", () => {
     expect(a.y).toBe(b.y);
     expect(Math.abs(a.x - b.x)).toBeLessThan(140);
   });
+
+  it("aligns partners even when only one has a parent, and draws every edge", () => {
+    const layout = computeFamilyTreeLayout(
+      [
+        { id: "dad", label: "Dad" },
+        { id: "jeff", label: "Jeff" },
+        { id: "kathy", label: "Kathy" },
+        { id: "scott", label: "Scott" },
+        { id: "kathy-parent", label: "Mom" },
+        { id: "scott-parent", label: "Uncle" },
+      ],
+      [
+        { fromNodeId: "dad", toNodeId: "jeff", type: "parent_of" },
+        { fromNodeId: "jeff", toNodeId: "kathy", type: "partner_of" },
+        { fromNodeId: "kathy-parent", toNodeId: "kathy", type: "parent_of" },
+        {
+          fromNodeId: "scott-parent",
+          toNodeId: "scott",
+          type: "parent_of",
+        },
+        {
+          fromNodeId: "kathy-parent",
+          toNodeId: "scott-parent",
+          type: "sibling_of",
+        },
+        { fromNodeId: "kathy", toNodeId: "scott", type: "cousin_of" },
+      ],
+    );
+
+    const jeff = layout.nodes.find((n) => n.id === "jeff")!;
+    const kathy = layout.nodes.find((n) => n.id === "kathy")!;
+    const dad = layout.nodes.find((n) => n.id === "dad")!;
+    expect(jeff.generation).toBe(kathy.generation);
+    expect(dad.y).toBeLessThan(jeff.y);
+    expect(layout.edges.some((e) => e.id === "parent:dad->jeff")).toBe(true);
+    expect(layout.edges.some((e) => e.type === "cousin_of")).toBe(true);
+    // No invented Jeff↔Scott link.
+    expect(
+      layout.edges.some(
+        (e) =>
+          (e.fromId === "jeff" && e.toId === "scott") ||
+          (e.fromId === "scott" && e.toId === "jeff"),
+      ),
+    ).toBe(false);
+  });
 });
 
 describe("treeNodeInitials", () => {

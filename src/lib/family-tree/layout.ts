@@ -1,13 +1,17 @@
 /**
  * Family-tree visual layout — generations, partner clustering, curved edges.
+ * Positions and edge geometry are derived only from stored relationships
+ * (never invents links). Generation ranks are recomputed from the same edges.
  */
 
 import type { FamilyTreeRelationType } from "@/lib/db/schema";
 import { edgeLabelForRelation } from "@/lib/family-tree/relations";
+import { assignGenerationRanks } from "@/lib/family-tree/types";
 
 export type LayoutGraphNode = {
   id: string;
-  generation: number;
+  /** Hint only — layout recomputes generations from edges. */
+  generation?: number;
   label: string;
 };
 
@@ -63,6 +67,8 @@ export const TREE_LAYOUT = {
   nodeHeight: 118,
   hGap: 36,
   partnerGap: 18,
+  /** Extra gap between unrelated family clusters on a row. */
+  clusterGap: 56,
   vGap: 112,
   padding: 48,
 } as const;
@@ -111,11 +117,12 @@ function pathMidpoint(
 }
 
 /**
- * Pack nodes into a warm, readable tree:
- * - y by generation
+ * Pack nodes into a readable tree:
+ * - y by generation (recomputed from parent/partner/sibling edges)
  * - partners sit side-by-side
- * - children cluster under parent midpoints when possible
- * - extended relations draw as labeled soft arcs (no auto-invented links)
+ * - children cluster under parent midpoints
+ * - unrelated clusters get horizontal breathing room
+ * - every stored relationship draws a line; none are invented
  */
 export function computeFamilyTreeLayout(
   nodes: LayoutGraphNode[],
@@ -134,12 +141,16 @@ export function computeFamilyTreeLayout(
   }
 
   const byId = new Map(nodes.map((n) => [n.id, n]));
+  const validEdges = edges.filter(
+    (e) => byId.has(e.fromNodeId) && byId.has(e.toNodeId),
+  );
+
   const parentsByChild = new Map<string, string[]>();
   const childrenByParent = new Map<string, string[]>();
   const partnerOf = new Map<string, string>();
+  const siblingAdj = new Map<string, Set<string>>();
 
-  for (const edge of edges) {
-    if (!byId.has(edge.fromNodeId) || !byId.has(edge.toNodeId)) continue;
+  for (const edge of validEdges) {
     if (edge.type === "parent_of") {
       const parents = parentsByChild.get(edge.toNodeId) ?? [];
       parents.push(edge.fromNodeId);
@@ -150,14 +161,61 @@ export function computeFamilyTreeLayout(
     } else if (edge.type === "partner_of") {
       partnerOf.set(edge.fromNodeId, edge.toNodeId);
       partnerOf.set(edge.toNodeId, edge.fromNodeId);
+    } else if (edge.type === "sibling_of") {
+      const a = siblingAdj.get(edge.fromNodeId) ?? new Set<string>();
+      a.add(edge.toNodeId);
+      siblingAdj.set(edge.fromNodeId, a);
+      const b = siblingAdj.get(edge.toNodeId) ?? new Set<string>();
+      b.add(edge.fromNodeId);
+      siblingAdj.set(edge.toNodeId, b);
     }
   }
 
-  const maxGen = Math.max(...nodes.map((n) => n.generation), 0);
+  const generations = assignGenerationRanks(
+    nodes.map((n) => n.id),
+    validEdges
+      .filter((e) => e.type === "parent_of")
+      .map((e) => ({
+        fromNodeId: e.fromNodeId,
+        toNodeId: e.toNodeId,
+      })),
+    {
+      partnerPairs: validEdges
+        .filter((e) => e.type === "partner_of")
+        .map((e) => [e.fromNodeId, e.toNodeId] as const),
+      siblingPairs: validEdges
+        .filter((e) => e.type === "sibling_of")
+        .map((e) => [e.fromNodeId, e.toNodeId] as const),
+    },
+  );
+
+  const maxGen = Math.max(0, ...Object.values(generations), 0);
   const gens: string[][] = Array.from({ length: maxGen + 1 }, () => []);
   for (const n of nodes) {
-    const g = Math.max(0, Math.min(maxGen, n.generation));
+    const g = Math.max(0, Math.min(maxGen, generations[n.id] ?? 0));
     gens[g]!.push(n.id);
+  }
+
+  function parentClusterKey(id: string): string {
+    return [...(parentsByChild.get(id) ?? [])].sort().join("+") || `solo:${id}`;
+  }
+
+  function blocksRelated(aIds: string[], bIds: string[]): boolean {
+    const aParents = new Set(aIds.flatMap((id) => parentsByChild.get(id) ?? []));
+    const bParents = new Set(bIds.flatMap((id) => parentsByChild.get(id) ?? []));
+    for (const p of aParents) {
+      if (bParents.has(p)) return true;
+      for (const q of bParents) {
+        if (siblingAdj.get(p)?.has(q)) return true;
+      }
+    }
+    for (const a of aIds) {
+      for (const b of bIds) {
+        if (siblingAdj.get(a)?.has(b)) return true;
+        if (partnerOf.get(a) === b) return true;
+      }
+    }
+    return false;
   }
 
   for (let g = 0; g <= maxGen; g++) {
@@ -167,22 +225,79 @@ export function computeFamilyTreeLayout(
 
     const siblingGroups = new Map<string, string[]>();
     for (const id of ids) {
-      const parents = [...(parentsByChild.get(id) ?? [])].sort().join("+") || id;
-      const group = siblingGroups.get(parents) ?? [];
+      const key = parentClusterKey(id);
+      const group = siblingGroups.get(key) ?? [];
       group.push(id);
-      siblingGroups.set(parents, group);
+      siblingGroups.set(key, group);
     }
 
+    // Expand each sibling group into partner-aware units, then order units.
+    type Unit = { ids: string[]; sortKey: number };
+    const units: Unit[] = [];
+
     for (const group of siblingGroups.values()) {
+      const localSeen = new Set<string>();
       for (const id of group) {
+        if (localSeen.has(id) || seen.has(id)) continue;
+        const partner = partnerOf.get(id);
+        if (partner && ids.includes(partner) && !seen.has(partner)) {
+          units.push({ ids: [id, partner], sortKey: 0 });
+          localSeen.add(id);
+          localSeen.add(partner);
+        } else {
+          units.push({ ids: [id], sortKey: 0 });
+          localSeen.add(id);
+        }
+      }
+    }
+
+    for (const unit of units) {
+      const parentXs: number[] = [];
+      for (const id of unit.ids) {
+        for (const p of parentsByChild.get(id) ?? []) {
+          // Parents may not be positioned yet on first pass — use id order.
+          parentXs.push([...p].reduce((a, c) => a + c.charCodeAt(0), 0));
+        }
+      }
+      unit.sortKey =
+        parentXs.length > 0
+          ? parentXs.reduce((a, b) => a + b, 0) / parentXs.length
+          : unit.ids[0]!.charCodeAt(0);
+    }
+
+    units.sort((a, b) => a.sortKey - b.sortKey || a.ids[0]!.localeCompare(b.ids[0]!));
+
+    // Prefer keeping related units contiguous (cousin branches stay together).
+    const placedUnits: Unit[] = [];
+    const remaining = [...units];
+    while (remaining.length > 0) {
+      if (placedUnits.length === 0) {
+        placedUnits.push(remaining.shift()!);
+        continue;
+      }
+      const last = placedUnits[placedUnits.length - 1]!;
+      let bestIdx = 0;
+      let bestScore = -1;
+      for (let i = 0; i < remaining.length; i++) {
+        const score = blocksRelated(last.ids, remaining[i]!.ids) ? 2 : 0;
+        const score2 =
+          placedUnits.some((u) => blocksRelated(u.ids, remaining[i]!.ids))
+            ? 1
+            : 0;
+        const total = score + score2;
+        if (total > bestScore) {
+          bestScore = total;
+          bestIdx = i;
+        }
+      }
+      placedUnits.push(remaining.splice(bestIdx, 1)[0]!);
+    }
+
+    for (const unit of placedUnits) {
+      for (const id of unit.ids) {
         if (seen.has(id)) continue;
         ordered.push(id);
         seen.add(id);
-        const partner = partnerOf.get(id);
-        if (partner && ids.includes(partner) && !seen.has(partner)) {
-          ordered.push(partner);
-          seen.add(partner);
-        }
       }
     }
 
@@ -194,59 +309,76 @@ export function computeFamilyTreeLayout(
 
   const positions = new Map<string, { x: number; y: number }>();
   const unitWidth = TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap;
+  /** Track which sequential units were unrelated for cluster gaps. */
+  const clusterBreakAfter = new Set<string>();
 
-  let maxRowWidth = 0;
   for (let g = 0; g <= maxGen; g++) {
     const ids = gens[g]!;
-    let x = 0;
+    // Detect cluster breaks between consecutive partner-units.
+    const units: string[][] = [];
     let i = 0;
+    while (i < ids.length) {
+      const id = ids[i]!;
+      const partner = partnerOf.get(id);
+      if (partner && ids[i + 1] === partner) {
+        units.push([id, partner]);
+        i += 2;
+      } else {
+        units.push([id]);
+        i += 1;
+      }
+    }
+    for (let u = 0; u < units.length - 1; u++) {
+      if (!blocksRelated(units[u]!, units[u + 1]!)) {
+        clusterBreakAfter.add(units[u]![units[u]!.length - 1]!);
+      }
+    }
+
+    let x = 0;
+    i = 0;
     while (i < ids.length) {
       const id = ids[i]!;
       const partner = partnerOf.get(id);
       const partnerNext =
         partner && ids[i + 1] === partner ? partner : undefined;
+      const y = g * (TREE_LAYOUT.nodeHeight + TREE_LAYOUT.vGap);
 
       if (partnerNext) {
-        positions.set(id, {
-          x,
-          y: g * (TREE_LAYOUT.nodeHeight + TREE_LAYOUT.vGap),
-        });
+        positions.set(id, { x, y });
         positions.set(partnerNext, {
           x: x + TREE_LAYOUT.nodeWidth + TREE_LAYOUT.partnerGap,
-          y: g * (TREE_LAYOUT.nodeHeight + TREE_LAYOUT.vGap),
+          y,
         });
         x +=
           TREE_LAYOUT.nodeWidth * 2 +
           TREE_LAYOUT.partnerGap +
           TREE_LAYOUT.hGap;
+        if (clusterBreakAfter.has(partnerNext)) {
+          x += TREE_LAYOUT.clusterGap;
+        }
         i += 2;
       } else {
-        positions.set(id, {
-          x,
-          y: g * (TREE_LAYOUT.nodeHeight + TREE_LAYOUT.vGap),
-        });
+        positions.set(id, { x, y });
         x += unitWidth;
+        if (clusterBreakAfter.has(id)) {
+          x += TREE_LAYOUT.clusterGap;
+        }
         i += 1;
       }
     }
-    maxRowWidth = Math.max(maxRowWidth, x);
   }
 
+  // Pull children under their parents (2 passes).
   for (let pass = 0; pass < 2; pass++) {
     for (let g = 1; g <= maxGen; g++) {
       const ids = gens[g]!;
       let start = 0;
       while (start < ids.length) {
         const first = ids[start]!;
-        const parentKey = [...(parentsByChild.get(first) ?? [])]
-          .sort()
-          .join("+");
+        const parentKey = parentClusterKey(first);
         let end = start + 1;
         while (end < ids.length) {
-          const key = [...(parentsByChild.get(ids[end]!) ?? [])]
-            .sort()
-            .join("+");
-          if (key !== parentKey) break;
+          if (parentClusterKey(ids[end]!) !== parentKey) break;
           end += 1;
         }
 
@@ -302,7 +434,7 @@ export function computeFamilyTreeLayout(
       id: n.id,
       x: pos.x - minX + padding,
       y: pos.y - minY + padding,
-      generation: n.generation,
+      generation: generations[n.id] ?? 0,
     });
   }
   const posById = new Map(laidNodes.map((n) => [n.id, n]));
@@ -314,8 +446,8 @@ export function computeFamilyTreeLayout(
     const tx = to.x + TREE_LAYOUT.nodeWidth / 2;
 
     if (edge.type === "partner_of") {
-      const fy = from.y + TREE_LAYOUT.nodeWidth / 2;
-      const ty = to.y + TREE_LAYOUT.nodeWidth / 2;
+      const fy = from.y + TREE_LAYOUT.nodeHeight * 0.42;
+      const ty = to.y + TREE_LAYOUT.nodeHeight * 0.42;
       edge.path = partnerArc(fx, fy, tx, ty);
       const mid = pathMidpoint(fx, fy - 14, tx, ty - 14);
       edge.labelX = mid.x;
@@ -324,14 +456,14 @@ export function computeFamilyTreeLayout(
     }
 
     if (edge.type === "parent_of") {
-      const fy = from.y + TREE_LAYOUT.nodeWidth;
+      const fy = from.y + TREE_LAYOUT.nodeHeight;
       const ty = to.y;
       edge.path = cubicPath(fx, fy, tx, ty);
       return;
     }
 
-    const fy = from.y + TREE_LAYOUT.nodeWidth / 2;
-    const ty = to.y + TREE_LAYOUT.nodeWidth / 2;
+    const fy = from.y + TREE_LAYOUT.nodeHeight * 0.42;
+    const ty = to.y + TREE_LAYOUT.nodeHeight * 0.42;
     edge.path = relationArc(fx, fy, tx, ty);
     const mid = pathMidpoint(fx, fy, tx, ty);
     edge.labelX = mid.x;
@@ -339,48 +471,38 @@ export function computeFamilyTreeLayout(
   }
 
   const laidEdges: LaidOutEdge[] = [];
-  for (const edge of edges) {
+  const seenEdgeIds = new Set<string>();
+
+  for (const edge of validEdges) {
     const from = posById.get(edge.fromNodeId);
     const to = posById.get(edge.toNodeId);
     if (!from || !to) continue;
 
+    let id: string;
     if (edge.type === "parent_of") {
-      const laid: LaidOutEdge = {
-        id: `parent:${from.id}->${to.id}`,
-        type: "parent_of",
-        fromId: from.id,
-        toId: to.id,
-        path: "",
-        emphasis: "structure",
-      };
-      rebuildEdgeGeometry(laid);
-      laidEdges.push(laid);
-      continue;
+      id = `parent:${from.id}->${to.id}`;
+    } else if (edge.type === "partner_of") {
+      id = `partner:${partnerKey(from.id, to.id)}`;
+    } else {
+      id = `${edge.type}:${partnerKey(from.id, to.id)}`;
     }
-
-    if (edge.type === "partner_of") {
-      const laid: LaidOutEdge = {
-        id: `partner:${partnerKey(from.id, to.id)}`,
-        type: "partner_of",
-        fromId: from.id,
-        toId: to.id,
-        path: "",
-        label: edgeLabelForRelation("partner_of"),
-        emphasis: "structure",
-      };
-      rebuildEdgeGeometry(laid);
-      laidEdges.push(laid);
-      continue;
-    }
+    if (seenEdgeIds.has(id)) continue;
+    seenEdgeIds.add(id);
 
     const laid: LaidOutEdge = {
-      id: `${edge.type}:${from.id}->${to.id}`,
+      id,
       type: edge.type,
       fromId: from.id,
       toId: to.id,
       path: "",
-      label: edgeLabelForRelation(edge.type),
-      emphasis: "relation",
+      label:
+        edge.type === "parent_of"
+          ? undefined
+          : edgeLabelForRelation(edge.type),
+      emphasis:
+        edge.type === "parent_of" || edge.type === "partner_of"
+          ? "structure"
+          : "relation",
     };
     rebuildEdgeGeometry(laid);
     laidEdges.push(laid);
@@ -418,8 +540,6 @@ export function computeFamilyTreeLayout(
     for (const edge of laidEdges) rebuildEdgeGeometry(edge);
     height += shift;
   }
-
-  void maxRowWidth;
 
   return {
     nodes: laidNodes,

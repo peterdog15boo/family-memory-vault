@@ -266,13 +266,29 @@ function addEdge(
   });
 }
 
+function bloodParentsOf(graph: ScaffoldGraph, nodeId: string): string[] {
+  const parents = parentsOf(graph, nodeId);
+  if (parents.length === 0) return [];
+  const partnerParentIds = new Set(
+    partnersOf(graph, nodeId).flatMap((partnerId) =>
+      parentsOf(graph, partnerId),
+    ),
+  );
+  // Prefer parents that are not also parents of a partner (in-law side).
+  const blood = parents.filter((id) => !partnerParentIds.has(id));
+  return blood.length > 0 ? blood : [];
+}
+
 function ensureParentKey(
   builder: PlanBuilder,
   childId: string,
   preferredKey: string,
 ): string {
-  const existing = parentsOf(builder.working, childId);
-  if (existing[0]) return existing[0]!;
+  const blood = bloodParentsOf(builder.working, childId);
+  if (blood[0]) return blood[0]!;
+
+  // Do not reuse a spouse's parents for cousin/niece scaffolding — that
+  // incorrectly attaches the new relative to the partner's bloodline.
   const key = addNode(builder, preferredKey, builder.nextParentLabel());
   if (safeToAddParent(builder.working, key, childId)) {
     addEdge(builder, key, childId, "parent_of");
@@ -323,11 +339,8 @@ function planNieceNephew(
     }
   }
 
-  const parents = parentsOf(builder.working, nieceId);
-  const bridge =
-    parents.find((id) =>
-      builder.working.nodes.some((n) => n.id === id && !n.personId),
-    ) ?? parents[0];
+  const parents = bloodParentsOf(builder.working, nieceId);
+  const bridge = parents[0];
 
   if (bridge) {
     if (safeToAddSibling(builder.working, bridge, auntUncleId)) {
