@@ -1682,7 +1682,8 @@ body {
 .family-tree-branches {
   position: absolute;
   inset: 0;
-  z-index: 0;
+  /* Above person cards so spouse/parent connectors are never covered. */
+  z-index: 2;
   pointer-events: none;
   overflow: visible;
 }

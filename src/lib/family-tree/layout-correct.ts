@@ -192,6 +192,13 @@ export function computeNaiveFamilyTreeLayout(
       width: 320,
       height: 240,
       padding: TREE_LAYOUT.padding,
+      edgeVerification: {
+        relationshipCount: 0,
+        renderedEdgeCount: 0,
+        relationshipsWithoutConnector: [],
+        connectorsWithoutRelationship: [],
+        ok: true,
+      },
     };
   }
 
@@ -241,6 +248,15 @@ export function computeNaiveFamilyTreeLayout(
       (maxGen + 1) * TREE_LAYOUT.nodeHeight +
       maxGen * TREE_LAYOUT.vGap,
     padding: TREE_LAYOUT.padding,
+    edgeVerification: {
+      relationshipCount: edges.length,
+      renderedEdgeCount: 0,
+      relationshipsWithoutConnector: edges.map(
+        (_, i) => `naive-unprojected:${i}`,
+      ),
+      connectorsWithoutRelationship: [],
+      ok: false,
+    },
   };
 }
 

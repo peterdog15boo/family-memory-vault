@@ -1,10 +1,7 @@
 /**
- * Family-tree visual layout — generations, partner clustering, curved edges.
- * Positions and edge geometry are derived only from stored relationships
- * (never invents links). Generation ranks are recomputed from the same edges.
- *
- * Layout IQ (`layout-iq.ts`) orders people within each generation into
- * traditional positions (spouse side-by-side, siblings on the outer family side).
+ * Family-tree visual layout — generations + Layout IQ node placement.
+ * Visible connectors are projected ONLY from canonical relationship records
+ * via `projectRelationshipsToConnectors` (never from soft layout pairs).
  */
 
 import type { FamilyTreeRelationType } from "@/lib/db/schema";
@@ -14,7 +11,11 @@ import {
   orderGenerationForLayout,
   outerSiblingsOf,
 } from "@/lib/family-tree/layout-iq";
-import { edgeLabelForRelation } from "@/lib/family-tree/relations";
+import {
+  logEdgeProjectionVerification,
+  projectRelationshipsToConnectors,
+  type EdgeProjectionVerification,
+} from "@/lib/family-tree/project-edges";
 import { assignGenerationRanks } from "@/lib/family-tree/types";
 
 export type LayoutGraphNode = {
@@ -25,6 +26,8 @@ export type LayoutGraphNode = {
 };
 
 export type LayoutGraphEdge = {
+  /** Canonical relationship id when available. */
+  id?: string;
   fromNodeId: string;
   toNodeId: string;
   type: FamilyTreeRelationType;
@@ -39,22 +42,19 @@ export type LaidOutNode = {
 
 export type LaidOutEdge = {
   id: string;
+  relationshipId?: string;
   type: FamilyTreeRelationType;
   fromId: string;
   toId: string;
-  /** SVG path `d` in canvas coordinates (node centers). */
   path: string;
-  /** Midpoint label for non-structural / extended links. */
   label?: string;
   labelX?: number;
   labelY?: number;
-  /** Softer stroke for cousin / in-law / other links. */
   emphasis?: "structure" | "relation";
 };
 
 export type GhostParentSlot = {
   id: string;
-  /** Child who is missing a parent. */
   childId: string;
   x: number;
   y: number;
@@ -67,87 +67,27 @@ export type FamilyTreeLayout = {
   ghosts: GhostParentSlot[];
   width: number;
   height: number;
-  /** Padding baked into positions. */
   padding: number;
+  edgeVerification: EdgeProjectionVerification;
 };
 
 export const TREE_LAYOUT = {
   nodeWidth: 100,
   nodeHeight: 118,
   hGap: 36,
-  /** Keep spouses visually distinct — never stacked into one cell. */
   partnerGap: 32,
-  /** Extra gap between unrelated family clusters on a row. */
   clusterGap: 56,
   vGap: 112,
   padding: 48,
 } as const;
 
-function partnerKey(a: string, b: string): string {
-  return a < b ? `${a}|${b}` : `${b}|${a}`;
-}
-
-function cubicPath(
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-): string {
-  const midY = (y1 + y2) / 2;
-  return `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
-}
-
-function partnerMarriageBar(
-  left: { x: number; y: number },
-  right: { x: number; y: number },
-): { path: string; labelX: number; labelY: number } {
-  const a = left.x <= right.x ? left : right;
-  const b = left.x <= right.x ? right : left;
-  // Bar through the upper third of the node card, in the horizontal gap.
-  const y = a.y + Math.min(36, TREE_LAYOUT.nodeHeight * 0.28);
-  const x1 = a.x + TREE_LAYOUT.nodeWidth;
-  const x2 = b.x;
-  const gap = x2 - x1;
-  // If nodes overlap or nearly touch, arch clearly above both cards.
-  if (gap < 8) {
-    const cx1 = a.x + TREE_LAYOUT.nodeWidth / 2;
-    const cx2 = b.x + TREE_LAYOUT.nodeWidth / 2;
-    const top = Math.min(a.y, b.y) - 28;
-    return {
-      path: `M ${cx1} ${a.y} L ${cx1} ${top} L ${cx2} ${top} L ${cx2} ${b.y}`,
-      labelX: (cx1 + cx2) / 2,
-      labelY: top - 10,
-    };
-  }
-  return {
-    path: `M ${x1} ${y} L ${x2} ${y}`,
-    labelX: (x1 + x2) / 2,
-    labelY: y - 12,
-  };
-}
-
-function relationArc(x1: number, y1: number, x2: number, y2: number): string {
-  const midX = (x1 + x2) / 2;
-  const midY = (y1 + y2) / 2;
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const len = Math.max(1, Math.hypot(dx, dy));
-  const lift = Math.min(36, len * 0.18 + 12);
-  const nx = -dy / len;
-  const ny = dx / len;
-  const cx = midX + nx * lift;
-  const cy = midY + ny * lift;
-  return `M ${x1} ${y1} Q ${cx} ${cy}, ${x2} ${y2}`;
-}
-
-function pathMidpoint(
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-): { x: number; y: number } {
-  return { x: (x1 + x2) / 2, y: (y1 + y2) / 2 };
-}
+const EMPTY_VERIFICATION: EdgeProjectionVerification = {
+  relationshipCount: 0,
+  renderedEdgeCount: 0,
+  relationshipsWithoutConnector: [],
+  connectorsWithoutRelationship: [],
+  ok: true,
+};
 
 /**
  * Pack nodes into a readable tree:
@@ -172,6 +112,7 @@ export function computeFamilyTreeLayout(
       width: 320,
       height: 240,
       padding,
+      edgeVerification: EMPTY_VERIFICATION,
     };
   }
 
@@ -588,90 +529,6 @@ export function computeFamilyTreeLayout(
       generation: generations[n.id] ?? 0,
     });
   }
-  const posById = new Map(laidNodes.map((n) => [n.id, n]));
-
-  function rebuildEdgeGeometry(edge: LaidOutEdge) {
-    const from = posById.get(edge.fromId)!;
-    const to = posById.get(edge.toId)!;
-    const fx = from.x + TREE_LAYOUT.nodeWidth / 2;
-    const tx = to.x + TREE_LAYOUT.nodeWidth / 2;
-
-    if (edge.type === "partner_of") {
-      const bar = partnerMarriageBar(from, to);
-      edge.path = bar.path;
-      edge.labelX = bar.labelX;
-      edge.labelY = bar.labelY;
-      return;
-    }
-
-    if (edge.type === "parent_of") {
-      const fy = from.y + TREE_LAYOUT.nodeHeight;
-      const ty = to.y;
-      edge.path = cubicPath(fx, fy, tx, ty);
-      return;
-    }
-
-    const fy = from.y + TREE_LAYOUT.nodeHeight * 0.42;
-    const ty = to.y + TREE_LAYOUT.nodeHeight * 0.42;
-    edge.path = relationArc(fx, fy, tx, ty);
-    const mid = pathMidpoint(fx, fy, tx, ty);
-    edge.labelX = mid.x;
-    edge.labelY = mid.y - 8;
-  }
-
-  /**
-   * Project every saved relationship onto the canvas.
-   * Layout units/soft-pairs never invent or omit connectors — if both
-   * endpoints are placed, the edge is drawn.
-   */
-  const laidEdges: LaidOutEdge[] = [];
-  const seenEdgeIds = new Set<string>();
-
-  for (const edge of validEdges) {
-    const from = posById.get(edge.fromNodeId);
-    const to = posById.get(edge.toNodeId);
-    if (!from || !to) {
-      console.warn("[family-tree.layout] edge skipped — endpoint not placed", {
-        type: edge.type,
-        fromNodeId: edge.fromNodeId,
-        toNodeId: edge.toNodeId,
-        fromPlaced: Boolean(from),
-        toPlaced: Boolean(to),
-      });
-      continue;
-    }
-
-    let id: string;
-    if (edge.type === "parent_of") {
-      id = `parent:${from.id}->${to.id}`;
-    } else if (edge.type === "partner_of") {
-      id = `partner:${partnerKey(from.id, to.id)}`;
-    } else {
-      id = `${edge.type}:${partnerKey(from.id, to.id)}`;
-    }
-    if (seenEdgeIds.has(id)) continue;
-    seenEdgeIds.add(id);
-
-    const laid: LaidOutEdge = {
-      id,
-      type: edge.type,
-      fromId: from.id,
-      toId: to.id,
-      path: "",
-      // Structure edges: no mid-gap label that can hide the connector.
-      label:
-        edge.type === "parent_of" || edge.type === "partner_of"
-          ? undefined
-          : edgeLabelForRelation(edge.type),
-      emphasis:
-        edge.type === "parent_of" || edge.type === "partner_of"
-          ? "structure"
-          : "relation",
-    };
-    rebuildEdgeGeometry(laid);
-    laidEdges.push(laid);
-  }
-
   const ghosts: GhostParentSlot[] = [];
   for (const node of laidNodes) {
     const parents = parentsByChild.get(node.id) ?? [];
@@ -701,9 +558,36 @@ export function computeFamilyTreeLayout(
     const shift = padding / 2 - ghostMinY;
     for (const n of laidNodes) n.y += shift;
     for (const g of ghosts) g.y += shift;
-    for (const edge of laidEdges) rebuildEdgeGeometry(edge);
     height += shift;
   }
+
+  // Canonical projection after final node positions (including ghost Y shift).
+  const canonical = validEdges.map((edge, index) => ({
+    id:
+      edge.id?.trim() ||
+      `anon:${edge.type}:${edge.fromNodeId}:${edge.toNodeId}:${index}`,
+    fromNodeId: edge.fromNodeId,
+    toNodeId: edge.toNodeId,
+    type: edge.type,
+  }));
+  const { connectors, verification } = projectRelationshipsToConnectors(
+    canonical,
+    laidNodes,
+  );
+  logEdgeProjectionVerification(verification, "computeFamilyTreeLayout");
+
+  const laidEdges: LaidOutEdge[] = connectors.map((c) => ({
+    id: c.id,
+    relationshipId: c.relationshipId,
+    type: c.type,
+    fromId: c.fromId,
+    toId: c.toId,
+    path: c.path,
+    label: c.label,
+    labelX: c.labelX,
+    labelY: c.labelY,
+    emphasis: c.emphasis,
+  }));
 
   return {
     nodes: laidNodes,
@@ -712,6 +596,7 @@ export function computeFamilyTreeLayout(
     width: Math.max(width, 320),
     height: Math.max(height, 280),
     padding,
+    edgeVerification: verification,
   };
 }
 

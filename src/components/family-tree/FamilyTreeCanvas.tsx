@@ -86,9 +86,11 @@ export function FamilyTreeCanvas({
   const prevNodeCountRef = useRef(0);
 
   const layout = useMemo(() => {
+    // Same source as the person dialog: tree.relationships only.
     const edges = tree.relationships
       .filter((r) => isFamilyTreeRelationType(r.type))
       .map((r) => ({
+        id: r.id,
         fromNodeId: r.fromNodeId,
         toNodeId: r.toNodeId,
         type: r.type,
@@ -102,6 +104,16 @@ export function FamilyTreeCanvas({
       edges,
     );
   }, [tree.nodes, tree.relationships]);
+
+  useEffect(() => {
+    if (!layout.edgeVerification.ok) {
+      console.warn("[family-tree.canvas] edge projection mismatch", {
+        relationshipCount: layout.edgeVerification.relationshipCount,
+        renderedEdgeCount: layout.edgeVerification.renderedEdgeCount,
+        missing: layout.edgeVerification.relationshipsWithoutConnector,
+      });
+    }
+  }, [layout.edgeVerification]);
 
   const nodeById = useMemo(
     () => new Map(tree.nodes.map((n) => [n.id, n])),

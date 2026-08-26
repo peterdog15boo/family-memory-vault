@@ -105,7 +105,12 @@ describe("computeFamilyTreeLayout", () => {
       TREE_LAYOUT.nodeWidth,
     );
     expect(dad.y).toBeLessThan(jeff.y);
-    expect(layout.edges.some((e) => e.id === "parent:dad->jeff")).toBe(true);
+    expect(
+      layout.edges.some(
+        (e) =>
+          e.type === "parent_of" && e.fromId === "dad" && e.toId === "jeff",
+      ),
+    ).toBe(true);
     expect(layout.edges.some((e) => e.type === "cousin_of")).toBe(true);
     // No invented Jeff↔Scott link.
     expect(
@@ -189,44 +194,51 @@ describe("computeFamilyTreeLayout", () => {
 
     // Parent lines only to the correct child — no fan-in to a merged cell.
     expect(
-      layout.edges.some((e) => e.id === "parent:jeff-mom->jeff"),
+      layout.edges.some(
+        (e) =>
+          e.type === "parent_of" &&
+          e.fromId === "jeff-mom" &&
+          e.toId === "jeff",
+      ),
     ).toBe(true);
     expect(
-      layout.edges.some((e) => e.id === "parent:kathy-mom->kathy"),
+      layout.edges.some(
+        (e) =>
+          e.type === "parent_of" &&
+          e.fromId === "kathy-mom" &&
+          e.toId === "kathy",
+      ),
     ).toBe(true);
     expect(
-      layout.edges.some((e) => e.id === "parent:jeff-mom->kathy"),
+      layout.edges.some(
+        (e) =>
+          e.type === "parent_of" &&
+          e.fromId === "jeff-mom" &&
+          e.toId === "kathy",
+      ),
     ).toBe(false);
     expect(
-      layout.edges.some((e) => e.id === "parent:kathy-mom->jeff"),
+      layout.edges.some(
+        (e) =>
+          e.type === "parent_of" &&
+          e.fromId === "kathy-mom" &&
+          e.toId === "jeff",
+      ),
     ).toBe(false);
 
-    // Spouse lines for each parent couple + Jeff↔Kathy must be projected.
+    // Every stored spouse + parent relationship projects to a connector.
+    expect(layout.edgeVerification.ok).toBe(true);
     expect(
-      layout.edges.some((e) => e.id === "partner:jeff-dad|jeff-mom"),
-    ).toBe(true);
+      layout.edges.filter((e) => e.type === "partner_of"),
+    ).toHaveLength(3);
     expect(
-      layout.edges.some((e) => e.id === "partner:kathy-dad|kathy-mom"),
-    ).toBe(true);
-    expect(layout.edges.some((e) => e.id === "partner:jeff|kathy")).toBe(
-      true,
-    );
-    for (const id of [
-      "partner:jeff-dad|jeff-mom",
-      "partner:kathy-dad|kathy-mom",
-      "partner:jeff|kathy",
-    ]) {
-      const edge = layout.edges.find((e) => e.id === id)!;
+      layout.edges.filter((e) => e.type === "parent_of"),
+    ).toHaveLength(6);
+    for (const edge of layout.edges) {
+      expect(edge.relationshipId).toBeTruthy();
       expect(edge.path.length).toBeGreaterThan(0);
       expect(edge.path).not.toMatch(/NaN/);
     }
-
-    // Every stored parent_of / partner_of is on the chart.
-    const structural = layout.edges.filter(
-      (e) => e.type === "parent_of" || e.type === "partner_of",
-    );
-    expect(structural.filter((e) => e.type === "parent_of")).toHaveLength(6);
-    expect(structural.filter((e) => e.type === "partner_of")).toHaveLength(3);
   });
 });
 

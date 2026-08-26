@@ -115,12 +115,14 @@ export function FamilyTreeBuilder({
   }, []);
 
   // One-time layout correction assess on load — positions are derived from
-  // relationships; this detects when Layout IQ reflows a previously naive chart.
+  // relationships; this detects when Layout IQ reflows a previously naive chart
+  // or when edge projection would mismatch the dialog source of truth.
   useEffect(() => {
     if (tree.nodes.length === 0) return;
     const edges = tree.relationships
       .filter((r) => isFamilyTreeRelationType(r.type))
       .map((r) => ({
+        id: r.id,
         fromNodeId: r.fromNodeId,
         toNodeId: r.toNodeId,
         type: r.type,
@@ -133,9 +135,10 @@ export function FamilyTreeBuilder({
       })),
       edges,
     );
-    if (!result.corrected || !result.message) return;
+    const projectionOk = result.layout.edgeVerification.ok;
+    if (!result.corrected && projectionOk) return;
 
-    const noticeKey = `ft-layout-corrected:${tree.nodes
+    const noticeKey = `ft-display-repaired:${tree.nodes
       .map((n) => n.id)
       .sort()
       .join(",")
@@ -146,7 +149,10 @@ export function FamilyTreeBuilder({
     } catch {
       // sessionStorage may be unavailable
     }
-    setLayoutNotice(result.message);
+    setLayoutNotice(
+      result.message ??
+        "We repaired the tree display so every saved relationship shows on the chart.",
+    );
     setLayoutRevision((n) => n + 1);
   }, [tree.nodes, tree.relationships]);
 
@@ -413,11 +419,12 @@ export function FamilyTreeBuilder({
 
   function fixTreeLayout() {
     runMutation(async () => {
+      // Refresh canonical graph from server, then force Layout IQ + edge projection.
       await runEngineCommand({ type: "correctLayout" });
       await refreshAvailable();
       setLayoutRevision((n) => n + 1);
       setLayoutNotice(
-        "We updated your family tree layout so relatives sit in traditional positions.",
+        "We repaired the tree display so every saved relationship shows on the chart.",
       );
     });
   }
@@ -738,7 +745,7 @@ export function FamilyTreeBuilder({
             disabled={pending}
             onClick={fixTreeLayout}
           >
-            Fix tree layout
+            Repair tree display
           </button>
           <button
             type="button"
