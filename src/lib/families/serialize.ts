@@ -8,6 +8,7 @@ export type SerializedFamily = {
   id: string;
   name: string;
   createdByUserId: string;
+  treeSharedWithFamily: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -23,6 +24,8 @@ export type SerializedFamilyMember = {
   invitedAt: string;
   acceptedAt: string | null;
   firstContributedAt: string | null;
+  canViewTree: boolean;
+  canContributeTree: boolean;
   createdAt: string;
   updatedAt: string;
   displayName?: string | null;
@@ -47,6 +50,7 @@ export function serializeFamily(family: Family): SerializedFamily {
     id: family.id,
     name: family.name,
     createdByUserId: family.createdByUserId,
+    treeSharedWithFamily: Boolean(family.treeSharedWithFamily),
     createdAt: family.createdAt.toISOString(),
     updatedAt: family.updatedAt.toISOString(),
   };
@@ -69,6 +73,8 @@ export function serializeFamilyMember(
     invitedAt: member.invitedAt.toISOString(),
     acceptedAt: member.acceptedAt?.toISOString() ?? null,
     firstContributedAt: member.firstContributedAt?.toISOString() ?? null,
+    canViewTree: Boolean(member.canViewTree),
+    canContributeTree: Boolean(member.canContributeTree),
     createdAt: member.createdAt.toISOString(),
     updatedAt: member.updatedAt.toISOString(),
     displayName: member.displayName ?? null,

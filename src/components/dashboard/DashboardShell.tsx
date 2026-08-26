@@ -39,6 +39,8 @@ type DashboardShellProps = {
   idleTimeoutPolicy?: IdleTimeoutPolicy;
   /** Legacy+ plan: show Documents / Digital Legacy / Connected Accounts nav. */
   showLegacyPlusNav?: boolean;
+  /** Family / Family Plus / Legacy+: show Family Tree nav. */
+  showFamilyTreeNav?: boolean;
   children: ReactNode;
 };
 
@@ -64,6 +66,7 @@ function DashboardShellInner({
   initialAvaProgress = null,
   idleTimeoutPolicy,
   showLegacyPlusNav = false,
+  showFamilyTreeNav = false,
   children,
 }: DashboardShellProps) {
   const { isModern } = useTheme();
@@ -140,6 +143,7 @@ function DashboardShellInner({
         <DashboardSidebar
           isAdmin={isAdmin}
           showLegacyPlusNav={showLegacyPlusNav}
+          showFamilyTreeNav={showFamilyTreeNav}
         />
         <div className="dashboard-shell-main app-shell-stage flex min-w-0 flex-1 flex-col px-5 py-8 sm:px-8 sm:pb-12">
           {children}

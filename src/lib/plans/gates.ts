@@ -29,7 +29,8 @@ export type PlanGateCode =
   | "ai_soundtrack_disabled"
   | "ai_soundtrack_quota"
   | "ai_soundtrack_unavailable"
-  | "legacy_plus_required";
+  | "legacy_plus_required"
+  | "family_tree_required";
 
 export type PlanGateResult = {
   allowed: boolean;
@@ -524,6 +525,23 @@ export function hasLegacyPlusFeatures(features: PlanFeatures): boolean {
   );
 }
 
+/**
+ * Family Tree — Family, Family Plus, and Legacy+.
+ * Prefers `features.familyTree`; falls back to paid plan slugs when the DB
+ * row has not been re-seeded yet.
+ */
+export function hasFamilyTreeAccess(
+  features: PlanFeatures,
+  planSlug: string,
+): boolean {
+  if (featureFlag(features, "familyTree")) return true;
+  return (
+    planSlug === "family" ||
+    planSlug === "family_plus" ||
+    planSlug === "legacy"
+  );
+}
+
 export async function canUseLegacyPlusFeatures(
   userId: string,
 ): Promise<PlanGateResult> {
@@ -536,6 +554,24 @@ export async function canUseLegacyPlusFeatures(
       {
         upgradeHint:
           "Switch to the Legacy+ plan (free during beta) to unlock these vaults.",
+      },
+    );
+  }
+  return allowed(limits);
+}
+
+export async function canUseFamilyTree(
+  userId: string,
+): Promise<PlanGateResult> {
+  const limits = await loadLimits(userId);
+  if (!hasFamilyTreeAccess(limits.features, String(limits.slug))) {
+    return denied(
+      limits,
+      "family_tree_required",
+      `Family Tree is included on Family and Legacy+ — not on ${limits.name}.`,
+      {
+        upgradeHint:
+          "Upgrade to Family to map the people you love into a living family tree.",
       },
     );
   }
@@ -559,6 +595,7 @@ export type PlanCapabilities = {
   aiSoundtrack: boolean;
   aiSoundtracks: PlanGateResult;
   legacyPlus: boolean;
+  familyTree: boolean;
   /** Free-plan soft branding watermark on rendered movies. */
   movieWatermark: boolean;
 };
@@ -583,6 +620,7 @@ export async function getPlanCapabilities(
     aiSoundtrack: featureFlag(limits.features, "aiSoundtrack"),
     aiSoundtracks,
     legacyPlus: hasLegacyPlusFeatures(limits.features),
+    familyTree: hasFamilyTreeAccess(limits.features, String(limits.slug)),
     movieWatermark: shouldApplyMovieWatermark(
       String(limits.slug),
       limits.features,

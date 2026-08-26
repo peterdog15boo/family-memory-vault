@@ -11,18 +11,32 @@ import {
   requireFamilyApiUser,
 } from "@/lib/families/http";
 import { serializeFamilyMember } from "@/lib/families/serialize";
+import { setMemberTreeAccess } from "@/lib/family-tree/access";
+import { getDb } from "@/lib/db";
+import { familyMembers } from "@/lib/db/schema";
+import { and, eq } from "drizzle-orm";
 import { ensureAppUser } from "@/lib/users";
 
 type RouteContext = {
   params: Promise<{ id: string; memberId: string }>;
 };
 
-const patchBodySchema = z.object({
-  role: z.enum(FAMILY_MEMBER_ROLES),
-});
+const patchBodySchema = z
+  .object({
+    role: z.enum(FAMILY_MEMBER_ROLES).optional(),
+    canViewTree: z.boolean().optional(),
+    canContributeTree: z.boolean().optional(),
+  })
+  .refine(
+    (v) =>
+      v.role !== undefined ||
+      v.canViewTree !== undefined ||
+      v.canContributeTree !== undefined,
+    { message: "Provide role and/or tree access fields." },
+  );
 
 /**
- * PATCH /api/family/[id]/members/[memberId] — change role (owner only).
+ * PATCH /api/family/[id]/members/[memberId] — role and/or tree access (owner only).
  */
 export async function PATCH(request: Request, context: RouteContext) {
   const authResult = await requireFamilyApiUser();
@@ -44,7 +58,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   const parsed = patchBodySchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Invalid role update", details: parsed.error.flatten() },
+      { error: "Invalid member update", details: parsed.error.flatten() },
       { status: 400 },
     );
   }
@@ -52,15 +66,57 @@ export async function PATCH(request: Request, context: RouteContext) {
   try {
     await ensureAppUser(userId);
     await requireFamilyApiOwner(familyId, userId);
-    const member = await updateMemberRole(
-      familyId,
-      memberId,
-      parsed.data.role,
-      userId,
-    );
-    return NextResponse.json({ member: serializeFamilyMember(member) });
+
+    if (parsed.data.role !== undefined) {
+      await updateMemberRole(familyId, memberId, parsed.data.role, userId);
+    }
+
+    if (
+      parsed.data.canViewTree !== undefined ||
+      parsed.data.canContributeTree !== undefined
+    ) {
+      const db = getDb();
+      const [existing] = await db
+        .select()
+        .from(familyMembers)
+        .where(
+          and(
+            eq(familyMembers.id, memberId),
+            eq(familyMembers.familyId, familyId),
+          ),
+        )
+        .limit(1);
+      if (!existing) {
+        return NextResponse.json({ error: "Member not found" }, { status: 404 });
+      }
+
+      await setMemberTreeAccess({
+        familyId,
+        memberId,
+        canViewTree:
+          parsed.data.canViewTree ?? existing.canViewTree,
+        canContributeTree:
+          parsed.data.canContributeTree ?? existing.canContributeTree,
+      });
+    }
+
+    const db = getDb();
+    const [member] = await db
+      .select()
+      .from(familyMembers)
+      .where(
+        and(
+          eq(familyMembers.id, memberId),
+          eq(familyMembers.familyId, familyId),
+        ),
+      )
+      .limit(1);
+
+    return NextResponse.json({
+      member: member ? serializeFamilyMember(member) : null,
+    });
   } catch (error) {
-    return familyApiErrorResponse(error, "Failed to update member role");
+    return familyApiErrorResponse(error, "Failed to update family member");
   }
 }
 

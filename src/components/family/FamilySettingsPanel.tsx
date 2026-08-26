@@ -19,6 +19,7 @@ import { UpgradePrompt } from "@/components/billing/UpgradePrompt";
 import { celebrateFromJourney } from "@/lib/celebrations/bus";
 import { FamilyCircleStrength } from "@/components/family/FamilyCircleStrength";
 import { FamilyLocationMap } from "@/components/family/FamilyLocationMap";
+import { FamilyTreeSharingSettings } from "@/components/family/FamilyTreeSharingSettings";
 import { RequestPhotosDialog } from "@/components/family/RequestPhotosDialog";
 import type { JourneyCelebrationPayload } from "@/lib/gamification/types";
 import { useCopy, useFormat, useTranslations } from "@/components/i18n/LocaleProvider";
@@ -372,6 +373,69 @@ export function FamilySettingsPanel({
               </p>
             )}
 
+            {isOwner &&
+            capabilities.familyTree &&
+            family.createdByUserId === viewerUserId ? (
+              <FamilyTreeSharingSettings
+                familyId={family.id}
+                shared={Boolean(family.treeSharedWithFamily)}
+                canManage
+                pending={pending && busyKey === `tree-share-${family.id}`}
+                onSharedChange={(shared) => {
+                  runAction(`tree-share-${family.id}`, async () => {
+                    const response = await fetch(
+                      `/api/family/${family.id}/tree-sharing`,
+                      {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ shared }),
+                      },
+                    );
+                    const data = (await response.json().catch(() => ({}))) as {
+                      error?: string;
+                      family?: { treeSharedWithFamily?: boolean };
+                    };
+                    if (!response.ok) {
+                      throw new Error(
+                        data.error || "Could not update Family Tree sharing.",
+                      );
+                    }
+                    setFamilies((prev) =>
+                      prev.map((f) =>
+                        f.id === family.id
+                          ? {
+                              ...f,
+                              treeSharedWithFamily: Boolean(
+                                data.family?.treeSharedWithFamily ?? shared,
+                              ),
+                            }
+                          : f,
+                      ),
+                    );
+                    setMembersByFamilyId((prev) => ({
+                      ...prev,
+                      [family.id]: (prev[family.id] ?? []).map((m) =>
+                        shared
+                          ? { ...m, canViewTree: true }
+                          : { ...m, canContributeTree: false },
+                      ),
+                    }));
+                    setNotice(
+                      shared
+                        ? "Family Tree is shared — members can view. Turn on contribute per person below."
+                        : "Family Tree sharing is off.",
+                    );
+                  });
+                }}
+              />
+            ) : (
+              <FamilyTreeSharingSettings
+                familyId={family.id}
+                shared={Boolean(family.treeSharedWithFamily)}
+                canManage={false}
+              />
+            )}
+
             {pendingInvites.length > 0 ? (
               <div className="mt-8">
                 <h3 className="flex items-center gap-2 text-sm font-medium text-ink">
@@ -389,6 +453,41 @@ export function FamilySettingsPanel({
                       busyKey={busyKey}
                       inviteLink={inviteLinks[member.id]}
                       canRequestPhotos={canRequestPhotos}
+                      treeShared={Boolean(family.treeSharedWithFamily)}
+                      onChangeTreeAccess={(next) =>
+                        runAction(`tree-${member.id}`, async () => {
+                          const response = await fetch(
+                            `/api/family/${family.id}/members/${member.id}`,
+                            {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify(next),
+                            },
+                          );
+                          const data = (await response
+                            .json()
+                            .catch(() => ({}))) as {
+                            error?: string;
+                            member?: SerializedFamilyMember;
+                          };
+                          if (!response.ok) {
+                            throw new Error(
+                              data.error ||
+                                "Could not update Family Tree access.",
+                            );
+                          }
+                          if (data.member) {
+                            setMembersByFamilyId((prev) => ({
+                              ...prev,
+                              [family.id]: (prev[family.id] ?? []).map((m) =>
+                                m.id === member.id
+                                  ? { ...m, ...data.member! }
+                                  : m,
+                              ),
+                            }));
+                          }
+                        })
+                      }
                       onRequestPhotos={() =>
                         setRequestTarget({
                           familyId: family.id,
@@ -486,6 +585,41 @@ export function FamilySettingsPanel({
                       pending={pending}
                       busyKey={busyKey}
                       canRequestPhotos={canRequestPhotos}
+                      treeShared={Boolean(family.treeSharedWithFamily)}
+                      onChangeTreeAccess={(next) =>
+                        runAction(`tree-${member.id}`, async () => {
+                          const response = await fetch(
+                            `/api/family/${family.id}/members/${member.id}`,
+                            {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify(next),
+                            },
+                          );
+                          const data = (await response
+                            .json()
+                            .catch(() => ({}))) as {
+                            error?: string;
+                            member?: SerializedFamilyMember;
+                          };
+                          if (!response.ok) {
+                            throw new Error(
+                              data.error ||
+                                "Could not update Family Tree access.",
+                            );
+                          }
+                          if (data.member) {
+                            setMembersByFamilyId((prev) => ({
+                              ...prev,
+                              [family.id]: (prev[family.id] ?? []).map((m) =>
+                                m.id === member.id
+                                  ? { ...m, ...data.member! }
+                                  : m,
+                              ),
+                            }));
+                          }
+                        })
+                      }
                       onRequestPhotos={() =>
                         setRequestTarget({
                           familyId: family.id,
@@ -818,6 +952,8 @@ function MemberRow({
   inviteLink,
   canRequestPhotos = false,
   onRequestPhotos,
+  treeShared = false,
+  onChangeTreeAccess,
 }: {
   member: SerializedFamilyMember;
   viewerUserId: string;
@@ -829,6 +965,11 @@ function MemberRow({
   inviteLink?: string;
   canRequestPhotos?: boolean;
   onRequestPhotos?: () => void;
+  treeShared?: boolean;
+  onChangeTreeAccess?: (next: {
+    canViewTree: boolean;
+    canContributeTree: boolean;
+  }) => void;
 }) {
   const t = useTranslations();
   const format = useFormat();
@@ -842,6 +983,13 @@ function MemberRow({
 
   const roleBusy = pending && busyKey === `role-${member.id}`;
   const removeBusy = pending && busyKey === `remove-${member.id}`;
+  const treeBusy = pending && busyKey === `tree-${member.id}`;
+  const showTreeAcl =
+    treeShared &&
+    isOwner &&
+    !isSelf &&
+    Boolean(onChangeTreeAccess) &&
+    member.role !== "owner";
 
   return (
     <li className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
@@ -910,6 +1058,44 @@ function MemberRow({
             {roleLabel(t, member.role)}
           </span>
         )}
+
+        {showTreeAcl ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-ink/10 bg-canvas px-2 py-1.5 text-[11px]">
+            <label className="inline-flex items-center gap-1.5 text-ink">
+              <input
+                type="checkbox"
+                className="size-3.5 rounded border-ink/30"
+                checked={member.canViewTree || member.canContributeTree}
+                disabled={pending || member.canContributeTree}
+                onChange={(e) =>
+                  onChangeTreeAccess?.({
+                    canViewTree: e.target.checked,
+                    canContributeTree: false,
+                  })
+                }
+              />
+              View tree
+            </label>
+            <label className="inline-flex items-center gap-1.5 text-ink">
+              <input
+                type="checkbox"
+                className="size-3.5 rounded border-ink/30"
+                checked={member.canContributeTree}
+                disabled={pending || member.role === "viewer"}
+                onChange={(e) =>
+                  onChangeTreeAccess?.({
+                    canViewTree: true,
+                    canContributeTree: e.target.checked,
+                  })
+                }
+              />
+              Can contribute
+            </label>
+            {treeBusy ? (
+              <Loader2 className="size-3 animate-spin text-ink-muted" aria-hidden />
+            ) : null}
+          </div>
+        ) : null}
 
         {inviteLink ? (
           <button

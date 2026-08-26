@@ -358,6 +358,20 @@
       "when": 1786720000000,
       "tag": "0061_media_content_hash",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1786800000000,
+      "tag": "0062_family_tree",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1786900000000,
+      "tag": "0063_family_tree_sharing",
+      "breakpoints": true
     }
   ]
 }

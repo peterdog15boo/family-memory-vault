@@ -482,6 +482,8 @@ export {
   canGenerateAiSoundtrack,
   canUseLegacyPlusFeatures,
   hasLegacyPlusFeatures,
+  canUseFamilyTree,
+  hasFamilyTreeAccess,
   countAiSoundtracksThisMonth,
   getPlanCapabilities,
   countFamilyMemberSeats,

@@ -16,6 +16,7 @@ import { MediaError } from "@/lib/media/errors";
 import { MemoryError } from "@/lib/memories/errors";
 import { MovieError } from "@/lib/movies/errors";
 import { PeopleError } from "@/lib/people";
+import { FamilyTreeError } from "@/lib/family-tree";
 import { logger } from "@/lib/observability/logger";
 import { PlanGateError } from "@/lib/plans/gates";
 import { StripeBillingError } from "@/lib/stripe/subscriptions";
@@ -133,6 +134,21 @@ export function apiErrorFromUnknown(
       code:
         error.code ??
         (status === 404 ? "not_found" : status === 403 ? "plan_limit" : "validation"),
+    });
+  }
+
+  if (error instanceof FamilyTreeError) {
+    const status =
+      error.code === "plan_limit"
+        ? 403
+        : error.code === "not_found"
+          ? 404
+          : error.code === "conflict"
+            ? 409
+            : 400;
+    return apiError(error.message, {
+      status,
+      code: error.code ?? "validation",
     });
   }
 

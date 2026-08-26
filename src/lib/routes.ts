@@ -7,6 +7,9 @@ export const MARKETING_HOME_PATH = "/" as const;
 /** First-session “Your First Family Movie” ritual (when feature flag is on). */
 export const FIRST_FAMILY_MOVIE_PATH = "/first-family-movie" as const;
 
+/** Interactive family tree (Family / Legacy+ plans). */
+export const FAMILY_TREE_PATH = "/family-tree" as const;
+
 /**
  * Where Clerk should send users after sign-in / sign-up when no deep link
  * is present.

@@ -93,6 +93,9 @@ export function planFeatureBullets(plan: PlanSeed): string[] {
   } else {
     bullets.push("Private to you");
   }
+  if (plan.features.familyTree) {
+    bullets.push("Family Tree");
+  }
   if (plan.features.cinematicThemes) {
     bullets.push("Cinematic movie themes");
   } else {

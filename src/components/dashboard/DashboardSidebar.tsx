@@ -13,6 +13,7 @@ import {
   ImageIcon,
   Images,
   Landmark,
+  Network,
   Package,
   Settings,
   Shield,
@@ -35,6 +36,8 @@ type DashboardSidebarProps = {
   isAdmin?: boolean;
   /** Documents / Digital Legacy / Connected Accounts — Legacy+ only. */
   showLegacyPlusNav?: boolean;
+  /** Family Tree — Family / Family Plus / Legacy+. */
+  showFamilyTreeNav?: boolean;
 };
 
 type NavItem = {
@@ -46,9 +49,12 @@ type NavItem = {
   openAskAi?: boolean;
   /** Requires Legacy+ plan features. */
   legacyPlusOnly?: boolean;
+  /** Requires Family Tree plan access. */
+  familyTreeOnly?: boolean;
 };
 
 const LEGACY_PLUS_HREFS = new Set(["/documents", "/legacy", "/accounts"]);
+const FAMILY_TREE_HREFS = new Set(["/family-tree"]);
 
 /**
  * App navigation. Modern: Home-first + grouped everyday vs keep-safe vs account.
@@ -57,6 +63,7 @@ const LEGACY_PLUS_HREFS = new Set(["/documents", "/legacy", "/accounts"]);
 export function DashboardSidebar({
   isAdmin = false,
   showLegacyPlusNav = false,
+  showFamilyTreeNav = false,
 }: DashboardSidebarProps) {
   const pathname = usePathname();
   const { theme, ready } = useTheme();
@@ -102,6 +109,12 @@ export function DashboardSidebar({
       },
       { href: "/people", label: t("nav.people"), icon: Users },
       { href: "/family", label: t("nav.family"), icon: Home },
+      {
+        href: "/family-tree",
+        label: t("nav.familyTree"),
+        icon: Network,
+        familyTreeOnly: true,
+      },
       { href: "/family-memory-box", label: t("nav.digitize"), icon: Package },
       { href: "/billing", label: t("nav.billing"), icon: CreditCard },
       { href: "/settings", label: t("nav.settings"), icon: Settings },
@@ -163,6 +176,12 @@ export function DashboardSidebar({
             legacyPlusOnly: true,
           },
           { href: "/family", label: t("nav.family"), icon: Users },
+          {
+            href: "/family-tree",
+            label: t("nav.familyTree"),
+            icon: Network,
+            familyTreeOnly: true,
+          },
         ],
       },
       {
@@ -193,6 +212,9 @@ export function DashboardSidebar({
   function isVisible(item: NavItem) {
     if (item.legacyPlusOnly || LEGACY_PLUS_HREFS.has(item.href)) {
       return showLegacyPlusNav;
+    }
+    if (item.familyTreeOnly || FAMILY_TREE_HREFS.has(item.href)) {
+      return showFamilyTreeNav;
     }
     return true;
   }

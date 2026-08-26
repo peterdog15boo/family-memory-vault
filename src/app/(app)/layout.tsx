@@ -10,7 +10,7 @@ import { shouldEnterFirstFamilyMovie } from "@/lib/first-family-movie";
 import { getUnreadCount } from "@/lib/notifications";
 import type { AvaProgress } from "@/lib/ava/types";
 import { getIdleTimeoutPolicyForUser } from "@/lib/account-preferences";
-import { canUseLegacyPlusFeatures } from "@/lib/plans/gates";
+import { canUseLegacyPlusFeatures, canUseFamilyTree } from "@/lib/plans/gates";
 import { APP_HOME_PATH, FIRST_FAMILY_MOVIE_PATH } from "@/lib/routes";
 import { ensureAppUser } from "@/lib/users";
 
@@ -140,6 +140,7 @@ export default async function AppLayout({
     avaProgress,
     idleTimeoutPolicy,
     showLegacyPlusNav,
+    showFamilyTreeNav,
   ] = await Promise.all([
     resolveShellUser(userId),
     safeUnreadCount(userId),
@@ -147,6 +148,7 @@ export default async function AppLayout({
     safeAvaProgress(userId),
     safeIdleTimeoutPolicy(userId),
     safeShowLegacyPlusNav(userId),
+    safeShowFamilyTreeNav(userId),
   ]);
 
   return (
@@ -158,6 +160,7 @@ export default async function AppLayout({
       initialAvaProgress={avaProgress}
       idleTimeoutPolicy={idleTimeoutPolicy}
       showLegacyPlusNav={showLegacyPlusNav}
+      showFamilyTreeNav={showFamilyTreeNav}
     >
       {children}
     </DashboardShell>
@@ -174,6 +177,24 @@ async function safeShowLegacyPlusNav(
   } catch (error) {
     console.warn("[app.layout] canUseLegacyPlusFeatures failed", error);
     return false;
+  }
+}
+
+async function safeShowFamilyTreeNav(
+  userId: string | null | undefined,
+): Promise<boolean> {
+  if (!userId) return false;
+  try {
+    const { canAccessFamilyTreeNav } = await import("@/lib/family-tree/access");
+    return await canAccessFamilyTreeNav(userId);
+  } catch (error) {
+    console.warn("[app.layout] canAccessFamilyTreeNav failed", error);
+    try {
+      const gate = await canUseFamilyTree(userId);
+      return gate.allowed;
+    } catch {
+      return false;
+    }
   }
 }
 

@@ -31,6 +31,7 @@ export const enUS = {
       people: "People",
       personDetail: "Person",
       family: "Family",
+      familyTree: "Family Tree",
       documents: "Documents",
       documentDetail: "Document",
       legacy: "Legacy",
@@ -77,6 +78,7 @@ export const enUS = {
     onThisDay: "On This Day",
     upload: "Upload",
     people: "People",
+    familyTree: "Family Tree",
     askAi: "Ask AI",
     familyChat: "Family Chat",
     documents: "Documents",
@@ -327,6 +329,11 @@ export const enUS = {
     peopleDescription:
       "Faces from your photos, gathered gently so you can name the people you love.",
     peopleAbout: "About People",
+    familyTreeEyebrow: "Your roots",
+    familyTreeTitle: "Family Tree",
+    familyTreeDescription:
+      "Place people from your vault on a warm tree — same People and face thumbnails, no second identity system.",
+    familyTreeAbout: "About Family Tree",
     familyTitle: "Family",
     familyDescription:
       "Invite people you trust. Photos can be shared with family; memories stay private until you choose.",
@@ -628,6 +635,8 @@ export const enUS = {
       "Movies use the photos already in this memory. New uploads join in after they’re ready.",
     peopleFaces:
       "We only group faces from ready photos, and it stays private to your account.",
+    familyTree:
+      "Family Tree uses the same People and face thumbnails as the rest of your vault. Place people you already have, add temporary names when needed, then link them — People stay private to your account, even when family shares photos.",
     familyShare:
       "Sharing a memory lets family view it. Contribute access also lets them add photos.",
     storageQuota:

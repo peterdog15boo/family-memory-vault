@@ -429,6 +429,12 @@ export async function acceptInvite(
     throw new FamilyError("You are already an active member of this family.");
   }
 
+  const [familyRow] = await db
+    .select({ treeSharedWithFamily: families.treeSharedWithFamily })
+    .from(families)
+    .where(eq(families.id, invite.familyId))
+    .limit(1);
+
   const now = new Date();
   const [updated] = await db
     .update(familyMembers)
@@ -438,6 +444,10 @@ export async function acceptInvite(
       acceptedAt: now,
       inviteToken: null,
       updatedAt: now,
+      // Inherit view when the tree is already shared (contribute stays opt-in).
+      ...(familyRow?.treeSharedWithFamily
+        ? { canViewTree: true }
+        : {}),
     })
     .where(eq(familyMembers.id, invite.id))
     .returning();

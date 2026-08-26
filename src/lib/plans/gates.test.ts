@@ -6,6 +6,7 @@ import {
 } from "@/lib/plans/catalog";
 import {
   assertGateAllowed,
+  hasFamilyTreeAccess,
   isAdvancedMovieTheme,
   PlanGateError,
   type PlanGateResult,
@@ -58,6 +59,30 @@ describe("getCatalogPlan", () => {
     expect(legacy.features.privateDocuments).toBe(true);
     expect(free.features.legacy).toBeFalsy();
     expect(family.features.legacy).toBeFalsy();
+  });
+
+  it("gates Family Tree on Family / Family Plus / Legacy+ only", () => {
+    expect(FREE_PLAN.features.familyTree).toBe(false);
+    expect(getCatalogPlan("family").features.familyTree).toBe(true);
+    expect(getCatalogPlan("family_plus").features.familyTree).toBe(true);
+    expect(getCatalogPlan("legacy").features.familyTree).toBe(true);
+  });
+});
+
+describe("hasFamilyTreeAccess", () => {
+  it("allows when the familyTree feature flag is set", () => {
+    expect(
+      hasFamilyTreeAccess({ ...FREE_PLAN.features, familyTree: true }, "free"),
+    ).toBe(true);
+  });
+
+  it("falls back to paid plan slugs when the flag is missing", () => {
+    const bare = { ...FREE_PLAN.features };
+    delete bare.familyTree;
+    expect(hasFamilyTreeAccess(bare, "free")).toBe(false);
+    expect(hasFamilyTreeAccess(bare, "family")).toBe(true);
+    expect(hasFamilyTreeAccess(bare, "family_plus")).toBe(true);
+    expect(hasFamilyTreeAccess(bare, "legacy")).toBe(true);
   });
 });
 

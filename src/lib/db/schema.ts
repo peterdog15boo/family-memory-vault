@@ -146,6 +146,8 @@ export type PlanFeatures = {
   maxAiSoundtracksPerMonth?: number;
   /** Paid plans omit the soft “Made with Family Memory Vault” movie watermark. */
   removeMovieWatermark?: boolean;
+  /** Interactive family tree (Family / Family Plus / Legacy+). */
+  familyTree?: boolean;
   [key: string]: unknown;
 };
 
@@ -794,6 +796,99 @@ export const people = pgTable(
 );
 
 /**
+ * Canonical relationship types for the family tree.
+ * - parent_of: from = parent, to = child
+ * - niece_of / nephew_of: from = niece/nephew, to = aunt/uncle (etc.)
+ * - partner_of / sibling_of / cousin_of / in-laws / other: undirected;
+ *   stored with fromNodeId < toNodeId
+ * Derived grandparent/sibling edges are never auto-invented as stored rows.
+ */
+export const FAMILY_TREE_RELATION_TYPES = [
+  "parent_of",
+  "partner_of",
+  "sibling_of",
+  "cousin_of",
+  "niece_of",
+  "nephew_of",
+  "sister_in_law_of",
+  "brother_in_law_of",
+  "other_relative_of",
+] as const;
+export type FamilyTreeRelationType =
+  (typeof FAMILY_TREE_RELATION_TYPES)[number];
+
+/**
+ * A node on the vault owner's family tree.
+ * May link to a People identity (photo) or remain a label-only placeholder.
+ */
+export const familyTreeNodes = pgTable(
+  "family_tree_nodes",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Optional link to a People record in this vault. */
+    personId: text("person_id").references(() => people.id, {
+      onDelete: "set null",
+    }),
+    /** Display label (placeholder name or override). Always required. */
+    label: text("label").notNull(),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("family_tree_nodes_user_id_idx").on(table.userId),
+    index("family_tree_nodes_person_id_idx").on(table.personId),
+    uniqueIndex("family_tree_nodes_user_person_uidx")
+      .on(table.userId, table.personId)
+      .where(sql`${table.personId} is not null`),
+  ],
+);
+
+/**
+ * Directed/canonical edges between tree nodes (scoped to vault owner).
+ */
+export const familyTreeRelationships = pgTable(
+  "family_tree_relationships",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    fromNodeId: text("from_node_id")
+      .notNull()
+      .references(() => familyTreeNodes.id, { onDelete: "cascade" }),
+    toNodeId: text("to_node_id")
+      .notNull()
+      .references(() => familyTreeNodes.id, { onDelete: "cascade" }),
+    type: text("type").$type<FamilyTreeRelationType>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("family_tree_rels_user_id_idx").on(table.userId),
+    index("family_tree_rels_from_idx").on(table.fromNodeId),
+    index("family_tree_rels_to_idx").on(table.toNodeId),
+    uniqueIndex("family_tree_rels_edge_uidx").on(
+      table.userId,
+      table.fromNodeId,
+      table.toNodeId,
+      table.type,
+    ),
+  ],
+);
+
+/**
  * Individual detected faces on a media object.
  * `person_id` is null until the face is assigned / clustered into a person.
  * No separate face_media join — each face row already belongs to one media.
@@ -933,6 +1028,13 @@ export const families = pgTable(
     createdByUserId: text("created_by_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    /**
+     * When true, members with canViewTree may open the family owner's Family Tree.
+     * Contribution still requires canContributeTree (default off).
+     */
+    treeSharedWithFamily: boolean("tree_shared_with_family")
+      .default(false)
+      .notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -978,6 +1080,12 @@ export const familyMembers = pgTable(
     firstContributedAt: timestamp("first_contributed_at", {
       withTimezone: true,
     }),
+    /**
+     * Family Tree ACL (when family.treeSharedWithFamily is on).
+     * Defaults: view off until share is enabled; contribute always opt-in.
+     */
+    canViewTree: boolean("can_view_tree").default(false).notNull(),
+    canContributeTree: boolean("can_contribute_tree").default(false).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -2717,6 +2825,8 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   betaFeedback: many(feedbackSubmissions),
   feedbackSubmissions: many(feedbackSubmissions),
   people: many(people),
+  familyTreeNodes: many(familyTreeNodes),
+  familyTreeRelationships: many(familyTreeRelationships),
   faces: many(faces),
   moderationEvents: many(moderationEvents),
   familiesCreated: many(families),
@@ -2869,7 +2979,48 @@ export const peopleRelations = relations(people, ({ one, many }) => ({
     references: [faces.id],
   }),
   faces: many(faces),
+  treeNodes: many(familyTreeNodes),
 }));
+
+export const familyTreeNodesRelations = relations(
+  familyTreeNodes,
+  ({ one, many }) => ({
+    user: one(users, {
+      fields: [familyTreeNodes.userId],
+      references: [users.id],
+    }),
+    person: one(people, {
+      fields: [familyTreeNodes.personId],
+      references: [people.id],
+    }),
+    relationshipsFrom: many(familyTreeRelationships, {
+      relationName: "familyTreeRelFrom",
+    }),
+    relationshipsTo: many(familyTreeRelationships, {
+      relationName: "familyTreeRelTo",
+    }),
+  }),
+);
+
+export const familyTreeRelationshipsRelations = relations(
+  familyTreeRelationships,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [familyTreeRelationships.userId],
+      references: [users.id],
+    }),
+    fromNode: one(familyTreeNodes, {
+      fields: [familyTreeRelationships.fromNodeId],
+      references: [familyTreeNodes.id],
+      relationName: "familyTreeRelFrom",
+    }),
+    toNode: one(familyTreeNodes, {
+      fields: [familyTreeRelationships.toNodeId],
+      references: [familyTreeNodes.id],
+      relationName: "familyTreeRelTo",
+    }),
+  }),
+);
 
 export const facesRelations = relations(faces, ({ one }) => ({
   user: one(users, {
@@ -3267,6 +3418,10 @@ export type PhotoRequest = typeof photoRequests.$inferSelect;
 export type NewPhotoRequest = typeof photoRequests.$inferInsert;
 export type Person = typeof people.$inferSelect;
 export type NewPerson = typeof people.$inferInsert;
+export type FamilyTreeNode = typeof familyTreeNodes.$inferSelect;
+export type NewFamilyTreeNode = typeof familyTreeNodes.$inferInsert;
+export type FamilyTreeRelationship = typeof familyTreeRelationships.$inferSelect;
+export type NewFamilyTreeRelationship = typeof familyTreeRelationships.$inferInsert;
 export type Face = typeof faces.$inferSelect;
 export type NewFace = typeof faces.$inferInsert;
 export type ProcessingJob = typeof processingJobs.$inferSelect;
