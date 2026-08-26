@@ -348,7 +348,7 @@ export const SIMPLE_THEME = defineTheme({
   },
   transition: {
     style: "soft_dissolve",
-    durationMs: 900,
+    durationMs: 1100,
     intensity: "subtle",
   },
   text: {

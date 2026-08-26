@@ -120,8 +120,11 @@ export function resolveTransitionDurationMs(input: {
   }
 
   // Cap so a short clip is not mostly transition — still allow polished dissolves.
-  const clipCap = Math.max(280, Math.floor(input.clipDurationMs * 0.4));
-  return Math.min(Math.max(base, 180), clipCap, 3000);
+  const minMs = input.style === "soft_dissolve" || input.style === "crossfade"
+    ? 550
+    : 220;
+  const clipCap = Math.max(320, Math.floor(input.clipDurationMs * 0.45));
+  return Math.min(Math.max(base, minMs), clipCap, 3200);
 }
 
 /**
@@ -157,13 +160,13 @@ export function transitionSampleCount(
   }
 
   // Match encode cadence; soft dissolves oversample so blends don’t stair-step.
-  const density = dissolve ? encodeFps * 1.5 : Math.max(24, encodeFps);
+  const density = dissolve ? encodeFps * 2 : Math.max(24, encodeFps);
   if (style === "soft_cut") {
-    return Math.max(4, Math.min(Math.round(seconds * density), 14));
+    return Math.max(6, Math.min(Math.round(seconds * density), 16));
   }
 
-  const max = Math.min(120, Math.round(encodeFps * 4));
-  return Math.max(10, Math.min(Math.round(seconds * density), max));
+  const max = Math.min(150, Math.round(encodeFps * 5));
+  return Math.max(12, Math.min(Math.round(seconds * density), max));
 }
 
 /**

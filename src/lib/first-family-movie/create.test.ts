@@ -46,9 +46,9 @@ describe("firstFamilyMovieDurationSettings", () => {
 });
 
 describe("buildFirstFamilyMovieSettings", () => {
-  it("uses the fast encode path for first-session latency", () => {
+  it("uses share-ready 1080p encode for the first reveal", () => {
     const settings = buildFirstFamilyMovieSettings(6);
-    expect(settings.qualityMode).toBe("fast");
+    expect(settings.qualityMode).toBe("standard");
     expect(settings.includeTitles).toBe(false);
     expect(settings.transition).toBe("soft_dissolve");
   });

@@ -19,13 +19,13 @@ export const TRANSITION_CATALOG: readonly TransitionCatalogEntry[] = [
     id: "crossfade",
     label: "Crossfade",
     hint: "Smooth linear-light blend",
-    defaultDurationMs: 550,
+    defaultDurationMs: 700,
   },
   {
     id: "soft_dissolve",
     label: "Soft dissolve",
     hint: "Gentle blend with soft mid bloom",
-    defaultDurationMs: 900,
+    defaultDurationMs: 1100,
   },
   {
     id: "soft_cut",

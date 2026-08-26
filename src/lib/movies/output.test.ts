@@ -3,6 +3,7 @@ import {
   appendVideoEdgeFades,
   buildEncodeVideoFilter,
   buildLibx264EncodeArgs,
+  buildLibx264IntermediateEncodeArgs,
   resolveMovieOutputSpec,
   scaleThemeFontSize,
 } from "@/lib/movies/output";
@@ -16,12 +17,12 @@ describe("resolveMovieOutputSpec", () => {
     expect(spec).toMatchObject({
       width: 1920,
       height: 1080,
-      crf: 14,
+      crf: 11,
       profile: "high",
       fps: 30,
       x264Preset: "slow",
       frameJpegQuality: 99,
-      maxrate: "16M",
+      maxrate: "24M",
     });
   });
 
@@ -41,13 +42,20 @@ describe("resolveMovieOutputSpec", () => {
     ).toMatchObject({ width: 1080, height: 1080 });
   });
 
-  it("uses 720p-class dims for fast mode while keeping aspect", () => {
+  it("uses 720p-class dims for fast mode with sharper draft encode", () => {
     expect(
       resolveMovieOutputSpec({
         aspectRatio: "16:9",
         qualityMode: "fast",
       }),
-    ).toMatchObject({ width: 1280, height: 720, x264Preset: "veryfast" });
+    ).toMatchObject({
+      width: 1280,
+      height: 720,
+      x264Preset: "faster",
+      crf: 18,
+      fps: 30,
+      frameJpegQuality: 95,
+    });
 
     expect(
       resolveMovieOutputSpec({
@@ -67,9 +75,9 @@ describe("resolveMovieOutputSpec", () => {
     ).toMatchObject({
       width: 3840,
       height: 2160,
-      crf: 15,
+      crf: 14,
       x264Preset: "slow",
-      maxrate: "45M",
+      maxrate: "48M",
     });
 
     expect(
@@ -78,7 +86,7 @@ describe("resolveMovieOutputSpec", () => {
         qualityMode: "ultra",
         allowUltra: false,
       }),
-    ).toMatchObject({ width: 1920, height: 1080, crf: 14 });
+    ).toMatchObject({ width: 1920, height: 1080, crf: 11 });
   });
 });
 
@@ -114,6 +122,14 @@ describe("buildEncodeVideoFilter", () => {
     expect(exact).toContain("scale=1920:1080:flags=lanczos");
     expect(exact).not.toContain("force_original_aspect_ratio");
     expect(exact).not.toContain("pad=");
+
+    const passthrough = buildEncodeVideoFilter(1920, 1080, 30, "exact", {
+      assumeExactSize: true,
+    });
+    expect(passthrough).not.toContain("scale=");
+    expect(passthrough).toContain("setsar=1");
+    expect(passthrough).toContain("format=yuv420p");
+    expect(passthrough).toContain("fps=30");
   });
 
   it("biases cover crop toward a face focal point", () => {
@@ -130,8 +146,8 @@ describe("appendVideoEdgeFades", () => {
   it("adds short open and close fades for the full timeline", () => {
     const base = buildEncodeVideoFilter(1920, 1080, 30, "exact");
     const vf = appendVideoEdgeFades(base, 40);
-    expect(vf).toContain("fade=t=in:st=0:d=0.700");
-    expect(vf).toContain("fade=t=out:st=39.100:d=0.900");
+    expect(vf).toContain("fade=t=in:st=0:d=0.900");
+    expect(vf).toContain("fade=t=out:st=38.800:d=1.200");
   });
 
   it("clamps fades on very short movies", () => {
@@ -152,9 +168,20 @@ describe("buildLibx264EncodeArgs", () => {
     const args = buildLibx264EncodeArgs(spec);
     expect(args).toContain("libx264");
     expect(args).toContain("slow");
-    expect(args).toContain("14");
+    expect(args).toContain("11");
     expect(args).toContain("bt709");
-    expect(args).toContain("16M");
+    expect(args).toContain("24M");
     expect(args).toContain("+faststart");
+  });
+
+  it("uses a lower CRF for intermediate photo-run segments", () => {
+    const spec = resolveMovieOutputSpec({
+      aspectRatio: "16:9",
+      qualityMode: "standard",
+    });
+    const args = buildLibx264IntermediateEncodeArgs(spec);
+    const crfIdx = args.indexOf("-crf");
+    expect(crfIdx).toBeGreaterThan(-1);
+    expect(Number(args[crfIdx + 1])).toBe(10);
   });
 });

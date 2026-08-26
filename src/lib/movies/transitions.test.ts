@@ -133,8 +133,9 @@ describe("transition timing helpers", () => {
 describe("transitionSampleCount", () => {
   it("tracks encode fps for smooth exports", () => {
     const count = transitionSampleCount("crossfade", 600, { fps: 30 });
-    expect(count).toBeGreaterThanOrEqual(18);
-    expect(count).toBeLessThanOrEqual(30);
+    // Dissolves oversample 2× encode fps (0.6s × 60 = 36).
+    expect(count).toBeGreaterThanOrEqual(24);
+    expect(count).toBeLessThanOrEqual(60);
   });
 
   it("uses fewer samples in fast mode", () => {

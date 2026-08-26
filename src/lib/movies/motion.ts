@@ -19,10 +19,9 @@
  */
 
 import {
-  centerFraming,
   getKenBurnsFraming,
+  interpolateSourceCrop,
   resolveKenBurnsScaleRange,
-  sourceCropAtScale,
   type KenBurnsSourceCrop,
   type MediaFraming,
 } from "@/lib/movies/framing";
@@ -108,10 +107,10 @@ export function resolveZoomDirection(
 /**
  * How many discrete samples to render for a continuous zoom over `durationMs`.
  *
- * Count is derived from clip duration × density so each sample hold stays
- * short. Gentle zooms and longer clips use higher density so crop motion does
- * not stair-step. Caps are safety ceilings only — they must not collapse a
- * multi-second zoom into a handful of keyframes.
+ * Always ≥ encode fps so each output frame can receive a unique crop (holds
+ * never span multiple video frames). Gentle zooms oversample so consecutive
+ * JPEG crops move by sub-pixel amounts — reduces stair-step when concat
+ * timing / fps resampling lands between samples.
  */
 export function resolveKenBurnsSampleCount(input: {
   durationMs: number;
@@ -133,25 +132,32 @@ export function resolveKenBurnsSampleCount(input: {
 
   const durationMs = Math.max(1, input.durationMs);
   const seconds = durationMs / 1000;
-  const baseFps = input.targetFps ?? (input.fast ? 15 : 30);
+  const baseFps = Math.max(1, input.targetFps ?? (input.fast ? 30 : 30));
 
-  // Oversample vs encode fps so JPEG holds are shorter than one video frame
-  // for gentle zooms (small crop deltas need denser intermediate crops).
+  // Floor: one unique crop per encode frame (no multi-frame holds).
   let densityMult = 1;
-  if (!input.fast) {
-    if (input.zoomAmount <= 0.06) densityMult = 2.25;
-    else if (input.zoomAmount <= 0.1) densityMult = 1.75;
-    else densityMult = 1.5;
-    if ((input.intensityFactor ?? 1) <= 0.65) {
-      densityMult = Math.max(densityMult, 2);
-    }
+  if (input.fast) {
+    // Match encode fps exactly — Railway RAM; still continuous at 30fps.
+    densityMult = 1;
+  } else if (input.zoomAmount <= 0.06) {
+    densityMult = 3;
+  } else if (input.zoomAmount <= 0.12) {
+    densityMult = 2;
+  } else {
+    densityMult = 1.5;
+  }
+  if (!input.fast && (input.intensityFactor ?? 1) <= 0.65) {
+    densityMult = Math.max(densityMult, 2.5);
   }
 
-  const density = baseFps * densityMult;
-  const fromDuration = Math.round(seconds * density);
+  const fromFps = Math.ceil(seconds * baseFps);
+  const fromDensity = Math.round(seconds * baseFps * densityMult);
+  const fromDuration = Math.max(fromFps, fromDensity);
   const maxSamples =
     input.maxSamples ??
-    (input.fast ? 60 : Math.max(480, Math.ceil(seconds * density)));
+    (input.fast
+      ? Math.max(fromFps + 2, Math.ceil(seconds * baseFps * 1.05) + 2)
+      : Math.max(480, Math.ceil(seconds * baseFps * densityMult) + 2));
   // At least 2 samples so start (0%) and end (100%) are distinct.
   return Math.max(2, Math.min(fromDuration, maxSamples));
 }
@@ -185,6 +191,10 @@ export type KenBurnsCropResult = {
  *
  * Pass `sourceWidth`/`sourceHeight` + optional `framing` for face-aware
  * source extracts. Without source dims, falls back to output-space pan.
+ *
+ * Face-aware path lerps start→end crops (from getKenBurnsFraming) so pan/zoom
+ * stay continuous — recomputing placeCropAroundFocal every sample caused
+ * clamp-boundary jumps mid-zoom.
  */
 export function kenBurnsCrop(input: {
   progress: number;
@@ -213,22 +223,13 @@ export function kenBurnsCrop(input: {
       zoomAmount: input.zoomAmount,
       framing: input.framing,
     });
-    // Continuous scale → crop (not lerp of rounded rects) avoids stepped pixels.
-    const scale =
-      plan.startScale + (plan.endScale - plan.startScale) * eased;
-    const framing = input.framing ?? centerFraming();
-    const sourceCrop = sourceCropAtScale({
-      scale,
-      sourceWidth: input.sourceWidth,
-      sourceHeight: input.sourceHeight,
-      targetWidth: input.width,
-      targetHeight: input.height,
-      framing,
-    });
-    const maxLeft = Math.max(0, input.sourceWidth - sourceCrop.width);
-    const maxTop = Math.max(0, input.sourceHeight - sourceCrop.height);
-    sourceCrop.left = Math.min(Math.max(0, sourceCrop.left), maxLeft);
-    sourceCrop.top = Math.min(Math.max(0, sourceCrop.top), maxTop);
+    const sourceCrop = interpolateSourceCrop(
+      plan.start,
+      plan.end,
+      eased,
+      input.sourceWidth,
+      input.sourceHeight,
+    );
 
     return {
       scale: sourceCrop.scale,
@@ -247,8 +248,9 @@ export function kenBurnsCrop(input: {
   );
   const scale = startScale + (endScale - startScale) * eased;
 
-  const frameW = Math.max(input.width, Math.round(input.width * scale));
-  const frameH = Math.max(input.height, Math.round(input.height * scale));
+  // Keep float pan origins — integer snap here stair-steps slow zooms.
+  const frameW = Math.max(input.width, input.width * scale);
+  const frameH = Math.max(input.height, input.height * scale);
   const maxLeft = Math.max(0, frameW - input.width);
   const maxTop = Math.max(0, frameH - input.height);
 
@@ -256,11 +258,11 @@ export function kenBurnsCrop(input: {
   const pan = eased * panSign;
   const left = Math.min(
     maxLeft,
-    Math.max(0, Math.round(maxLeft / 2 + pan * maxLeft * 0.18)),
+    Math.max(0, maxLeft / 2 + pan * maxLeft * 0.18),
   );
   const top = Math.min(
     maxTop,
-    Math.max(0, Math.round(maxTop / 2 - pan * maxTop * 0.14)),
+    Math.max(0, maxTop / 2 - pan * maxTop * 0.14),
   );
 
   return { scale, left, top, frameW, frameH, sourceCrop: null };
@@ -504,21 +506,18 @@ export function sliceKenBurnsSamplesByTime(
   return out;
 }
 
-/** Split duration evenly across N samples (last gets remainder). Sum === totalMs. */
+/** Split duration evenly across N samples (holds differ by at most 1ms). Sum === totalMs. */
 export function splitDurationMs(totalMs: number, count: number): number[] {
   const n = Math.max(1, count);
   const safeTotal = Math.max(n, Math.round(totalMs));
-  const slice = Math.floor(safeTotal / n);
+  const base = Math.floor(safeTotal / n);
+  let rem = safeTotal - base * n;
   const out: number[] = [];
-  let allocated = 0;
   for (let i = 0; i < n; i++) {
-    if (i === n - 1) {
-      out.push(Math.max(1, safeTotal - allocated));
-    } else {
-      const hold = Math.max(1, slice);
-      out.push(hold);
-      allocated += hold;
-    }
+    // Spread remainder across early samples so the last hold is not a long stall.
+    const hold = base + (rem > 0 ? 1 : 0);
+    out.push(Math.max(1, hold));
+    if (rem > 0) rem -= 1;
   }
   return out;
 }

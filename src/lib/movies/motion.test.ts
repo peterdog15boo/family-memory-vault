@@ -135,9 +135,9 @@ describe("motion / Ken Burns", () => {
       fast: false,
       targetFps: 30,
     });
-    // zoomAmount 0.1 → 1.75× density over encode fps
-    expect(short).toBe(105);
-    expect(longer).toBe(210);
+    // zoomAmount 0.1 → 2× density over encode fps
+    expect(short).toBe(120);
+    expect(longer).toBe(240);
     expect(longer).toBeGreaterThan(short);
   });
 
@@ -148,7 +148,7 @@ describe("motion / Ken Burns", () => {
       fast: false,
       targetFps: 30,
     });
-    expect(n).toBe(315);
+    expect(n).toBe(360);
   });
 
   it("boosts sample density for gentle zooms", () => {
@@ -164,9 +164,19 @@ describe("motion / Ken Burns", () => {
       fast: false,
       targetFps: 30,
     });
-    expect(gentle).toBe(270); // 2.25× fps
+    expect(gentle).toBe(360); // 3× fps
     expect(strong).toBe(180); // 1.5× fps
     expect(gentle).toBeGreaterThan(strong);
+  });
+
+  it("never under-samples below encode fps", () => {
+    const n = resolveKenBurnsSampleCount({
+      durationMs: 3000,
+      zoomAmount: 0.2,
+      fast: false,
+      targetFps: 30,
+    });
+    expect(n).toBeGreaterThanOrEqual(90);
   });
 
   it("spans zoom 0→1 across the full clip duration for 3s and 6s", () => {
@@ -207,11 +217,60 @@ describe("motion / Ken Burns", () => {
       height: 720,
       targetFps: 30,
     });
-    // 3.2s × 30fps × 1.75 density = 168 samples
-    expect(plan.samples).toHaveLength(168);
+    // 3.2s × 30fps × 2 density = 192 samples
+    expect(plan.samples).toHaveLength(192);
     const avgHold =
       plan.samples.reduce((s, x) => s + x.holdMs, 0) / plan.samples.length;
     expect(avgHold).toBeLessThanOrEqual(1000 / 30 + 0.5);
+    const maxHold = Math.max(...plan.samples.map((s) => s.holdMs));
+    expect(maxHold).toBeLessThanOrEqual(Math.ceil(1000 / 30) + 1);
+  });
+
+  it("keeps face-aware crop motion continuous (no mid-zoom pan jumps)", () => {
+    const framing = {
+      focalPointX: 0.62,
+      focalPointY: 0.28,
+      subjectBounds: {
+        x: 0.5,
+        y: 0.15,
+        width: 0.25,
+        height: 0.35,
+        faceCount: 1,
+      },
+      maxZoomAmount: 0.2,
+      source: "faces" as const,
+    };
+    const plan = buildKenBurnsTimeline({
+      durationMs: 3000,
+      photoIndex: 0,
+      directionMode: "always-in",
+      themeZoom: 0.15,
+      intensityFactor: 1,
+      width: 1920,
+      height: 1080,
+      sourceWidth: 4000,
+      sourceHeight: 3000,
+      framing,
+      targetFps: 30,
+    });
+    const crops = plan.samples
+      .map((s) => s.sourceCrop)
+      .filter((c): c is NonNullable<typeof c> => c != null);
+    expect(crops.length).toBeGreaterThan(10);
+    let maxJump = 0;
+    for (let i = 1; i < crops.length; i++) {
+      const dx = Math.abs(crops[i]!.left - crops[i - 1]!.left);
+      const dy = Math.abs(crops[i]!.top - crops[i - 1]!.top);
+      maxJump = Math.max(maxJump, dx, dy);
+    }
+    const totalTravel = Math.hypot(
+      crops.at(-1)!.left - crops[0]!.left,
+      crops.at(-1)!.top - crops[0]!.top,
+    );
+    // No single step should dominate travel (clamp-boundary teleport).
+    if (totalTravel > 2) {
+      expect(maxJump).toBeLessThanOrEqual(totalTravel / 5 + 2);
+    }
   });
 
   it("keeps alternating direction across clips with mixed durations", () => {

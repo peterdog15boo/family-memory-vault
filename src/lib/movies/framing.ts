@@ -423,10 +423,32 @@ export function resolveKenBurnsScaleRange(
 }
 
 /**
+ * How many source pixels the cover window has vs the output frame.
+ * < 1 means the photo must already upscale to fill (small / soft source).
+ */
+export function sourceCoverScale(
+  sourceWidth: number,
+  sourceHeight: number,
+  targetWidth: number,
+  targetHeight: number,
+): number {
+  const base = baseCoverSize(
+    sourceWidth,
+    sourceHeight,
+    targetWidth,
+    targetHeight,
+  );
+  return Math.min(
+    base.width / Math.max(1, targetWidth),
+    base.height / Math.max(1, targetHeight),
+  );
+}
+
+/**
  * Cap zoom so Ken Burns does not shrink the extract below the output frame
  * when the source has enough resolution. Prevents muddy upscales from tight
  * zooms on large photos. If the cover window is already smaller than the
- * frame, leave zoom untouched (prefer full-res sources instead).
+ * frame, kill zoom — forced motion on small sources only softens further.
  */
 export function capZoomToAvoidUpscale(input: {
   zoomAmount: number;
@@ -437,19 +459,14 @@ export function capZoomToAvoidUpscale(input: {
 }): number {
   const z = Math.max(0, input.zoomAmount);
   if (z <= 0) return z;
-  const base = baseCoverSize(
+  const coverScale = sourceCoverScale(
     input.sourceWidth,
     input.sourceHeight,
     input.targetWidth,
     input.targetHeight,
   );
-  const coverScale = Math.min(
-    base.width / Math.max(1, input.targetWidth),
-    base.height / Math.max(1, input.targetHeight),
-  );
-  // Already soft at rest — don't kill motion; highest-res source selection
-  // is the primary sharpness lever for small photos.
-  if (coverScale < 1) return z;
+  // Already soft at rest — hold face-anchored (or center) fill, no extra zoom.
+  if (coverScale < 1) return 0;
   const maxZoom = Math.max(0, coverScale - 1);
   return Math.min(z, maxZoom);
 }
@@ -485,10 +502,17 @@ export function getKenBurnsFraming(input: {
     subject: framing.subjectBounds,
   });
 
+  const coverScale = sourceCoverScale(
+    input.sourceWidth,
+    input.sourceHeight,
+    input.targetWidth,
+    input.targetHeight,
+  );
+
   // Prefer continuous face-centered motion over a static hold when zoom was
-  // requested. Placement still keeps the focal point in frame; do not re-zero
-  // via a second capZoom pass (that undid motion and looked like “no face focus”).
+  // requested — but never force motion that would upscale a small photo.
   if (
+    coverScale >= 1 &&
     input.direction !== "none" &&
     input.zoomAmount > 0 &&
     zoomAmount < MIN_REQUESTED_CLIP_MOTION_ZOOM
@@ -496,7 +520,7 @@ export function getKenBurnsFraming(input: {
     zoomAmount = Math.min(input.zoomAmount, MIN_REQUESTED_CLIP_MOTION_ZOOM);
   }
 
-  // Prefer sharpness: don't zoom past 1:1 source→output when the photo is small.
+  // Prefer sharpness: don't zoom past 1:1 source→output (or at all when soft).
   zoomAmount = capZoomToAvoidUpscale({
     zoomAmount,
     sourceWidth: input.sourceWidth,

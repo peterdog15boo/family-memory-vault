@@ -45,7 +45,7 @@ describe("simple mode preset", () => {
     expect(settings.posterStyle).toBe("photo");
     expect(settings.presetId).toBe(SIMPLE_MODE_PRESET_ID);
     expect(settings.transition).toBe("soft_dissolve");
-    expect(settings.transitionDurationMs).toBe(900);
+    expect(settings.transitionDurationMs).toBe(1100);
     expect(settings.aspectRatio).toBe("16:9");
     expect(settings.zoomIntensity).not.toBe("off");
     expect(settings.qualityMode).toBe("standard");
@@ -53,8 +53,8 @@ describe("simple mode preset", () => {
     expect(settings.musicSource).toBe("library");
     expect(settings.musicTrackId).toBeTruthy();
     expect(getLibraryTrack(settings.musicTrackId)).not.toBeNull();
-    expect(settings.musicFadeInMs).toBe(800);
-    expect(settings.musicFadeOutMs).toBe(1200);
+    expect(settings.musicFadeInMs).toBe(1000);
+    expect(settings.musicFadeOutMs).toBe(1600);
   });
 
   it("randomizes library tracks and skips the previous track when possible", () => {

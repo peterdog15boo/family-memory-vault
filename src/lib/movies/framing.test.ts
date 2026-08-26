@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   baseCoverSize,
+  capZoomToAvoidUpscale,
   capZoomToFitSubject,
   centerFraming,
   computeFramingFromFaces,
@@ -9,6 +10,7 @@ import {
   getKenBurnsFraming,
   placeCropAroundFocal,
   resolveMaxZoomFromSubjectBounds,
+  sourceCoverScale,
   sourceCropAtScale,
 } from "@/lib/movies/framing";
 import {
@@ -248,9 +250,10 @@ describe("face-aware framing", () => {
     const framing = computeFramingFromFaces([
       { x: 0.7, y: 0.2, width: 0.18, height: 0.24 },
     ]);
+    // Source must be ≥ output cover window so zoom is not killed for sharpness.
     const plan = getKenBurnsFraming({
-      sourceWidth: 1600,
-      sourceHeight: 1200,
+      sourceWidth: 3200,
+      sourceHeight: 2400,
       targetWidth: 1920,
       targetHeight: 1080,
       direction: "in",
@@ -261,7 +264,7 @@ describe("face-aware framing", () => {
     expect(plan.end.scale).toBeGreaterThan(1);
     // End crop (tighter) should still be biased toward the right-side face.
     const endCx = plan.end.left + plan.end.width / 2;
-    expect(endCx / 1600).toBeGreaterThan(0.55);
+    expect(endCx / 3200).toBeGreaterThan(0.55);
   });
 
   it("base cover respects target aspect", () => {
@@ -482,5 +485,31 @@ describe("Ken Burns timeline with framing", () => {
     expect(plan.zoomAmount).toBeLessThanOrEqual(1.1);
     expect(plan.endScale).toBeLessThanOrEqual(2.1);
     expect(plan.end.width).toBeGreaterThanOrEqual(1920 - 1);
+  });
+
+  it("kills zoom when the source must already upscale to fill", () => {
+    expect(sourceCoverScale(800, 600, 1920, 1080)).toBeLessThan(1);
+    expect(
+      capZoomToAvoidUpscale({
+        zoomAmount: 0.2,
+        sourceWidth: 800,
+        sourceHeight: 600,
+        targetWidth: 1920,
+        targetHeight: 1080,
+      }),
+    ).toBe(0);
+
+    const plan = getKenBurnsFraming({
+      sourceWidth: 800,
+      sourceHeight: 600,
+      targetWidth: 1920,
+      targetHeight: 1080,
+      direction: "in",
+      zoomAmount: 0.2,
+      framing: centerFraming(),
+    });
+    expect(plan.zoomAmount).toBe(0);
+    expect(plan.startScale).toBe(1);
+    expect(plan.endScale).toBe(1);
   });
 });

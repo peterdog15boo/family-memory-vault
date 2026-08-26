@@ -52,6 +52,7 @@ export {
   hashRenderPlan,
   pickMovieStillKey,
   pickMovieVideoKey,
+  movieSourceMaxLongEdge,
   type GenerateMovieInput,
   type GenerateMovieResult,
   type MovieClip,
@@ -130,12 +131,27 @@ export {
   scaleThemeFontSize,
   buildEncodeVideoFilter,
   buildLibx264EncodeArgs,
+  buildLibx264IntermediateEncodeArgs,
   appendVideoEdgeFades,
   MOVIE_OPEN_FADE_MS,
   MOVIE_CLOSE_FADE_MS,
   type MovieOutputSpec,
   type EncodeFitMode,
 } from "@/lib/movies/output";
+export {
+  planMovieSourceUpscale,
+  maybeUpscaleMovieSource,
+  MOVIE_UPSCALE_MIN_COVER_SCALE,
+  type MovieUpscalePlan,
+  type MovieUpscaleResult,
+} from "@/lib/movies/upscale";
+export {
+  adaptPortraitSourceForLandscape,
+  decidePortraitLandscapeAdaptation,
+  registerPortraitOutpaintProvider,
+  type PortraitOutpaintProvider,
+  type AdaptPortraitResult,
+} from "@/lib/movies/portrait-landscape";
 export {
   shouldApplyMovieWatermark,
   MOVIE_WATERMARK_LABEL,

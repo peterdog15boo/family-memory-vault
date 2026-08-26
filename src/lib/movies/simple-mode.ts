@@ -132,8 +132,8 @@ export function buildSimpleModeSettings(options?: {
     musicTrackId: trackId,
     musicSuggestionId: trackId,
     musicVolume: 0.5,
-    musicFadeInMs: 800,
-    musicFadeOutMs: 1200,
+    musicFadeInMs: 1000,
+    musicFadeOutMs: 1600,
     musicLoop: true,
   };
 
@@ -145,7 +145,7 @@ export function buildSimpleModeSettings(options?: {
       aspectRatio: "16:9",
       qualityMode: "standard",
       transition: "soft_dissolve",
-      transitionDurationMs: 900,
+      transitionDurationMs: 1100,
       zoomIntensity: "medium",
       zoomDirection: "alternate",
       colorFilter: "warm_family",
@@ -163,7 +163,7 @@ export function buildSimpleModeSettings(options?: {
     targetDurationSeconds: preset.targetDurationSeconds,
     photoDurationMs: preset.photoDurationMs,
     transition: preset.transition,
-    transitionDurationMs: 900,
+    transitionDurationMs: 1100,
     zoomIntensity: preset.zoomIntensity,
     zoomDirection: preset.zoomDirection,
     includeTitles: false,

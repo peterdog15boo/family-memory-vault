@@ -102,10 +102,13 @@ import {
   appendVideoEdgeFades,
   buildEncodeVideoFilter,
   buildLibx264EncodeArgs,
+  buildLibx264IntermediateEncodeArgs,
   resolveMovieOutputSpec,
   scaleThemeFontSize,
   type MovieOutputSpec,
 } from "@/lib/movies/output";
+import { maybeUpscaleMovieSource } from "@/lib/movies/upscale";
+import { adaptPortraitSourceForLandscape } from "@/lib/movies/portrait-landscape";
 import { composeMoviePoster } from "@/lib/movies/poster";
 import { resolveMovieMusic } from "@/lib/movies/music/resolve";
 import {
@@ -769,49 +772,50 @@ async function selectAndOrderClips(
   return clips;
 }
 
-function pickVideoKey(row: Media): string | null {
-  const key = row.originalKey?.trim() || null;
-  if (!key) return null;
-  if (isQuarantineKey(key)) return null;
-  if (
-    key.startsWith(R2_PREFIXES.quarantine) ||
-    key.startsWith(R2_PREFIXES.temp)
-  ) {
-    return null;
+function isUsableMovieObjectKey(key: string | null | undefined): key is string {
+  const k = key?.trim() || "";
+  if (!k) return false;
+  if (isQuarantineKey(k)) return false;
+  if (k.startsWith(R2_PREFIXES.quarantine) || k.startsWith(R2_PREFIXES.temp)) {
+    return false;
   }
-  return key;
+  return true;
 }
 
+function pickVideoKey(row: Media): string | null {
+  // Always the camera/upload original — never a ≤1080p playback derivative.
+  return isUsableMovieObjectKey(row.originalKey) ? row.originalKey.trim() : null;
+}
+
+/**
+ * Highest-res still for Ken Burns frames.
+ * Priority: original → processed (display) → thumbnail (last resort only).
+ * Never prefer grid thumbs when a full-res or display JPEG exists.
+ */
 function pickStillKey(row: Media): string | null {
-  // Movies need the highest-res still available. Never use grid thumbnailKey
-  // (typically ~480px) — that forces muddy Ken Burns upscales.
-  // Prefer originalKey (true camera resolution) over processedKey (often a
-  // 2048px display JPEG for lightbox).
   if (isMovieVideoMedia(row)) {
-    // Stills-only helper: processed poster frame when present (not used for
-    // full video playback — see pickVideoKey).
-    const key = row.processedKey?.trim() || null;
-    if (!key) return null;
-    if (isQuarantineKey(key)) return null;
-    if (
-      key.startsWith(R2_PREFIXES.quarantine) ||
-      key.startsWith(R2_PREFIXES.temp)
-    ) {
-      return null;
-    }
+    // Stills-only helper (tests / poster paths) — not used for video clip playback.
+    const key = isUsableMovieObjectKey(row.processedKey)
+      ? row.processedKey.trim()
+      : null;
     return key;
   }
 
-  const key = row.originalKey?.trim() || row.processedKey?.trim() || null;
-  if (!key) return null;
-  if (isQuarantineKey(key)) return null;
-  if (
-    key.startsWith(R2_PREFIXES.quarantine) ||
-    key.startsWith(R2_PREFIXES.temp)
-  ) {
-    return null;
+  if (isUsableMovieObjectKey(row.originalKey)) {
+    return row.originalKey.trim();
   }
-  return key;
+  if (isUsableMovieObjectKey(row.processedKey)) {
+    return row.processedKey.trim();
+  }
+  // Absolute last resort — ~480px grid thumbs look soft under Ken Burns.
+  if (isUsableMovieObjectKey(row.thumbnailKey)) {
+    console.warn("[movies] Falling back to thumbnailKey for still (no original/processed)", {
+      mediaId: row.id,
+      thumbnailKey: row.thumbnailKey,
+    });
+    return row.thumbnailKey.trim();
+  }
+  return null;
 }
 
 /** Exported for unit tests — same rules as photo clip selection. */
@@ -910,26 +914,35 @@ export function buildRenderPlan(
 /* Frame rendering (sharp)                                                    */
 /* -------------------------------------------------------------------------- */
 
-function movieSourceMaxLongEdge(input: {
+/**
+ * Soft ceiling on oriented source long-edge before Ken Burns.
+ * Motion crops extract a window from the full image — early downscale is the
+ * main softness source for phone photos. Only shrink pathological giants.
+ */
+export function movieSourceMaxLongEdge(input: {
   fast: boolean;
   outputWidth: number;
   outputHeight: number;
 }): number {
   const fromEnv = Number(process.env.MOVIE_SOURCE_MAX_LONG_EDGE ?? 0);
   if (Number.isFinite(fromEnv) && fromEnv > 0) return fromEnv;
-  // Fast path stays lean for small workers.
-  if (input.fast) return 1280;
-  // Keep enough pixels for cover crop + Ken Burns zoom without upscaling.
-  // Portrait→landscape fill crops a short edge; 2× output long-edge preserves
-  // sharpness through medium zoom (~1.15) on phone photos.
+  // Fast draft path: keep workers lean but above 720p cover+zoom needs.
+  if (input.fast) return 2560;
   const outLong = Math.max(input.outputWidth, input.outputHeight);
-  return Math.max(3840, Math.ceil(outLong * 2.25));
+  // ≥4× output long-edge headroom for cover crop + medium Ken Burns zoom.
+  // Hard ceiling only for huge panoramas / 100MP files (Railway RAM).
+  return Math.min(12288, Math.max(8192, Math.ceil(outLong * 4)));
 }
 
-/** Decode, orient, and cap pixel volume before Ken Burns (Railway RAM). */
+/** Decode + auto-orient. Upscale small stills; avoid pre-motion downscale unless over ceiling. */
 async function prepareOrientedPhotoSource(
   body: Buffer,
-  opts: { fast: boolean; outputWidth: number; outputHeight: number },
+  opts: {
+    fast: boolean;
+    outputWidth: number;
+    outputHeight: number;
+    mediaId?: string;
+  },
 ): Promise<{ oriented: Buffer; sourceWidth: number; sourceHeight: number }> {
   let oriented = await sharp(body).rotate().toBuffer();
   let meta = await sharp(oriented).metadata();
@@ -955,9 +968,25 @@ async function prepareOrientedPhotoSource(
       maxLongEdge: maxLong,
       sourceWidth,
       sourceHeight,
+      reason: "pathological_source_ceiling",
     });
   }
-  return { oriented, sourceWidth, sourceHeight };
+
+  // Enlarge soft/small sources before Ken Burns so crops are not muddy.
+  // Failures fall back to the oriented original — never abort the movie.
+  const upscaled = await maybeUpscaleMovieSource({
+    oriented,
+    sourceWidth,
+    sourceHeight,
+    outputWidth: opts.outputWidth,
+    outputHeight: opts.outputHeight,
+    mediaId: opts.mediaId,
+  });
+  return {
+    oriented: upscaled.buffer,
+    sourceWidth: upscaled.width,
+    sourceHeight: upscaled.height,
+  };
 }
 
 /**
@@ -1072,11 +1101,12 @@ export async function renderMovieAssets(
     }
 
     // Decode + auto-orient once; reuse for all Ken Burns samples.
-    const { oriented, sourceWidth, sourceHeight } =
+    let { oriented, sourceWidth, sourceHeight } =
       await prepareOrientedPhotoSource(Buffer.from(body), {
         fast: plan.fast,
         outputWidth: plan.width,
         outputHeight: plan.height,
+        mediaId: clip.mediaId,
       });
 
     // Fail-closed face framing: if plan has no faces, re-fetch before render
@@ -1108,6 +1138,30 @@ export async function renderMovieAssets(
       }
     }
 
+    // Portrait → landscape: extend canvas when cover crop would clip faces;
+    // otherwise keep smart face-aware fill-crop (never letterbox).
+    try {
+      const adapted = await adaptPortraitSourceForLandscape({
+        oriented,
+        sourceWidth,
+        sourceHeight,
+        outputWidth: plan.width,
+        outputHeight: framingTargetHeight,
+        framing,
+        mediaId: clip.mediaId,
+      });
+      oriented = adapted.buffer;
+      sourceWidth = adapted.width;
+      sourceHeight = adapted.height;
+      framing = adapted.framing;
+      clip.framing = framing;
+    } catch (err) {
+      console.warn("[movies.portrait] Adapt skipped", {
+        mediaId: clip.mediaId,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     // Extend Ken Burns across lead/trail crossfade windows so zoom never
     // freezes during a dissolve (outgoing finishes; incoming starts).
     // Only dissolve into the *immediate* next photo — never look past a video,
@@ -1127,12 +1181,12 @@ export async function renderMovieAssets(
       trailTransitionMs: trailMs,
     });
 
-    // Sample density ≥ encode fps (motion.ts may oversample gentle zooms).
-    // Fast mode stays near encode fps — Railway 1GB OOMs at 2× oversample.
+    // Sample density ≥ encode fps (motion.ts oversamples gentle zooms).
+    // Ceiling must not clip below 1 unique crop per output frame.
     const encodeFps = Math.max(1, plan.output.fps);
     const motionSeconds = Math.max(0.001, motionDurationMs / 1000);
-    const motionFps = plan.fast ? Math.min(encodeFps, 15) : encodeFps;
-    const oversample = plan.fast ? 1 : 2;
+    const motionFps = encodeFps;
+    const oversample = plan.fast ? 1.05 : 3;
     const zoomPlan = buildKenBurnsTimeline({
       durationMs: motionDurationMs,
       photoIndex: photoIndex,
@@ -1270,10 +1324,11 @@ export async function renderMovieAssets(
           fast: plan.fast,
           outputWidth: plan.width,
           outputHeight: plan.height,
+          mediaId: nextClip.mediaId,
         });
-        const nextOriented = preparedNext.oriented;
-        const nextSourceWidth = preparedNext.sourceWidth;
-        const nextSourceHeight = preparedNext.sourceHeight;
+        let nextOriented = preparedNext.oriented;
+        let nextSourceWidth = preparedNext.sourceWidth;
+        let nextSourceHeight = preparedNext.sourceHeight;
         let transitionFraming = nextClip.framing ?? centerFraming();
         if (
           transitionFraming.source !== "faces" ||
@@ -1302,6 +1357,25 @@ export async function renderMovieAssets(
           } catch {
             /* keep planned framing */
           }
+        }
+
+        try {
+          const adaptedNext = await adaptPortraitSourceForLandscape({
+            oriented: nextOriented,
+            sourceWidth: nextSourceWidth,
+            sourceHeight: nextSourceHeight,
+            outputWidth: plan.width,
+            outputHeight: framingTargetHeight,
+            framing: transitionFraming,
+            mediaId: nextClip.mediaId,
+          });
+          nextOriented = adaptedNext.buffer;
+          nextSourceWidth = adaptedNext.width;
+          nextSourceHeight = adaptedNext.height;
+          transitionFraming = adaptedNext.framing;
+          nextClip.framing = transitionFraming;
+        } catch {
+          /* smart cover crop fallback */
         }
 
         const nextClipIdx = plan.clips.indexOf(nextClip);
@@ -1529,6 +1603,7 @@ async function prepareVideoSegment(input: {
   console.info("[movies] Video fill-frame normalize", {
     mediaId: clip.mediaId,
     fit: "cover",
+    noLetterbox: true,
     framingSource: framing.source,
     focalX: Number(framing.focalPointX.toFixed(4)),
     focalY: Number(framing.focalPointY.toFixed(4)),
@@ -1718,6 +1793,7 @@ async function renderPhotoFrame(
       opts.sourceHeight,
       width,
       contentHeight,
+      { supersample: !plan.fast },
     );
   } else {
     // Legacy cover + pan only when no face framing and no source crop.
@@ -1728,16 +1804,21 @@ async function renderPhotoFrame(
       width,
       height: contentHeight,
     });
-    pipeline = sharp(orientedSource).resize(legacy.frameW, legacy.frameH, {
+    const frameW = Math.max(width, Math.round(legacy.frameW));
+    const frameH = Math.max(contentHeight, Math.round(legacy.frameH));
+    pipeline = sharp(orientedSource).resize(frameW, frameH, {
       fit: "cover",
       position: "centre",
       kernel: "lanczos3",
+      // Fill-frame (no letterbox); small sources still upscale to cover.
       withoutEnlargement: false,
     });
-    if (legacy.frameW !== width || legacy.frameH !== contentHeight) {
+    if (frameW !== width || frameH !== contentHeight) {
+      const maxLeft = Math.max(0, frameW - width);
+      const maxTop = Math.max(0, frameH - contentHeight);
       pipeline = pipeline.extract({
-        left: legacy.left,
-        top: legacy.top,
+        left: Math.min(maxLeft, Math.max(0, Math.round(legacy.left))),
+        top: Math.min(maxTop, Math.max(0, Math.round(legacy.top))),
         width,
         height: contentHeight,
       });
@@ -1873,8 +1954,10 @@ async function assembleTimelineMp4(input: {
   const { plan, assets, workDir, ffmpegPath, outputPath } = input;
   const { fps } = plan.output;
   const durationSeconds = timelineDurationSeconds(assets);
-  // Ken Burns JPEGs are already WxH — exact scale avoids pad/letterbox artifacts.
-  const baseVf = buildEncodeVideoFilter(plan.width, plan.height, fps, "exact");
+  // Ken Burns JPEGs are already WxH — skip redundant scale= resampling.
+  const baseVf = buildEncodeVideoFilter(plan.width, plan.height, fps, "exact", {
+    assumeExactSize: true,
+  });
   // Open/close visual fades only on the final delivery encode (not mid segments).
   const finalVf = appendVideoEdgeFades(baseVf, durationSeconds);
 
@@ -1937,7 +2020,8 @@ async function assembleTimelineMp4(input: {
       concatPath,
       "-vf",
       baseVf,
-      ...buildLibx264EncodeArgs(plan.output),
+      // Near-lossless intermediate — final delivery encode applies fades/mix.
+      ...buildLibx264IntermediateEncodeArgs(plan.output),
       segPath,
     ]);
     segmentPaths.push(segPath);
@@ -2369,8 +2453,9 @@ export type MovieVideoEncoder = (
 
 /**
  * Render a (possibly fractional) source crop to an exact output size.
- * Sharp extract is integer-only; covering extract + single lanczos resize
- * preserves sub-pixel alignment without a soft double-upsample pass.
+ * Sharp extract is integer-only; we cover the float window, lanczos-scale,
+ * then crop with sub-pixel offsets. Standard/ultra paths supersample 2× then
+ * lanczos-downsample so slow zooms do not flicker from 1px extract snaps.
  */
 function extractSourceCropSubpixel(
   image: Sharp,
@@ -2379,6 +2464,7 @@ function extractSourceCropSubpixel(
   sourceHeight: number,
   outWidth: number,
   outHeight: number,
+  options?: { supersample?: boolean },
 ): Sharp {
   const clamped = clampSourceCropFloat({
     left: crop.left,
@@ -2394,6 +2480,9 @@ function extractSourceCropSubpixel(
   const widthF = Math.max(1, clamped.width);
   const heightF = Math.max(1, clamped.height);
 
+  const renderW = options?.supersample ? outWidth * 2 : outWidth;
+  const renderH = options?.supersample ? outHeight * 2 : outHeight;
+
   const left = Math.floor(leftF);
   const top = Math.floor(topF);
   const right = Math.min(sourceWidth, Math.ceil(leftF + widthF));
@@ -2401,18 +2490,26 @@ function extractSourceCropSubpixel(
   const extractW = Math.max(1, right - left);
   const extractH = Math.max(1, bottom - top);
 
-  // Scale so the fractional crop window maps exactly to the output size, then
-  // extract the aligned region — one lanczos resize (sharper than 2×→down).
-  const scaleX = outWidth / widthF;
-  const scaleY = outHeight / heightF;
-  const scaledW = Math.max(outWidth, Math.ceil(extractW * scaleX));
-  const scaledH = Math.max(outHeight, Math.ceil(extractH * scaleY));
-  const offsetX = Math.round((leftF - left) * scaleX);
-  const offsetY = Math.round((topF - top) * scaleY);
-  const cropLeft = Math.min(Math.max(0, offsetX), Math.max(0, scaledW - outWidth));
-  const cropTop = Math.min(Math.max(0, offsetY), Math.max(0, scaledH - outHeight));
+  // Scale so the fractional crop window maps exactly to the render size, then
+  // extract the aligned region — lanczos3 throughout.
+  const scaleX = renderW / widthF;
+  const scaleY = renderH / heightF;
+  const scaledW = Math.max(renderW, Math.ceil(extractW * scaleX));
+  const scaledH = Math.max(renderH, Math.ceil(extractH * scaleY));
+  // Keep fractional phase with floor (consistent direction) to avoid
+  // round-trip flicker between adjacent Ken Burns samples.
+  const offsetX = Math.floor((leftF - left) * scaleX + 1e-9);
+  const offsetY = Math.floor((topF - top) * scaleY + 1e-9);
+  const cropLeft = Math.min(
+    Math.max(0, offsetX),
+    Math.max(0, scaledW - renderW),
+  );
+  const cropTop = Math.min(
+    Math.max(0, offsetY),
+    Math.max(0, scaledH - renderH),
+  );
 
-  return image
+  let pipeline = image
     .extract({ left, top, width: extractW, height: extractH })
     .resize(scaledW, scaledH, {
       kernel: "lanczos3",
@@ -2421,9 +2518,18 @@ function extractSourceCropSubpixel(
     .extract({
       left: cropLeft,
       top: cropTop,
-      width: outWidth,
-      height: outHeight,
+      width: renderW,
+      height: renderH,
     });
+
+  if (options?.supersample) {
+    pipeline = pipeline.resize(outWidth, outHeight, {
+      kernel: "lanczos3",
+      fit: "fill",
+    });
+  }
+
+  return pipeline;
 }
 
 /** Stable content fingerprint for cache / idempotent re-renders. */

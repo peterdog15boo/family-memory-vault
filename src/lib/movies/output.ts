@@ -123,41 +123,42 @@ function encodeProfileForQuality(quality: QualityMode): Omit<
   switch (quality) {
     case "fast":
       return {
-        x264Preset: "veryfast",
-        crf: 23,
-        profile: "main",
+        x264Preset: "faster",
+        // Still a draft path, but CRF 23 was visibly soft on social exports.
+        crf: 18,
+        profile: "high",
         level: "4.0",
-        // Lower fps + JPEG quality keeps Railway 1GB workers under the OOM line.
-        fps: 24,
-        frameJpegQuality: 88,
-        maxrate: "4M",
-        bufsize: "8M",
+        // Match motion sampling to delivery fps (was 24fps encode / 15fps crops).
+        fps: 30,
+        frameJpegQuality: 95,
+        maxrate: "8M",
+        bufsize: "16M",
       };
     case "ultra":
       // Premium 4K path — slower encode, higher bit budget.
       return {
         x264Preset: "slow",
-        crf: 15,
+        crf: 14,
         profile: "high",
         level: "5.1",
         fps: 30,
         frameJpegQuality: 99,
-        maxrate: "45M",
-        bufsize: "90M",
+        maxrate: "48M",
+        bufsize: "96M",
       };
     case "standard":
     default:
-      // Share-ready 1080p: favor visual quality over encode speed.
+      // Share-ready 1080p: social-presentable sharpness over encode speed.
       return {
         x264Preset: "slow",
-        crf: 14,
+        crf: 11,
         profile: "high",
         level: "4.1",
         fps: 30,
         // Near-lossless intermediates — JPEG→H.264 is already one generation.
         frameJpegQuality: 99,
-        maxrate: "16M",
-        bufsize: "32M",
+        maxrate: "24M",
+        bufsize: "48M",
       };
   }
 }
@@ -197,6 +198,11 @@ export function buildEncodeVideoFilter(
     /** Normalized focal point for cover crops (faces / smart center). */
     focalX?: number;
     focalY?: number;
+    /**
+     * When fit is `exact` and frames are already WxH, skip scale= to avoid a
+     * redundant lanczos resample before encode.
+     */
+    assumeExactSize?: boolean;
   },
 ): string {
   const w = Math.max(2, Math.round(width / 2) * 2);
@@ -206,7 +212,9 @@ export function buildEncodeVideoFilter(
 
   let geometry: string[];
   if (fit === "exact") {
-    geometry = [`scale=${w}:${h}:flags=lanczos`];
+    geometry = options?.assumeExactSize
+      ? []
+      : [`scale=${w}:${h}:flags=lanczos`];
   } else if (fit === "contain") {
     geometry = [
       `scale=${w}:${h}:force_original_aspect_ratio=decrease:flags=lanczos`,
@@ -230,9 +238,9 @@ export function buildEncodeVideoFilter(
   return base;
 }
 
-/** Short professional open/close visual fades (not a title card). */
-export const MOVIE_OPEN_FADE_MS = 700;
-export const MOVIE_CLOSE_FADE_MS = 900;
+/** Professional open/close visual fades (not a title card). */
+export const MOVIE_OPEN_FADE_MS = 900;
+export const MOVIE_CLOSE_FADE_MS = 1200;
 
 /**
  * Append fade-in at t=0 and fade-out at the end of the timeline.
@@ -302,4 +310,30 @@ export function buildLibx264EncodeArgs(
     "-movflags",
     "+faststart",
   ];
+}
+
+/**
+ * Near-lossless intermediate encode for photo-run segments that will be
+ * concatenated and re-encoded once more (edge fades / mix). Keeps generation
+ * loss off the final social delivery.
+ */
+export function buildLibx264IntermediateEncodeArgs(
+  spec: Pick<
+    MovieOutputSpec,
+    "x264Preset" | "crf" | "profile" | "level" | "maxrate" | "bufsize"
+  >,
+): string[] {
+  const intermediateCrf = Math.max(10, Math.min(spec.crf, spec.crf - 4));
+  const preset =
+    spec.x264Preset === "veryfast" || spec.x264Preset === "faster"
+      ? "faster"
+      : spec.x264Preset;
+  return buildLibx264EncodeArgs({
+    ...spec,
+    crf: intermediateCrf,
+    x264Preset: preset,
+    // Headroom for the second pass — VBV still applies on the final encode.
+    maxrate: spec.maxrate,
+    bufsize: spec.bufsize,
+  });
 }

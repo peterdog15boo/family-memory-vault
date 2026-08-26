@@ -1,6 +1,7 @@
 /**
  * First Family Movie — start a Simple Mode render from ritual photos.
- * Fast-path: shorter film, capped clip count, allowFastQuality encode.
+ * Snappy via shorter film + capped clip count; encode quality matches
+ * share-ready Memory movies (1080p standard).
  */
 
 import { and, eq, inArray } from "drizzle-orm";
@@ -35,7 +36,8 @@ export function firstFamilyMovieDurationSettings(
 
 /**
  * Lightweight Simple Mode settings for the first-session ritual.
- * Still polished (soft dissolves + face-aware motion) with a faster encode.
+ * Share-ready 1080p encode (same quality target as Memory movies) with
+ * soft dissolves + face-aware motion; duration stays snappy via clip caps.
  */
 export function buildFirstFamilyMovieSettings(
   photoCount: number,
@@ -46,8 +48,8 @@ export function buildFirstFamilyMovieSettings(
     ...duration,
     includeTitles: false,
     posterStyle: "photo",
-    qualityMode: "fast",
-    transitionDurationMs: 700,
+    qualityMode: "standard",
+    transitionDurationMs: 1100,
     transition: "soft_dissolve",
   };
 }
@@ -152,7 +154,6 @@ export async function startFirstFamilyMovieCreate(input: {
     autoTitle: true,
     style: "simple",
     settings,
-    allowFastQuality: true,
   });
 
   const movie = await serializeMovie(created, { includeUrls: false });
