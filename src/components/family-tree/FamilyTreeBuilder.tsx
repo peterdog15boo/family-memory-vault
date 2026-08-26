@@ -13,6 +13,7 @@ import type {
   SerializedFamilyTreeGraph,
   SerializedFamilyTreePerson,
 } from "@/lib/family-tree/serialize";
+import { preferredExistingCoParentId } from "@/lib/family-tree/co-parents";
 import type { FamilyTreeRelationType } from "@/lib/db/schema";
 import { useOverlayA11y } from "@/hooks/useOverlayA11y";
 
@@ -196,6 +197,19 @@ export function FamilyTreeBuilder({
 
   function addParentForChild(childId: string) {
     runMutation(async () => {
+      // Prefer linking an existing spouse of a current parent over inventing
+      // a new "Parent" placeholder beside a married couple.
+      const spouseId = preferredExistingCoParentId(
+        tree.relationships,
+        childId,
+      );
+      if (spouseId) {
+        await createRel(spouseId, childId, "parent_of");
+        setSelectedNodeId(spouseId);
+        await refreshAvailable();
+        return;
+      }
+
       const created = await createNode({
         label: "Parent",
         link: {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   computeFamilyTreeLayout,
+  TREE_LAYOUT,
   treeNodeInitials,
 } from "@/lib/family-tree/layout";
 
@@ -34,6 +35,38 @@ describe("computeFamilyTreeLayout", () => {
     const b = layout.nodes.find((n) => n.id === "b")!;
     expect(a.y).toBe(b.y);
     expect(Math.abs(a.x - b.x)).toBeLessThan(140);
+  });
+
+  it("places a child below and between both parents of a couple", () => {
+    const layout = computeFamilyTreeLayout(
+      [
+        { id: "mom", label: "Mom" },
+        { id: "dad", label: "Dad" },
+        { id: "kid", label: "Kid" },
+      ],
+      [
+        { fromNodeId: "dad", toNodeId: "mom", type: "partner_of" },
+        { fromNodeId: "mom", toNodeId: "kid", type: "parent_of" },
+        { fromNodeId: "dad", toNodeId: "kid", type: "parent_of" },
+      ],
+    );
+
+    const mom = layout.nodes.find((n) => n.id === "mom")!;
+    const dad = layout.nodes.find((n) => n.id === "dad")!;
+    const kid = layout.nodes.find((n) => n.id === "kid")!;
+    expect(kid.y).toBeGreaterThan(mom.y);
+    expect(kid.y).toBeGreaterThan(dad.y);
+
+    const coupleMid =
+      (Math.min(mom.x, dad.x) +
+        Math.max(mom.x, dad.x) +
+        TREE_LAYOUT.nodeWidth) /
+      2;
+    const kidMid = kid.x + TREE_LAYOUT.nodeWidth / 2;
+    expect(Math.abs(kidMid - coupleMid)).toBeLessThan(TREE_LAYOUT.nodeWidth);
+
+    const parentEdges = layout.edges.filter((e) => e.type === "parent_of");
+    expect(parentEdges).toHaveLength(2);
   });
 
   it("aligns partners even when only one has a parent, and draws every edge", () => {

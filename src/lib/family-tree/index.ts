@@ -29,6 +29,7 @@ import {
   isScaffoldTempKey,
   planFamilyTreeScaffold,
 } from "@/lib/family-tree/scaffold";
+import { missingCoParentSpouseIds } from "@/lib/family-tree/co-parents";
 import {
   FAMILY_TREE_CIRCULAR_RELATIONSHIP_MESSAGE,
   validateFamilyTreeRelationship,
@@ -315,6 +316,11 @@ export type CreateFamilyTreeRelationshipInput = {
   type: FamilyTreeRelationType | string;
   /** When false, skip auto-placeholders (used while applying a scaffold). */
   scaffold?: boolean;
+  /**
+   * When false, do not also link the parent's existing spouses as co-parents.
+   * Defaults to true for parent_of edges.
+   */
+  linkSpousesAsCoParents?: boolean;
 };
 
 export type FamilyTreeRelationshipScaffoldResult = {
@@ -467,6 +473,8 @@ export async function createFamilyTreeRelationshipWithScaffold(
         toNodeId: toId,
         type: planned.type,
         scaffold: false,
+        // Scaffold plans already list every parent link; don't auto-expand.
+        linkSpousesAsCoParents: false,
       });
       createdRelationshipIds.push(bridge.relationship.id);
     }
@@ -488,16 +496,85 @@ export async function createFamilyTreeRelationshipWithScaffold(
     type: input.type,
   });
 
+  const coParentIds: string[] = [];
+  if (
+    input.type === "parent_of" &&
+    input.linkSpousesAsCoParents !== false
+  ) {
+    const linked = await linkExistingSpousesAsCoParents({
+      userId: input.userId,
+      parentNodeId: endpoints.fromNodeId,
+      childNodeId: endpoints.toNodeId,
+    });
+    coParentIds.push(...linked);
+  }
+
   return {
     relationship,
     scaffold: {
       message: scaffoldMessage,
       createdNodeIds,
-      createdRelationshipIds,
+      createdRelationshipIds: [...createdRelationshipIds, ...coParentIds],
       undoNodeIds: createdNodeIds,
-      undoRelationshipIds: [relationship.id, ...createdRelationshipIds],
+      undoRelationshipIds: [
+        relationship.id,
+        ...createdRelationshipIds,
+        ...coParentIds,
+      ],
     },
   };
+}
+
+/**
+ * When Parent A gains a child and already has a spouse, also create
+ * parent_of links from that spouse → child so the kid sits under the couple.
+ */
+async function linkExistingSpousesAsCoParents(input: {
+  userId: string;
+  parentNodeId: string;
+  childNodeId: string;
+}): Promise<string[]> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      fromNodeId: familyTreeRelationships.fromNodeId,
+      toNodeId: familyTreeRelationships.toNodeId,
+      type: familyTreeRelationships.type,
+    })
+    .from(familyTreeRelationships)
+    .where(eq(familyTreeRelationships.userId, input.userId));
+
+  const spouseIds = missingCoParentSpouseIds(
+    rows,
+    input.parentNodeId,
+    input.childNodeId,
+  );
+  if (spouseIds.length === 0) return [];
+
+  const createdIds: string[] = [];
+  for (const spouseId of spouseIds) {
+    try {
+      const bridge = await createFamilyTreeRelationshipWithScaffold({
+        userId: input.userId,
+        fromNodeId: spouseId,
+        toNodeId: input.childNodeId,
+        type: "parent_of",
+        scaffold: false,
+        linkSpousesAsCoParents: false,
+      });
+      createdIds.push(bridge.relationship.id);
+    } catch (error) {
+      // Skip invalid/duplicate co-parent links; the primary parent link stands.
+      if (
+        error instanceof FamilyTreeError &&
+        (error.code === "conflict" || error.code === "validation")
+      ) {
+        continue;
+      }
+      throw error;
+    }
+  }
+  return createdIds;
 }
 
 async function insertFamilyTreeRelationship(input: {
