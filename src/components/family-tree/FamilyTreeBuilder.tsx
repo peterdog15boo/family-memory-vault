@@ -270,10 +270,24 @@ export function FamilyTreeBuilder({
     fromNodeId: string,
     toNodeId: string,
     type: FamilyTreeRelationType,
-  ) {
-    runMutation(async () => {
-      await createRel(fromNodeId, toNodeId, type);
-    });
+  ): Promise<void> {
+    return (async () => {
+      if (!canEdit) {
+        const msg = "You can view this tree but not edit it.";
+        setError(msg);
+        throw new Error(msg);
+      }
+      setError(null);
+      try {
+        await createRel(fromNodeId, toNodeId, type);
+        setSelectedNodeId(null);
+      } catch (err) {
+        const msg =
+          err instanceof Error ? err.message : "Could not save that connection.";
+        setError(msg);
+        throw err instanceof Error ? err : new Error(msg);
+      }
+    })();
   }
 
   function undoScaffold() {
@@ -443,7 +457,9 @@ export function FamilyTreeBuilder({
                 coverByPersonId={coverByPersonId}
                 selectedNodeId={null}
                 onSelectNode={() => undefined}
-                onAddParentSlot={() => undefined}
+                onAddParent={() => undefined}
+                onAddChild={() => undefined}
+                onAddPartner={() => undefined}
                 viewOnly
                 className="family-tree-viewport-shell--fill"
               />
@@ -499,7 +515,9 @@ export function FamilyTreeBuilder({
           coverByPersonId={coverByPersonId}
           selectedNodeId={null}
           onSelectNode={() => undefined}
-          onAddParentSlot={() => undefined}
+          onAddParent={() => undefined}
+          onAddChild={() => undefined}
+          onAddPartner={() => undefined}
           viewOnly
         />
         {viewOverlay}
@@ -538,7 +556,9 @@ export function FamilyTreeBuilder({
         coverByPersonId={coverByPersonId}
         selectedNodeId={selectedNodeId}
         onSelectNode={setSelectedNodeId}
-        onAddParentSlot={addParentForChild}
+        onAddParent={addParentForChild}
+        onAddChild={addChildForParent}
+        onAddPartner={addPartnerForNode}
       />
 
       {toolkit}

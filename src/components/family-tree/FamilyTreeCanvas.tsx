@@ -3,21 +3,19 @@
 import {
   useCallback,
   useEffect,
-  useId,
   useMemo,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,
 } from "react";
-import { Minus, Plus, RotateCcw } from "lucide-react";
+import { Baby, Heart, Minus, Plus, RotateCcw, UserPlus } from "lucide-react";
 import { PersonAvatar } from "@/components/people/PersonAvatar";
 import type { FamilyTreePersonCover } from "@/components/family-tree/types";
 import {
   computeFamilyTreeLayout,
   TREE_LAYOUT,
   treeNodeInitials,
-  type GhostParentSlot,
 } from "@/lib/family-tree/layout";
 import { isFamilyTreeRelationType } from "@/lib/family-tree/relations";
 import type { SerializedFamilyTreeGraph } from "@/lib/family-tree/serialize";
@@ -28,14 +26,16 @@ type Props = {
   coverByPersonId: Map<string, FamilyTreePersonCover>;
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
-  onAddParentSlot: (childId: string) => void;
-  /** Hide edit ghosts / selection chrome — pan/zoom only. */
+  onAddParent: (childId: string) => void;
+  onAddChild: (parentId: string) => void;
+  onAddPartner: (nodeId: string) => void;
+  /** Hide edit chrome — pan/zoom only. */
   viewOnly?: boolean;
   className?: string;
 };
 
-const MIN_ZOOM = 0.45;
-const MAX_ZOOM = 2.2;
+const MIN_ZOOM = 0.4;
+const MAX_ZOOM = 2.4;
 
 /**
  * Zoomable / pannable family tree with soft branch curves and circular nodes.
@@ -45,13 +45,20 @@ export function FamilyTreeCanvas({
   coverByPersonId,
   selectedNodeId,
   onSelectNode,
-  onAddParentSlot,
+  onAddParent,
+  onAddChild,
+  onAddPartner,
   viewOnly = false,
   className,
 }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.9);
   const [pan, setPan] = useState({ x: 24, y: 16 });
+  const scaleRef = useRef(scale);
+  const panRef = useRef(pan);
+  scaleRef.current = scale;
+  panRef.current = pan;
+
   const dragRef = useRef<{
     pointerId: number;
     startX: number;
@@ -60,7 +67,16 @@ export function FamilyTreeCanvas({
     originY: number;
     moved: boolean;
   } | null>(null);
+  const pinchRef = useRef<{
+    startDist: number;
+    startScale: number;
+    originPan: { x: number; y: number };
+    midX: number;
+    midY: number;
+  } | null>(null);
   const [isPanning, setIsPanning] = useState(false);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const hasFittedRef = useRef(false);
 
   const layout = useMemo(() => {
     const edges = tree.relationships
@@ -85,28 +101,117 @@ export function FamilyTreeCanvas({
     [tree.nodes],
   );
 
+  const clampZoom = useCallback((z: number) => {
+    return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
+  }, []);
+
+  const applyZoomAt = useCallback(
+    (nextScale: number, mx: number, my: number) => {
+      const prev = scaleRef.current;
+      const next = clampZoom(nextScale);
+      if (next === prev) return;
+      const ratio = next / prev;
+      const p = panRef.current;
+      setPan({
+        x: mx - (mx - p.x) * ratio,
+        y: my - (my - p.y) * ratio,
+      });
+      setScale(next);
+    },
+    [clampZoom],
+  );
+
   const fitToView = useCallback(() => {
     const el = viewportRef.current;
     if (!el) return;
     const vw = el.clientWidth;
     const vh = el.clientHeight;
     if (vw < 40 || vh < 40) return;
-    const sx = (vw - 32) / layout.width;
-    const sy = (vh - 32) / layout.height;
-    const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.min(sx, sy, 1)));
+    const sx = (vw - 40) / Math.max(layout.width, 1);
+    const sy = (vh - 40) / Math.max(layout.height, 1);
+    const next = clampZoom(Math.min(sx, sy, 1));
     setScale(next);
     setPan({
       x: (vw - layout.width * next) / 2,
       y: Math.max(12, (vh - layout.height * next) / 2),
     });
-  }, [layout.height, layout.width]);
+  }, [clampZoom, layout.height, layout.width]);
+
+  // Fit once when the canvas first has content — don't steal zoom on every edit.
+  useEffect(() => {
+    if (layout.nodes.length === 0) {
+      hasFittedRef.current = false;
+      return;
+    }
+    if (hasFittedRef.current) return;
+    fitToView();
+    hasFittedRef.current = true;
+  }, [fitToView, layout.nodes.length]);
 
   useEffect(() => {
-    fitToView();
-  }, [fitToView]);
+    setAddMenuOpen(false);
+  }, [selectedNodeId]);
 
-  function clampZoom(z: number) {
-    return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
+  // Pinch-zoom (mobile).
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+
+    function touchDist(a: Touch, b: Touch) {
+      return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    }
+
+    function onTouchStart(event: TouchEvent) {
+      const viewport = viewportRef.current;
+      if (!viewport) return;
+      if (event.touches.length !== 2) {
+        pinchRef.current = null;
+        return;
+      }
+      const a = event.touches[0]!;
+      const b = event.touches[1]!;
+      const rect = viewport.getBoundingClientRect();
+      pinchRef.current = {
+        startDist: Math.max(1, touchDist(a, b)),
+        startScale: scaleRef.current,
+        originPan: { ...panRef.current },
+        midX: (a.clientX + b.clientX) / 2 - rect.left,
+        midY: (a.clientY + b.clientY) / 2 - rect.top,
+      };
+    }
+
+    function onTouchMove(event: TouchEvent) {
+      const pinch = pinchRef.current;
+      if (!pinch || event.touches.length !== 2) return;
+      event.preventDefault();
+      const a = event.touches[0]!;
+      const b = event.touches[1]!;
+      const dist = Math.max(1, touchDist(a, b));
+      const next = pinch.startScale * (dist / pinch.startDist);
+      applyZoomAt(next, pinch.midX, pinch.midY);
+    }
+
+    function onTouchEnd() {
+      if (!pinchRef.current) return;
+    }
+
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd);
+    el.addEventListener("touchcancel", onTouchEnd);
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("touchcancel", onTouchEnd);
+    };
+  }, [applyZoomAt]);
+
+  function zoomBy(factor: number) {
+    const el = viewportRef.current;
+    const mx = el ? el.clientWidth / 2 : 0;
+    const my = el ? el.clientHeight / 2 : 0;
+    applyZoomAt(scaleRef.current * factor, mx, my);
   }
 
   function onWheel(event: ReactWheelEvent<HTMLDivElement>) {
@@ -117,19 +222,21 @@ export function FamilyTreeCanvas({
     const mx = event.clientX - rect.left;
     const my = event.clientY - rect.top;
     const delta = event.deltaY > 0 ? 0.9 : 1.1;
-    const next = clampZoom(scale * delta);
-    const ratio = next / scale;
-    setPan({
-      x: mx - (mx - pan.x) * ratio,
-      y: my - (my - pan.y) * ratio,
-    });
-    setScale(next);
+    applyZoomAt(scaleRef.current * delta, mx, my);
   }
 
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     if (event.button !== 0) return;
+    if (pinchRef.current) return;
     const target = event.target as HTMLElement;
-    if (target.closest("[data-tree-node], [data-tree-ghost], button")) return;
+    if (
+      target.closest(
+        "[data-tree-node], [data-tree-add], [data-tree-toolbar], button",
+      )
+    ) {
+      return;
+    }
+    setAddMenuOpen(false);
     dragRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
@@ -163,6 +270,12 @@ export function FamilyTreeCanvas({
     }
   }
 
+  const selectedPos = selectedNodeId
+    ? layout.nodes.find((n) => n.id === selectedNodeId)
+    : undefined;
+
+  const zoomPct = Math.round(scale * 100);
+
   return (
     <div
       className={cn(
@@ -171,11 +284,16 @@ export function FamilyTreeCanvas({
         className,
       )}
     >
-      <div className="family-tree-toolbar" role="toolbar" aria-label="Tree view">
+      <div
+        className="family-tree-toolbar"
+        data-tree-toolbar
+        role="toolbar"
+        aria-label="Tree zoom"
+      >
         <button
           type="button"
           className="family-tree-tool-btn"
-          onClick={() => setScale((z) => clampZoom(z * 1.15))}
+          onClick={() => zoomBy(1.15)}
           aria-label="Zoom in"
         >
           <Plus className="size-4" aria-hidden />
@@ -183,7 +301,7 @@ export function FamilyTreeCanvas({
         <button
           type="button"
           className="family-tree-tool-btn"
-          onClick={() => setScale((z) => clampZoom(z / 1.15))}
+          onClick={() => zoomBy(1 / 1.15)}
           aria-label="Zoom out"
         >
           <Minus className="size-4" aria-hidden />
@@ -192,14 +310,18 @@ export function FamilyTreeCanvas({
           type="button"
           className="family-tree-tool-btn"
           onClick={fitToView}
-          aria-label="Fit tree"
+          aria-label="Reset zoom"
+          title="Reset zoom"
         >
           <RotateCcw className="size-4" aria-hidden />
         </button>
+        <span className="family-tree-toolbar-pct" aria-live="polite">
+          {zoomPct}%
+        </span>
         <span className="family-tree-toolbar-hint">
           {viewOnly
-            ? "Drag to pan · scroll to zoom"
-            : "Drag to pan · scroll to zoom · tap a person to edit"}
+            ? "Drag to pan · pinch or scroll to zoom"
+            : "Drag to pan · pinch or scroll to zoom · tap a person"}
         </span>
       </div>
 
@@ -273,16 +395,6 @@ export function FamilyTreeCanvas({
             ))}
           </svg>
 
-          {!viewOnly
-            ? layout.ghosts.map((ghost) => (
-                <GhostSlot
-                  key={ghost.id}
-                  ghost={ghost}
-                  onClick={() => onAddParentSlot(ghost.childId)}
-                />
-              ))
-            : null}
-
           {layout.nodes.map((pos) => {
             const node = nodeById.get(pos.id);
             if (!node) return null;
@@ -337,35 +449,73 @@ export function FamilyTreeCanvas({
               </button>
             );
           })}
+
+          {!viewOnly && selectedPos && selectedNodeId ? (
+            <div
+              className="family-tree-node-add"
+              data-tree-add
+              style={{
+                left: selectedPos.x + TREE_LAYOUT.nodeWidth / 2,
+                top: selectedPos.y + TREE_LAYOUT.nodeHeight - 6,
+              }}
+            >
+              <button
+                type="button"
+                className="family-tree-node-add-btn"
+                aria-expanded={addMenuOpen}
+                aria-haspopup="menu"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAddMenuOpen((open) => !open);
+                }}
+              >
+                <Plus className="size-3.5" aria-hidden />
+                Add
+              </button>
+              {addMenuOpen ? (
+                <div className="family-tree-node-add-menu" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAddMenuOpen(false);
+                      onAddParent(selectedNodeId);
+                    }}
+                  >
+                    <UserPlus className="size-3.5" aria-hidden />
+                    Parent
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAddMenuOpen(false);
+                      onAddChild(selectedNodeId);
+                    }}
+                  >
+                    <Baby className="size-3.5" aria-hidden />
+                    Child
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAddMenuOpen(false);
+                      onAddPartner(selectedNodeId);
+                    }}
+                  >
+                    <Heart className="size-3.5" aria-hidden />
+                    Partner
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
-  );
-}
-
-function GhostSlot({
-  ghost,
-  onClick,
-}: {
-  ghost: GhostParentSlot;
-  onClick: () => void;
-}) {
-  const labelId = useId();
-  return (
-    <button
-      type="button"
-      data-tree-ghost={ghost.id}
-      className="family-tree-ghost-slot"
-      style={{ left: ghost.x, top: ghost.y }}
-      onClick={onClick}
-      aria-labelledby={labelId}
-    >
-      <span className="family-tree-ghost-ring" aria-hidden>
-        +
-      </span>
-      <span id={labelId} className="family-tree-ghost-label">
-        Add parent
-      </span>
-    </button>
   );
 }

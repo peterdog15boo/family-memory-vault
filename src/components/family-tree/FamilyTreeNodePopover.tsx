@@ -44,7 +44,7 @@ type Props = {
     fromNodeId: string,
     toNodeId: string,
     type: FamilyTreeRelationType,
-  ) => void;
+  ) => void | Promise<void>;
   onRemoveRelationship: (relationshipId: string) => void;
   onAddParent: (childId: string) => void;
   onAddChild: (parentId: string) => void;
@@ -80,6 +80,8 @@ export function FamilyTreeNodePopover({
   const [relOtherId, setRelOtherId] = useState("");
   const [relChoice, setRelChoice] = useState<FamilyTreeRelationChoiceId>("parent");
   const [linkQuery, setLinkQuery] = useState("");
+  const [connectError, setConnectError] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
 
   useEffect(() => {
     setLabel(node?.label ?? "");
@@ -87,6 +89,8 @@ export function FamilyTreeNodePopover({
     setRelOtherId("");
     setRelChoice("parent");
     setLinkQuery("");
+    setConnectError(null);
+    setConnecting(false);
   }, [node?.id, node?.label]);
 
   useOverlayA11y({
@@ -417,7 +421,7 @@ export function FamilyTreeNodePopover({
             <button
               type="button"
               className="ui-btn ui-btn-secondary ui-btn-sm mt-2"
-              disabled={pending || !relOtherId}
+              disabled={pending || connecting || !relOtherId}
               onClick={() => {
                 if (!relOtherId) return;
                 const resolved = resolveRelationChoice(
@@ -425,16 +429,42 @@ export function FamilyTreeNodePopover({
                   node.id,
                   relOtherId,
                 );
-                onAddRelationship(
-                  resolved.fromNodeId,
-                  resolved.toNodeId,
-                  resolved.type,
-                );
-                setRelOtherId("");
+                void (async () => {
+                  setConnectError(null);
+                  setConnecting(true);
+                  try {
+                    await onAddRelationship(
+                      resolved.fromNodeId,
+                      resolved.toNodeId,
+                      resolved.type,
+                    );
+                    // Parent clears selection on success; close as a fallback.
+                    onClose();
+                  } catch (err) {
+                    setConnectError(
+                      err instanceof Error
+                        ? err.message
+                        : "Could not save that connection.",
+                    );
+                  } finally {
+                    setConnecting(false);
+                  }
+                })();
               }}
             >
+              {connecting ? (
+                <Loader2 className="size-3.5 animate-spin" aria-hidden />
+              ) : null}
               Save connection
             </button>
+            {connectError ? (
+              <p
+                className="mt-2 rounded-md border border-red-200 bg-red-50 px-2.5 py-2 text-xs text-red-800"
+                role="alert"
+              >
+                {connectError}
+              </p>
+            ) : null}
           </div>
         ) : null}
 
