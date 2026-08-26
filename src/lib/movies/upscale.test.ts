@@ -115,7 +115,7 @@ describe("maybeUpscaleMovieSource", () => {
       mediaId: "test-media",
     });
     expect(result.applied).toBe(true);
-    expect(result.method).toBe("sharp");
+    expect(["sharp", "cache"]).toContain(result.method);
     expect(result.width).toBeGreaterThan(640);
     expect(result.height).toBeGreaterThan(480);
   });

@@ -236,6 +236,8 @@ describe("motion / Ken Burns", () => {
         width: 0.25,
         height: 0.35,
         faceCount: 1,
+        meanFaceArea: 0.0875,
+        signature: "test-face-1",
       },
       maxZoomAmount: 0.2,
       source: "faces" as const,

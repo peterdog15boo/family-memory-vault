@@ -20,7 +20,6 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import sharp from "sharp";
 import { sourceCoverScale } from "@/lib/movies/framing";
-import { maybeUpscaleMovieSource } from "@/lib/movies/upscale";
 import { getObjectBytes, putObjectBytes, R2_PREFIXES } from "@/lib/r2";
 
 /** Bump when upscale algorithm / target policy changes (invalidates cache). */
@@ -162,7 +161,7 @@ async function writeLocalUpscaleCache(
 ): Promise<void> {
   const path = localUpscaleCachePath(fingerprint);
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, jpeg);
+  await writeFile(path, Buffer.from(jpeg));
 }
 
 async function readR2UpscaleCache(fingerprint: string): Promise<Buffer | null> {
@@ -239,7 +238,7 @@ export async function upscaleWithRealesrganIfAvailable(
 
   try {
     await mkdir(work, { recursive: true });
-    await writeFile(inputPath, buffer);
+    await writeFile(inputPath, Buffer.from(buffer));
 
     const srcMeta = await sharp(buffer).metadata();
     const srcLong = Math.max(srcMeta.width ?? 1, srcMeta.height ?? 1);
@@ -262,22 +261,24 @@ export async function upscaleWithRealesrganIfAvailable(
       90_000,
     );
 
-    let out = await readFile(outputPath);
+    let out: Buffer = Buffer.from(await readFile(outputPath));
     const meta = await sharp(out).metadata();
     const w = meta.width ?? 0;
     const h = meta.height ?? 0;
     if (w < targetWidth || h < targetHeight) {
       // ESRGAN under-shot — finish with sharp to exact target.
-      out = await upscaleWithSharp(out, targetWidth, targetHeight);
+      out = Buffer.from(await upscaleWithSharp(out, targetWidth, targetHeight));
     } else if (w !== targetWidth || h !== targetHeight) {
-      out = await sharp(out)
-        .resize(targetWidth, targetHeight, {
-          fit: "inside",
-          withoutEnlargement: false,
-          kernel: "lanczos3",
-        })
-        .jpeg({ quality: 95, chromaSubsampling: "4:4:4", mozjpeg: true })
-        .toBuffer();
+      out = Buffer.from(
+        await sharp(out)
+          .resize(targetWidth, targetHeight, {
+            fit: "inside",
+            withoutEnlargement: false,
+            kernel: "lanczos3",
+          })
+          .jpeg({ quality: 95, chromaSubsampling: "4:4:4", mozjpeg: true })
+          .toBuffer(),
+      );
     }
     return out;
   } catch (err) {
