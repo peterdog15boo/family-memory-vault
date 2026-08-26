@@ -3,8 +3,12 @@
  *
  * Relationships decide who connects to whom (Genealogy Engine).
  * Layout IQ decides where same-generation people sit on the row:
- * spouses side-by-side, blood siblings on that person's outer side,
- * maternal/paternal clusters kept together.
+ * spouses stay as atomic couple units, blood siblings on that person's
+ * outer side, maternal/paternal clusters kept separate.
+ *
+ * Critical: never split a spouse pair by treating one partner as an
+ * "outer sibling" of someone else (that creates one long top bar and
+ * crossing spouse connectors).
  */
 
 export type LayoutIqContext = {
@@ -13,6 +17,13 @@ export type LayoutIqContext = {
   parentsByChild: ReadonlyMap<string, readonly string[]>;
   /** Optional: cousin_of undirected adjacency for same-gen clustering. */
   cousinAdj?: ReadonlyMap<string, ReadonlySet<string>>;
+};
+
+/** A layout unit: a spouse pair or a single person. */
+export type LayoutUnit = {
+  ids: readonly string[];
+  /** True when ids are an oriented [left, right] spouse pair. */
+  isCouple: boolean;
 };
 
 /**
@@ -49,6 +60,16 @@ export function applyInLawSoftSiblings(
 
 function parentsKey(parents: readonly string[]): string {
   return [...parents].sort().join("+");
+}
+
+/** True when this person has a spouse who is also on the same generation row. */
+export function isCoupledOnRow(
+  id: string,
+  idsOnRow: ReadonlySet<string>,
+  partnerOf: ReadonlyMap<string, string>,
+): boolean {
+  const partner = partnerOf.get(id);
+  return Boolean(partner && idsOnRow.has(partner));
 }
 
 /**
@@ -131,8 +152,9 @@ export function orientCouple(
 }
 
 /**
- * Blood siblings of `personId` on this generation, excluding the person and
- * their spouse (spouse sits in the couple unit, not as a "sibling slot").
+ * Blood siblings of `personId` on this generation, excluding the person,
+ * their spouse, and anyone who already forms a couple unit on this row
+ * (those people stay inside their own spouse unit).
  */
 export function outerSiblingsOf(
   personId: string,
@@ -144,17 +166,168 @@ export function outerSiblingsOf(
   const mine = components.find((c) => c.includes(personId));
   if (!mine) return [];
   return mine
-    .filter((id) => id !== personId && !exclude.has(id) && idsOnRow.has(id))
+    .filter(
+      (id) =>
+        id !== personId &&
+        !exclude.has(id) &&
+        idsOnRow.has(id) &&
+        !isCoupledOnRow(id, idsOnRow, ctx.partnerOf),
+    )
     .sort((a, b) => a.localeCompare(b));
 }
 
+function unitsRelated(
+  a: LayoutUnit,
+  b: LayoutUnit,
+  ctx: LayoutIqContext,
+): boolean {
+  for (const x of a.ids) {
+    for (const y of b.ids) {
+      if (ctx.siblingAdj.get(x)?.has(y)) return true;
+      if (ctx.cousinAdj?.get(x)?.has(y)) return true;
+    }
+  }
+  return false;
+}
+
+function unitSortKey(unit: LayoutUnit, ctx: LayoutIqContext): string {
+  const anchor = unit.ids[0]!;
+  return parentsKey(ctx.parentsByChild.get(anchor) ?? []) || anchor;
+}
+
 /**
- * Order one generation left→right for a traditional tree row.
+ * Build atomic layout units for a generation: spouse pairs never split.
+ */
+export function familyUnitsForGeneration(
+  ids: readonly string[],
+  ctx: LayoutIqContext,
+): LayoutUnit[] {
+  const idSet = new Set(ids);
+  const units: LayoutUnit[] = [];
+  const used = new Set<string>();
+
+  const coupleSeeds: Array<readonly [string, string]> = [];
+  for (const id of ids) {
+    if (used.has(id)) continue;
+    const partner = ctx.partnerOf.get(id);
+    if (!partner || !idSet.has(partner) || used.has(partner)) continue;
+    const oriented = orientCouple(id, partner, ctx);
+    coupleSeeds.push(oriented);
+    used.add(oriented[0]);
+    used.add(oriented[1]);
+  }
+  coupleSeeds.sort(
+    (a, b) =>
+      unitSortKey({ ids: a, isCouple: true }, ctx).localeCompare(
+        unitSortKey({ ids: b, isCouple: true }, ctx),
+      ) || a[0].localeCompare(b[0]),
+  );
+  for (const [left, right] of coupleSeeds) {
+    units.push({ ids: [left, right], isCouple: true });
+  }
+
+  for (const id of ids) {
+    if (used.has(id)) continue;
+    used.add(id);
+    units.push({ ids: [id], isCouple: false });
+  }
+
+  return units;
+}
+
+/**
+ * Order family units left→right: related units (sibling/cousin bridges)
+ * stay adjacent; unrelated maternal/paternal couples stay separate.
+ */
+export function orderFamilyUnits(
+  units: readonly LayoutUnit[],
+  ctx: LayoutIqContext,
+): LayoutUnit[] {
+  if (units.length <= 1) return [...units];
+
+  const n = units.length;
+  const parent = units.map((_, i) => i);
+  function find(i: number): number {
+    let cur = i;
+    while (parent[cur] !== cur) {
+      parent[cur] = parent[parent[cur]!]!;
+      cur = parent[cur]!;
+    }
+    return cur;
+  }
+  function union(i: number, j: number) {
+    const ri = find(i);
+    const rj = find(j);
+    if (ri === rj) return;
+    if (ri < rj) parent[rj] = ri;
+    else parent[ri] = rj;
+  }
+
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      if (unitsRelated(units[i]!, units[j]!, ctx)) union(i, j);
+    }
+  }
+
+  const clusters = new Map<number, number[]>();
+  for (let i = 0; i < n; i++) {
+    const root = find(i);
+    const list = clusters.get(root) ?? [];
+    list.push(i);
+    clusters.set(root, list);
+  }
+
+  const orderedClusters = [...clusters.values()].sort((a, b) => {
+    const ka = unitSortKey(units[a[0]!]!, ctx);
+    const kb = unitSortKey(units[b[0]!]!, ctx);
+    return ka.localeCompare(kb);
+  });
+
+  const ordered: LayoutUnit[] = [];
+  for (const cluster of orderedClusters) {
+    // Within a related cluster, keep a stable walk so sibling-linked
+    // couples sit next to each other (not interleaved with strangers).
+    const remaining = new Set(cluster);
+    const seed = [...cluster].sort((i, j) =>
+      unitSortKey(units[i]!, ctx).localeCompare(unitSortKey(units[j]!, ctx)),
+    )[0]!;
+    const queue = [seed];
+    remaining.delete(seed);
+    while (queue.length > 0) {
+      const idx = queue.shift()!;
+      ordered.push(units[idx]!);
+      const neighbors = [...remaining].filter((j) =>
+        unitsRelated(units[idx]!, units[j]!, ctx),
+      );
+      neighbors.sort((i, j) =>
+        unitSortKey(units[i]!, ctx).localeCompare(unitSortKey(units[j]!, ctx)),
+      );
+      for (const j of neighbors) {
+        remaining.delete(j);
+        queue.push(j);
+      }
+      if (queue.length === 0 && remaining.size > 0) {
+        const next = [...remaining].sort((i, j) =>
+          unitSortKey(units[i]!, ctx).localeCompare(
+            unitSortKey(units[j]!, ctx),
+          ),
+        )[0]!;
+        remaining.delete(next);
+        queue.push(next);
+      }
+    }
+  }
+
+  return ordered;
+}
+
+/**
+ * Expand units into a flat left→right person order for a traditional row.
  *
  * Couple block shape:
- *   [siblings of left…][left][right][siblings of right…]
+ *   [unmarried siblings of left…][left][right][unmarried siblings of right…]
  *
- * So a wife's sister lands on the wife's outer side — never past the husband.
+ * Married people are never pulled into another couple's sibling slots.
  */
 export function orderGenerationForLayout(
   ids: readonly string[],
@@ -163,6 +336,7 @@ export function orderGenerationForLayout(
   if (ids.length <= 1) return [...ids];
 
   const idSet = new Set(ids);
+  const units = orderFamilyUnits(familyUnitsForGeneration(ids, ctx), ctx);
   const ordered: string[] = [];
   const used = new Set<string>();
 
@@ -172,73 +346,55 @@ export function orderGenerationForLayout(
     used.add(id);
   };
 
-  // Partner pairs where both appear on this row.
-  const couples: Array<readonly [string, string]> = [];
-  const inCouple = new Set<string>();
-  for (const id of ids) {
-    if (inCouple.has(id)) continue;
-    const partner = ctx.partnerOf.get(id);
-    if (!partner || !idSet.has(partner) || inCouple.has(partner)) continue;
-    const oriented = orientCouple(id, partner, ctx);
-    couples.push(oriented);
-    inCouple.add(oriented[0]);
-    inCouple.add(oriented[1]);
-  }
-
-  // Stable couple order: by left person's parent key / id.
-  couples.sort((a, b) => {
-    const ka = parentsKey(ctx.parentsByChild.get(a[0]) ?? []) || a[0];
-    const kb = parentsKey(ctx.parentsByChild.get(b[0]) ?? []) || b[0];
-    return ka.localeCompare(kb) || a[0].localeCompare(b[0]);
-  });
-
-  for (const [left, right] of couples) {
-    const exclude = new Set([left, right]);
-    const leftOuter = outerSiblingsOf(left, idSet, ctx, exclude).filter(
-      (id) => !used.has(id),
-    );
-    const rightOuter = outerSiblingsOf(right, idSet, ctx, exclude).filter(
-      (id) => !used.has(id) && !leftOuter.includes(id),
-    );
-
-    for (const id of leftOuter) take(id);
-    take(left);
-    take(right);
-    for (const id of rightOuter) take(id);
-  }
-
-  // Remaining sibling components (unmarried sibling sets, etc.).
-  const remainingComponents = siblingComponents(
-    ids.filter((id) => !used.has(id)),
-    ctx,
-  ).sort((a, b) => (a[0] ?? "").localeCompare(b[0] ?? ""));
-
-  for (const component of remainingComponents) {
-    // Prefer attaching near an already-placed cousin if linked.
-    let attachAfter: number | null = null;
-    if (ctx.cousinAdj) {
-      for (const id of component) {
-        for (const cousin of ctx.cousinAdj.get(id) ?? []) {
-          if (!used.has(cousin)) continue;
-          const idx = ordered.indexOf(cousin);
-          if (idx >= 0) {
-            attachAfter = idx;
-            break;
-          }
-        }
-        if (attachAfter != null) break;
-      }
-    }
-
-    if (attachAfter == null) {
-      for (const id of component) take(id);
+  for (const unit of units) {
+    if (unit.isCouple && unit.ids.length === 2) {
+      const [left, right] = unit.ids as [string, string];
+      const exclude = new Set([left, right]);
+      const leftOuter = outerSiblingsOf(left, idSet, ctx, exclude).filter(
+        (id) => !used.has(id),
+      );
+      const rightOuter = outerSiblingsOf(right, idSet, ctx, exclude).filter(
+        (id) => !used.has(id) && !leftOuter.includes(id),
+      );
+      for (const id of leftOuter) take(id);
+      take(left);
+      take(right);
+      for (const id of rightOuter) take(id);
       continue;
     }
 
-    // Insert cousin cluster immediately after the related person (same gen).
-    const cluster = component.filter((id) => !used.has(id));
-    ordered.splice(attachAfter + 1, 0, ...cluster);
-    for (const id of cluster) used.add(id);
+    for (const id of unit.ids) {
+      if (used.has(id)) continue;
+      // Unmarried sibling cluster around this singleton.
+      const cluster = [
+        id,
+        ...outerSiblingsOf(id, idSet, ctx, new Set([id])).filter(
+          (s) => !used.has(s),
+        ),
+      ];
+      // Prefer attaching near an already-placed cousin.
+      let attachAfter: number | null = null;
+      if (ctx.cousinAdj) {
+        for (const member of cluster) {
+          for (const cousin of ctx.cousinAdj.get(member) ?? []) {
+            if (!used.has(cousin)) continue;
+            const idx = ordered.indexOf(cousin);
+            if (idx >= 0) {
+              attachAfter = idx;
+              break;
+            }
+          }
+          if (attachAfter != null) break;
+        }
+      }
+      if (attachAfter == null) {
+        for (const member of cluster) take(member);
+      } else {
+        const insert = cluster.filter((m) => !used.has(m));
+        ordered.splice(attachAfter + 1, 0, ...insert);
+        for (const member of insert) used.add(member);
+      }
+    }
   }
 
   for (const id of ids) take(id);

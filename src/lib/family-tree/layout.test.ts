@@ -185,6 +185,24 @@ describe("computeFamilyTreeLayout", () => {
       Math.abs(kathyParentsMid - jeffMid) + 1,
     );
 
+    // Parent couples are atomic: spouses adjacent, not interleaved across families.
+    const jeffParentXs = [jeffMom.x, jeffDad.x].sort((a, b) => a - b);
+    const kathyParentXs = [kathyMom.x, kathyDad.x].sort((a, b) => a - b);
+    expect(jeffParentXs[1]! - jeffParentXs[0]!).toBeLessThanOrEqual(
+      TREE_LAYOUT.nodeWidth + TREE_LAYOUT.partnerGap + 1,
+    );
+    expect(kathyParentXs[1]! - kathyParentXs[0]!).toBeLessThanOrEqual(
+      TREE_LAYOUT.nodeWidth + TREE_LAYOUT.partnerGap + 1,
+    );
+    // The two parent couples do not interleave into one long bar.
+    const jeffBlockRight = jeffParentXs[1]! + TREE_LAYOUT.nodeWidth;
+    const kathyBlockLeft = kathyParentXs[0]!;
+    const kathyBlockRight = kathyParentXs[1]! + TREE_LAYOUT.nodeWidth;
+    const jeffBlockLeft = jeffParentXs[0]!;
+    const separated =
+      jeffBlockRight <= kathyBlockLeft || kathyBlockRight <= jeffBlockLeft;
+    expect(separated).toBe(true);
+
     // Noah under the couple.
     expect(noah.y).toBeGreaterThan(jeff.y);
     const coupleMid = (jeffMid + kathyMid) / 2;
@@ -239,6 +257,103 @@ describe("computeFamilyTreeLayout", () => {
       expect(edge.path.length).toBeGreaterThan(0);
       expect(edge.path).not.toMatch(/NaN/);
     }
+  });
+
+  it("places Scott on Kathy’s cousin branch without tangling Jeff’s parents", () => {
+    const layout = computeFamilyTreeLayout(
+      [
+        { id: "jeff-mom", label: "Mom" },
+        { id: "jeff-dad", label: "Dad" },
+        { id: "kathy-mom", label: "Mom" },
+        { id: "kathy-dad", label: "Dad" },
+        { id: "scott-mom", label: "Aunt" },
+        { id: "scott-dad", label: "Uncle" },
+        { id: "jeff", label: "Jeff" },
+        { id: "kathy", label: "Kathy" },
+        { id: "scott", label: "Scott" },
+        { id: "noah", label: "Noah" },
+      ],
+      [
+        { fromNodeId: "jeff-dad", toNodeId: "jeff-mom", type: "partner_of" },
+        { fromNodeId: "jeff-mom", toNodeId: "jeff", type: "parent_of" },
+        { fromNodeId: "jeff-dad", toNodeId: "jeff", type: "parent_of" },
+        {
+          fromNodeId: "kathy-dad",
+          toNodeId: "kathy-mom",
+          type: "partner_of",
+        },
+        { fromNodeId: "kathy-mom", toNodeId: "kathy", type: "parent_of" },
+        { fromNodeId: "kathy-dad", toNodeId: "kathy", type: "parent_of" },
+        {
+          fromNodeId: "scott-dad",
+          toNodeId: "scott-mom",
+          type: "partner_of",
+        },
+        { fromNodeId: "scott-mom", toNodeId: "scott", type: "parent_of" },
+        { fromNodeId: "scott-dad", toNodeId: "scott", type: "parent_of" },
+        // Cousin bridge: Kathy's mom ↔ Scott's mom are siblings — must NOT
+        // merge all top-generation people into one sibling bar.
+        {
+          fromNodeId: "kathy-mom",
+          toNodeId: "scott-mom",
+          type: "sibling_of",
+        },
+        { fromNodeId: "jeff", toNodeId: "kathy", type: "partner_of" },
+        { fromNodeId: "kathy", toNodeId: "scott", type: "cousin_of" },
+        { fromNodeId: "jeff", toNodeId: "noah", type: "parent_of" },
+        { fromNodeId: "kathy", toNodeId: "noah", type: "parent_of" },
+      ],
+    );
+
+    const jeff = layout.nodes.find((n) => n.id === "jeff")!;
+    const kathy = layout.nodes.find((n) => n.id === "kathy")!;
+    const scott = layout.nodes.find((n) => n.id === "scott")!;
+    const noah = layout.nodes.find((n) => n.id === "noah")!;
+    const kathyMom = layout.nodes.find((n) => n.id === "kathy-mom")!;
+    const scottMom = layout.nodes.find((n) => n.id === "scott-mom")!;
+    const scottDad = layout.nodes.find((n) => n.id === "scott-dad")!;
+    const jeffMom = layout.nodes.find((n) => n.id === "jeff-mom")!;
+    const jeffDad = layout.nodes.find((n) => n.id === "jeff-dad")!;
+
+    expect(jeff.y).toBe(kathy.y);
+    expect(scott.y).toBe(kathy.y);
+    expect(noah.y).toBeGreaterThan(jeff.y);
+
+    // Scott closer to Kathy than to Jeff (cousin branch, not center tangle).
+    const scottMid = scott.x + TREE_LAYOUT.nodeWidth / 2;
+    const kathyMid = kathy.x + TREE_LAYOUT.nodeWidth / 2;
+    const jeffMid = jeff.x + TREE_LAYOUT.nodeWidth / 2;
+    expect(Math.abs(scottMid - kathyMid)).toBeLessThan(
+      Math.abs(scottMid - jeffMid),
+    );
+
+    // Scott's parents remain an atomic couple (spouse adjacent).
+    expect(Math.abs(scottMom.x - scottDad.x)).toBeLessThanOrEqual(
+      TREE_LAYOUT.nodeWidth + TREE_LAYOUT.partnerGap + 1,
+    );
+    expect(scottMom.y).toBe(scottDad.y);
+
+    // Sibling bridge must not place Scott's dad between Kathy's parents.
+    const top = [kathyMom, scottMom, scottDad].sort((a, b) => a.x - b.x);
+    // Scott's parents occupy two consecutive slots among {kathyMom, scottMom, scottDad}
+    // when projected — at least scottMom/scottDad are adjacent.
+    const scottParentPairAdjacent =
+      Math.abs(scottMom.x - scottDad.x) <=
+      TREE_LAYOUT.nodeWidth + TREE_LAYOUT.partnerGap + 1;
+    expect(scottParentPairAdjacent).toBe(true);
+
+    // Jeff's parents stay a separate couple unit (not welded into Kathy/Scott bar).
+    expect(Math.abs(jeffMom.x - jeffDad.x)).toBeLessThanOrEqual(
+      TREE_LAYOUT.nodeWidth + TREE_LAYOUT.partnerGap + 1,
+    );
+    const jeffParentsMid =
+      (jeffMom.x + jeffDad.x) / 2 + TREE_LAYOUT.nodeWidth / 2;
+    expect(Math.abs(jeffParentsMid - jeffMid)).toBeLessThan(
+      Math.abs(jeffParentsMid - kathyMid) + TREE_LAYOUT.nodeWidth,
+    );
+
+    expect(layout.edgeVerification.ok).toBe(true);
+    void top;
   });
 });
 

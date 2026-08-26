@@ -85,6 +85,36 @@ describe("orderGenerationForLayout", () => {
       (bob < jeff && jeff < kathy) || (kathy < jeff && jeff < bob);
     expect(jeffBetweenBobAndKathy).toBe(true);
   });
+
+  it("keeps cousin-parent couples atomic despite a sibling bridge", () => {
+    const ordered = orderGenerationForLayout(
+      ["k-mom", "k-dad", "s-mom", "s-dad", "j-mom", "j-dad"],
+      ctx({
+        partners: [
+          ["k-mom", "k-dad"],
+          ["s-mom", "s-dad"],
+          ["j-mom", "j-dad"],
+        ],
+        siblings: [["k-mom", "s-mom"]],
+      }),
+    );
+
+    // Each spouse pair remains adjacent — never [k-mom, s-mom, k-dad, …].
+    expect(Math.abs(ordered.indexOf("k-mom") - ordered.indexOf("k-dad"))).toBe(
+      1,
+    );
+    expect(Math.abs(ordered.indexOf("s-mom") - ordered.indexOf("s-dad"))).toBe(
+      1,
+    );
+    expect(Math.abs(ordered.indexOf("j-mom") - ordered.indexOf("j-dad"))).toBe(
+      1,
+    );
+
+    // Cousin-side parent units stay next to each other as whole couples.
+    const kBlock = Math.min(ordered.indexOf("k-mom"), ordered.indexOf("k-dad"));
+    const sBlock = Math.min(ordered.indexOf("s-mom"), ordered.indexOf("s-dad"));
+    expect(Math.abs(kBlock - sBlock)).toBe(2);
+  });
 });
 
 describe("outerSiblingsOf", () => {

@@ -75,6 +75,43 @@ describe("projectRelationshipsToConnectors", () => {
     // Top of the marriage bridge sits above y=100.
     expect(geom.labelY).toBeLessThan(100);
   });
+
+  it("draws couple→child forks instead of crossing parent cubics", () => {
+    const { connectors } = projectRelationshipsToConnectors(
+      [
+        {
+          id: "r1",
+          fromNodeId: "mom",
+          toNodeId: "dad",
+          type: "partner_of",
+        },
+        {
+          id: "r2",
+          fromNodeId: "mom",
+          toNodeId: "kid",
+          type: "parent_of",
+        },
+        {
+          id: "r3",
+          fromNodeId: "dad",
+          toNodeId: "kid",
+          type: "parent_of",
+        },
+      ],
+      [
+        { id: "mom", x: 0, y: 0 },
+        { id: "dad", x: 140, y: 0 },
+        { id: "kid", x: 70, y: 200 },
+      ],
+    );
+    const parentPaths = connectors
+      .filter((c) => c.type === "parent_of")
+      .map((c) => c.path);
+    expect(parentPaths).toHaveLength(2);
+    // Shared couple midpoint stem (mom at 50, dad at 190 → mid 120).
+    expect(parentPaths.every((p) => p.includes("L 120 "))).toBe(true);
+    expect(parentPaths.every((p) => !p.includes("C "))).toBe(true);
+  });
 });
 
 describe("computeFamilyTreeLayout projection parity", () => {

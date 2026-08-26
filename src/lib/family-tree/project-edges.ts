@@ -106,6 +106,29 @@ function parentConnectorPath(
   return cubicPath(fx, fy, tx, ty);
 }
 
+/**
+ * Traditional couple → child fork: each parent drops to a bar under the
+ * couple, then a shared stem runs to the child. Overlapping mid→child
+ * segments from both parents read as one descent (no invented edges).
+ */
+export function coupleParentConnectorPath(
+  parent: NodePosition,
+  spouse: NodePosition,
+  child: NodePosition,
+): string {
+  const left = parent.x <= spouse.x ? parent : spouse;
+  const right = parent.x <= spouse.x ? spouse : parent;
+  const midX = (left.x + right.x + NODE_WIDTH) / 2;
+  const barY = Math.max(left.y, right.y) + NODE_HEIGHT + 18;
+  const px = parent.x + NODE_WIDTH / 2;
+  const py = parent.y + NODE_HEIGHT;
+  const cx = child.x + NODE_WIDTH / 2;
+  const cy = child.y;
+  // Keep a short vertical into the child so the stem doesn’t hit the card early.
+  const stemBottom = Math.max(barY + 8, (barY + cy) / 2);
+  return `M ${px} ${py} L ${px} ${barY} L ${midX} ${barY} L ${midX} ${stemBottom} L ${cx} ${cy}`;
+}
+
 function extendedConnectorPath(
   from: NodePosition,
   to: NodePosition,
@@ -137,6 +160,19 @@ export function projectRelationshipsToConnectors(
   const connectors: ProjectedConnector[] = [];
   const relationshipsWithoutConnector: string[] = [];
 
+  const partnerOf = new Map<string, string>();
+  const parentsOfChild = new Map<string, string[]>();
+  for (const rel of relationships) {
+    if (rel.type === "partner_of") {
+      partnerOf.set(rel.fromNodeId, rel.toNodeId);
+      partnerOf.set(rel.toNodeId, rel.fromNodeId);
+    } else if (rel.type === "parent_of") {
+      const list = parentsOfChild.get(rel.toNodeId) ?? [];
+      list.push(rel.fromNodeId);
+      parentsOfChild.set(rel.toNodeId, list);
+    }
+  }
+
   for (const rel of relationships) {
     const from = posById.get(rel.fromNodeId);
     const to = posById.get(rel.toNodeId);
@@ -163,7 +199,15 @@ export function projectRelationshipsToConnectors(
       labelY = geom.labelY;
       emphasis = "structure";
     } else if (rel.type === "parent_of") {
-      path = parentConnectorPath(from, to);
+      const spouseId = partnerOf.get(rel.fromNodeId);
+      const spouse = spouseId ? posById.get(spouseId) : undefined;
+      const coParents = parentsOfChild.get(rel.toNodeId) ?? [];
+      const spouseAlsoParent =
+        Boolean(spouseId) && coParents.includes(spouseId!);
+      path =
+        spouse && spouseAlsoParent
+          ? coupleParentConnectorPath(from, spouse, to)
+          : parentConnectorPath(from, to);
       emphasis = "structure";
     } else {
       const geom = extendedConnectorPath(from, to);
