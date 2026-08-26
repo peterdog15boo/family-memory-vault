@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createFamilyTreeNode, getFamilyTreeGraph } from "@/lib/family-tree";
+import {
+  runGenealogyCommand,
+  type GenealogyEngineCommand,
+} from "@/lib/family-tree/engine";
 import {
   familyTreeApiErrorResponse,
   requireFamilyTreeEditAccess,
@@ -9,7 +12,6 @@ import {
   serializeFamilyTreeGraph,
   serializeFamilyTreeNode,
 } from "@/lib/family-tree/serialize";
-
 import { FAMILY_TREE_RELATION_TYPES } from "@/lib/db/schema";
 
 const createBodySchema = z.object({
@@ -26,8 +28,45 @@ const createBodySchema = z.object({
     .optional(),
 });
 
+function commandForCreate(input: z.infer<typeof createBodySchema>): GenealogyEngineCommand {
+  const { label, personId, link } = input;
+
+  if (!link) {
+    if (personId) {
+      return { type: "placePerson", peopleId: personId, label };
+    }
+    return { type: "addPlaceholder", label };
+  }
+
+  const { type, otherNodeId, newNodeIs } = link;
+
+  if (type === "partner_of") {
+    return { type: "addSpouse", personId: otherNodeId, label };
+  }
+  if (type === "parent_of" && newNodeIs === "from") {
+    return { type: "addParent", personId: otherNodeId, label };
+  }
+  if (type === "parent_of" && newNodeIs === "to") {
+    return { type: "addChild", personId: otherNodeId, label };
+  }
+  if (type === "sibling_of") {
+    return { type: "addSibling", personId: otherNodeId, label };
+  }
+  if (type === "cousin_of") {
+    return { type: "addCousin", personId: otherNodeId, label };
+  }
+
+  // Extended: placeholder first; caller runs a second connect command.
+  if (personId) {
+    return { type: "placePerson", peopleId: personId, label };
+  }
+  return { type: "addPlaceholder", label };
+}
+
 /**
- * POST /api/family-tree/nodes — add a placeholder or place a Person on the tree.
+ * POST /api/family-tree/nodes
+ * Legacy entry — delegates to the Genealogy Relationship Engine.
+ * Prefer POST /api/family-tree/commands.
  */
 export async function POST(request: Request) {
   const authResult = await requireFamilyTreeEditAccess();
@@ -44,32 +83,66 @@ export async function POST(request: Request) {
     }
 
     const treeOwnerId = authResult.treeOwnerId;
-    const created = await createFamilyTreeNode({
-      userId: treeOwnerId,
-      label: parsed.data.label,
-      personId: parsed.data.personId ?? null,
-      notes: parsed.data.notes ?? null,
-      link: parsed.data.link,
-    });
-    const node = created.node;
+    const link = parsed.data.link;
+    const isExtendedLink =
+      link &&
+      !(
+        link.type === "partner_of" ||
+        link.type === "parent_of" ||
+        link.type === "sibling_of" ||
+        link.type === "cousin_of"
+      );
 
-    const graph = await getFamilyTreeGraph(treeOwnerId);
-    const enriched = graph.nodes.find((n) => n.id === node.id);
+    let result = await runGenealogyCommand(
+      treeOwnerId,
+      commandForCreate(parsed.data),
+    );
+
+    if (!result.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          needsInput: result.needsInput,
+          tree: serializeFamilyTreeGraph(result.tree),
+          notices: [],
+        },
+        { status: 409 },
+      );
+    }
+
+    if (isExtendedLink && link && result.focusNodeId) {
+      const newId = result.focusNodeId;
+      result = await runGenealogyCommand(treeOwnerId, {
+        type: "connect",
+        fromNodeId: link.newNodeIs === "from" ? newId : link.otherNodeId,
+        toNodeId: link.newNodeIs === "to" ? newId : link.otherNodeId,
+        relationType: link.type,
+      });
+      if (!result.ok) {
+        return NextResponse.json(
+          {
+            ok: false,
+            needsInput: result.needsInput,
+            tree: serializeFamilyTreeGraph(result.tree),
+            notices: [],
+          },
+          { status: 409 },
+        );
+      }
+    }
+
+    const graph = result.tree;
+    const focusId = result.focusNodeId;
+    const enriched = focusId
+      ? graph.nodes.find((n) => n.id === focusId)
+      : undefined;
 
     return NextResponse.json(
       {
-        node: enriched
-          ? serializeFamilyTreeNode(enriched)
-          : {
-              ...node,
-              isPlaceholder: !node.personId,
-              person: null,
-              generation: 0,
-              createdAt: node.createdAt.toISOString(),
-              updatedAt: node.updatedAt.toISOString(),
-            },
+        node: enriched ? serializeFamilyTreeNode(enriched) : null,
         tree: serializeFamilyTreeGraph(graph),
-        notices: created.notices,
+        notices: result.notices,
+        focusNodeId: focusId ?? null,
       },
       { status: 201 },
     );

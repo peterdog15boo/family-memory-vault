@@ -50,6 +50,7 @@ type Props = {
   onAddChild: (parentId: string) => void;
   onAddPartner: (nodeId: string) => void;
   onRemove: (nodeId: string) => void;
+  onClearReview?: (nodeId: string) => void;
 };
 
 /**
@@ -71,6 +72,7 @@ export function FamilyTreeNodePopover({
   onAddChild,
   onAddPartner,
   onRemove,
+  onClearReview,
 }: Props) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -182,6 +184,29 @@ export function FamilyTreeNodePopover({
             <X className="size-4" aria-hidden />
           </button>
         </div>
+
+        {node.needsReview ? (
+          <div
+            className="mt-4 rounded-xl border border-accent/25 bg-accent/5 px-3 py-2.5 text-sm text-ink"
+            role="status"
+          >
+            <p className="font-medium text-accent-deep">Needs review</p>
+            <p className="mt-1 text-ink-muted">
+              {node.reviewReason ??
+                "We weren’t sure how to fix this connection automatically."}
+            </p>
+            {onClearReview ? (
+              <button
+                type="button"
+                className="ui-btn ui-btn-secondary ui-btn-sm mt-2"
+                disabled={pending}
+                onClick={() => onClearReview(node.id)}
+              >
+                Mark as reviewed
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="mt-5">
           <p className="text-sm font-medium text-ink">Grow from here</p>

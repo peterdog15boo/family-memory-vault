@@ -29,6 +29,8 @@ function node(
       ? { id: personId, name: label, displayName: label }
       : null,
     generation: opts.generation ?? 0,
+    needsReview: false,
+    reviewReason: null,
   };
 }
 

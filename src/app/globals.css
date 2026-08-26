@@ -1863,6 +1863,23 @@ body {
   background: color-mix(in srgb, var(--canvas) 70%, #e8dccb);
 }
 
+.family-tree-person-node--needs-review {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.family-tree-person-review {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.65rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: var(--accent-deep);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .family-tree-ghost-slot {
   display: none;
 }

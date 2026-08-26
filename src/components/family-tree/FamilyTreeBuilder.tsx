@@ -13,7 +13,8 @@ import type {
   SerializedFamilyTreeGraph,
   SerializedFamilyTreePerson,
 } from "@/lib/family-tree/serialize";
-import { preferredExistingCoParentId } from "@/lib/family-tree/genealogy-iq";
+import type { CousinSide } from "@/lib/family-tree/cousin-side";
+import type { GenealogyEngineCommand } from "@/lib/family-tree/engine";
 import type { FamilyTreeRelationType } from "@/lib/db/schema";
 import { useOverlayA11y } from "@/hooks/useOverlayA11y";
 
@@ -38,13 +39,29 @@ type ApiTreeResponse = {
   tree?: SerializedFamilyTreeGraph;
   availablePeople?: SerializedFamilyTreePerson[];
   node?: { id: string };
+  focusNodeId?: string | null;
+  ok?: boolean;
   notices?: Array<{ kind?: string; message: string }>;
+  needsInput?: {
+    kind: "cousinSide";
+    message: string;
+    personId: string;
+  };
+  pendingConnect?: {
+    fromNodeId: string;
+    toNodeId: string;
+    relationType: FamilyTreeRelationType;
+  };
   scaffold?: {
     message?: string | null;
     createdNodeIds?: string[];
     createdRelationshipIds?: string[];
     undoNodeIds?: string[];
     undoRelationshipIds?: string[];
+  } | null;
+  repair?: {
+    applied?: boolean;
+    message?: string | null;
   } | null;
   error?: string;
 };
@@ -69,6 +86,19 @@ export function FamilyTreeBuilder({
     null,
   );
   const [iqNotice, setIqNotice] = useState<string | null>(null);
+  const [repairNotice, setRepairNotice] = useState<string | null>(
+    () =>
+      initialTree.repair?.applied && initialTree.repair.message
+        ? initialTree.repair.message
+        : null,
+  );
+  const [cousinPrompt, setCousinPrompt] = useState<{
+    message: string;
+    personId: string;
+    fromNodeId: string;
+    toNodeId: string;
+    relationType: FamilyTreeRelationType;
+  } | null>(null);
   const [pending, startTransition] = useTransition();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState(false);
@@ -157,56 +187,40 @@ export function FamilyTreeBuilder({
     }, 6000);
   }
 
-  async function createNode(body: {
-    label: string;
-    personId?: string | null;
-    link?: {
-      type: FamilyTreeRelationType;
-      otherNodeId: string;
-      newNodeIs: "from" | "to";
-    };
-  }): Promise<{ id: string; tree?: SerializedFamilyTreeGraph }> {
-    const res = await fetch("/api/family-tree/nodes", {
+  /**
+   * Sole Family Tree write path from the UI — Genealogy Relationship Engine.
+   */
+  async function runEngineCommand(
+    command: GenealogyEngineCommand,
+  ): Promise<ApiTreeResponse> {
+    const res = await fetch("/api/family-tree/commands", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify(command),
     });
     const data = (await res.json().catch(() => ({}))) as ApiTreeResponse;
-    if (!res.ok || !data.node?.id) {
-      throw new Error(data.error || "Could not add someone to the tree.");
+    if (res.status === 409 && data.needsInput?.kind === "cousinSide") {
+      if (data.tree) setTree(data.tree);
+      return data;
     }
-    if (data.tree) setTree(data.tree);
-    applyIqNotices(data);
-    applyScaffoldNotice(data);
-    return { id: data.node.id, tree: data.tree };
-  }
-
-  async function createRel(
-    fromNodeId: string,
-    toNodeId: string,
-    type: FamilyTreeRelationType,
-  ): Promise<SerializedFamilyTreeGraph | undefined> {
-    const res = await fetch("/api/family-tree/relationships", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fromNodeId, toNodeId, type }),
-    });
-    const data = (await res.json().catch(() => ({}))) as ApiTreeResponse;
     if (!res.ok) {
-      throw new Error(data.error || "Could not save that connection.");
+      throw new Error(data.error || "Could not update the family tree.");
     }
     if (data.tree) setTree(data.tree);
     applyIqNotices(data);
     applyScaffoldNotice(data);
-    return data.tree;
+    if (data.tree?.repair?.applied && data.tree.repair.message) {
+      setRepairNotice(data.tree.repair.message);
+    }
+    if (data.focusNodeId) setSelectedNodeId(data.focusNodeId);
+    return data;
   }
 
   function addPlaceholder(label: string) {
     const trimmed = label.trim();
     if (!trimmed) return;
     runMutation(async () => {
-      const created = await createNode({ label: trimmed });
-      setSelectedNodeId(created.id);
+      await runEngineCommand({ type: "addPlaceholder", label: trimmed });
       await refreshAvailable();
     });
   }
@@ -215,105 +229,49 @@ export function FamilyTreeBuilder({
     const person = availablePeople.find((p) => p.id === personId);
     if (!person) return;
     runMutation(async () => {
-      const created = await createNode({
+      await runEngineCommand({
+        type: "placePerson",
+        peopleId: person.id,
         label: person.displayName,
-        personId: person.id,
       });
-      setSelectedNodeId(created.id);
       await refreshAvailable();
     });
   }
 
   function addParentForChild(childId: string) {
     runMutation(async () => {
-      // Prefer linking an existing spouse of a current parent over inventing
-      // a new "Parent" placeholder beside a married couple.
-      const spouseId = preferredExistingCoParentId(
-        tree.relationships,
-        childId,
-      );
-      if (spouseId) {
-        await createRel(spouseId, childId, "parent_of");
-        setSelectedNodeId(spouseId);
-        await refreshAvailable();
-        return;
-      }
-
-      const parentCount = tree.relationships.filter(
-        (r) => r.type === "parent_of" && r.toNodeId === childId,
-      ).length;
-      if (parentCount >= 2) {
-        throw new Error(
-          "This person already has two parents. Link an existing relative instead of adding another parent.",
-        );
-      }
-
-      const created = await createNode({
-        label: "Parent",
-        link: {
-          type: "parent_of",
-          otherNodeId: childId,
-          newNodeIs: "from",
-        },
-      });
-      setSelectedNodeId(created.id);
+      await runEngineCommand({ type: "addParent", personId: childId });
       await refreshAvailable();
     });
   }
 
   function addChildForParent(parentId: string) {
     runMutation(async () => {
-      const created = await createNode({
-        label: "Child",
-        link: {
-          type: "parent_of",
-          otherNodeId: parentId,
-          newNodeIs: "to",
-        },
-      });
-      setSelectedNodeId(created.id);
+      await runEngineCommand({ type: "addChild", personId: parentId });
       await refreshAvailable();
     });
   }
 
   function addPartnerForNode(nodeId: string) {
     runMutation(async () => {
-      const created = await createNode({
-        label: "Spouse",
-        link: {
-          type: "partner_of",
-          otherNodeId: nodeId,
-          newNodeIs: "from",
-        },
-      });
-      setSelectedNodeId(created.id);
+      await runEngineCommand({ type: "addSpouse", personId: nodeId });
       await refreshAvailable();
     });
   }
 
   function renameNode(nodeId: string, label: string) {
     runMutation(async () => {
-      const res = await fetch(`/api/family-tree/nodes/${nodeId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label }),
-      });
-      const data = (await res.json().catch(() => ({}))) as ApiTreeResponse;
-      if (!res.ok) throw new Error(data.error || "Could not rename.");
-      if (data.tree) setTree(data.tree);
+      await runEngineCommand({ type: "renameNode", nodeId, label });
     });
   }
 
   function linkPerson(nodeId: string, personId: string | null) {
     runMutation(async () => {
-      const res = await fetch(`/api/family-tree/nodes/${nodeId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ personId }),
+      await runEngineCommand({
+        type: "linkPlaceholderToPerson",
+        nodeId,
+        peopleId: personId,
       });
-      const data = (await res.json().catch(() => ({}))) as ApiTreeResponse;
-      if (!res.ok) throw new Error(data.error || "Could not update link.");
-      if (data.tree) setTree(data.tree);
       await refreshAvailable();
     });
   }
@@ -322,6 +280,7 @@ export function FamilyTreeBuilder({
     fromNodeId: string,
     toNodeId: string,
     type: FamilyTreeRelationType,
+    cousinSide?: CousinSide,
   ): Promise<void> {
     return (async () => {
       if (!canEdit) {
@@ -331,7 +290,24 @@ export function FamilyTreeBuilder({
       }
       setError(null);
       try {
-        await createRel(fromNodeId, toNodeId, type);
+        const data = await runEngineCommand({
+          type: "connect",
+          fromNodeId,
+          toNodeId,
+          relationType: type,
+          cousinSide,
+        });
+        if (data.needsInput?.kind === "cousinSide") {
+          setCousinPrompt({
+            message: data.needsInput.message,
+            personId: data.needsInput.personId,
+            fromNodeId,
+            toNodeId,
+            relationType: type,
+          });
+          return;
+        }
+        setCousinPrompt(null);
         setSelectedNodeId(null);
       } catch (err) {
         const msg =
@@ -342,6 +318,18 @@ export function FamilyTreeBuilder({
     })();
   }
 
+  function resolveCousinSide(side: CousinSide) {
+    if (!cousinPrompt) return;
+    const pending = cousinPrompt;
+    setCousinPrompt(null);
+    void addRelationship(
+      pending.fromNodeId,
+      pending.toNodeId,
+      pending.relationType,
+      side,
+    );
+  }
+
   function undoScaffold() {
     if (!scaffoldNotice) return;
     const payload = {
@@ -349,14 +337,11 @@ export function FamilyTreeBuilder({
       relationshipIds: scaffoldNotice.undoRelationshipIds,
     };
     runMutation(async () => {
-      const res = await fetch("/api/family-tree/relationships/undo-scaffold", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+      await runEngineCommand({
+        type: "undoScaffold",
+        nodeIds: payload.nodeIds,
+        relationshipIds: payload.relationshipIds,
       });
-      const data = (await res.json().catch(() => ({}))) as ApiTreeResponse;
-      if (!res.ok) throw new Error(data.error || "Could not undo.");
-      if (data.tree) setTree(data.tree);
       setScaffoldNotice(null);
       setSelectedNodeId(null);
       await refreshAvailable();
@@ -365,26 +350,24 @@ export function FamilyTreeBuilder({
 
   function removeRelationship(relationshipId: string) {
     runMutation(async () => {
-      const res = await fetch(
-        `/api/family-tree/relationships/${relationshipId}`,
-        { method: "DELETE" },
-      );
-      const data = (await res.json().catch(() => ({}))) as ApiTreeResponse;
-      if (!res.ok) throw new Error(data.error || "Could not remove connection.");
-      if (data.tree) setTree(data.tree);
+      await runEngineCommand({
+        type: "removeRelationship",
+        edgeId: relationshipId,
+      });
     });
   }
 
   function removeNode(nodeId: string) {
     runMutation(async () => {
-      const res = await fetch(`/api/family-tree/nodes/${nodeId}`, {
-        method: "DELETE",
-      });
-      const data = (await res.json().catch(() => ({}))) as ApiTreeResponse;
-      if (!res.ok) throw new Error(data.error || "Could not remove member.");
-      if (data.tree) setTree(data.tree);
+      await runEngineCommand({ type: "deleteNode", nodeId });
       setSelectedNodeId(null);
       await refreshAvailable();
+    });
+  }
+
+  function clearNodeReview(nodeId: string) {
+    runMutation(async () => {
+      await runEngineCommand({ type: "clearNodeReview", nodeId });
     });
   }
 
@@ -401,6 +384,51 @@ export function FamilyTreeBuilder({
     setSelectedNodeId(null);
     setViewMode(true);
   }
+
+  const cousinSideBanner =
+    cousinPrompt && canEdit ? (
+      <div
+        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-accent/25 bg-accent/5 px-3 py-2.5 text-sm text-ink"
+        role="dialog"
+        aria-label="Cousin side"
+      >
+        <p className="min-w-0 flex-1 leading-snug">{cousinPrompt.message}</p>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="ui-btn ui-btn-secondary ui-btn-sm"
+            disabled={pending}
+            onClick={() => resolveCousinSide("maternal")}
+          >
+            Mom’s side
+          </button>
+          <button
+            type="button"
+            className="ui-btn ui-btn-secondary ui-btn-sm"
+            disabled={pending}
+            onClick={() => resolveCousinSide("paternal")}
+          >
+            Dad’s side
+          </button>
+          <button
+            type="button"
+            className="ui-btn ui-btn-ghost ui-btn-sm"
+            disabled={pending}
+            onClick={() => resolveCousinSide("unknown")}
+          >
+            Not sure
+          </button>
+          <button
+            type="button"
+            className="rounded-md p-1.5 text-ink-muted hover:bg-ink/5 hover:text-ink"
+            aria-label="Cancel"
+            onClick={() => setCousinPrompt(null)}
+          >
+            <X className="size-3.5" aria-hidden />
+          </button>
+        </div>
+      </div>
+    ) : null;
 
   const scaffoldBanner =
     scaffoldNotice && canEdit ? (
@@ -441,6 +469,23 @@ export function FamilyTreeBuilder({
         className="rounded-full p-0.5 text-ink-muted hover:bg-ink/5 hover:text-ink"
         aria-label="Dismiss"
         onClick={() => setIqNotice(null)}
+      >
+        <X className="size-3.5" aria-hidden />
+      </button>
+    </div>
+  ) : null;
+
+  const repairBanner = repairNotice ? (
+    <div
+      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-ink/10 bg-canvas px-3 py-2.5 text-sm text-ink shadow-sm"
+      role="status"
+    >
+      <p className="min-w-0 flex-1 leading-snug">{repairNotice}</p>
+      <button
+        type="button"
+        className="rounded-md p-1.5 text-ink-muted hover:bg-ink/5 hover:text-ink"
+        aria-label="Dismiss"
+        onClick={() => setRepairNotice(null)}
       >
         <X className="size-3.5" aria-hidden />
       </button>
@@ -557,6 +602,8 @@ export function FamilyTreeBuilder({
           </p>
         ) : null}
         {scaffoldBanner}
+        {cousinSideBanner}
+        {repairBanner}
         {iqBanner}
         {completeness}
         {toolkit}
@@ -603,6 +650,8 @@ export function FamilyTreeBuilder({
         </p>
       ) : null}
       {scaffoldBanner}
+      {cousinSideBanner}
+      {repairBanner}
       {iqBanner}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -650,6 +699,7 @@ export function FamilyTreeBuilder({
         onAddChild={addChildForParent}
         onAddPartner={addPartnerForNode}
         onRemove={removeNode}
+        onClearReview={clearNodeReview}
       />
 
       {viewOverlay}

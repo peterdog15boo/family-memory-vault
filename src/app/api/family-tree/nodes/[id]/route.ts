@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import {
-  deleteFamilyTreeNode,
-  getFamilyTreeGraph,
-  updateFamilyTreeNode,
-} from "@/lib/family-tree";
+import { runGenealogyCommand } from "@/lib/family-tree/engine";
 import {
   familyTreeApiErrorResponse,
   requireFamilyTreeEditAccess,
@@ -24,6 +20,7 @@ const patchBodySchema = z.object({
 
 /**
  * PATCH /api/family-tree/nodes/[id] — rename, link/unlink Person.
+ * Delegates to the Genealogy Relationship Engine.
  */
 export async function PATCH(request: Request, context: RouteContext) {
   const authResult = await requireFamilyTreeEditAccess();
@@ -40,21 +37,55 @@ export async function PATCH(request: Request, context: RouteContext) {
       );
     }
 
-    await updateFamilyTreeNode({
-      userId: authResult.treeOwnerId,
-      nodeId: id,
-      ...parsed.data,
-    });
+    const treeOwnerId = authResult.treeOwnerId;
+    let tree = null;
 
-    const graph = await getFamilyTreeGraph(authResult.treeOwnerId);
-    const node = graph.nodes.find((n) => n.id === id);
+    if (parsed.data.label !== undefined || parsed.data.notes !== undefined) {
+      const result = await runGenealogyCommand(treeOwnerId, {
+        type: "renameNode",
+        nodeId: id,
+        label: parsed.data.label,
+        notes: parsed.data.notes,
+      });
+      if (!result.ok) {
+        return NextResponse.json(
+          { ok: false, needsInput: result.needsInput },
+          { status: 409 },
+        );
+      }
+      tree = result.tree;
+    }
+
+    if (parsed.data.personId !== undefined) {
+      const result = await runGenealogyCommand(treeOwnerId, {
+        type: "linkPlaceholderToPerson",
+        nodeId: id,
+        peopleId: parsed.data.personId,
+      });
+      if (!result.ok) {
+        return NextResponse.json(
+          { ok: false, needsInput: result.needsInput },
+          { status: 409 },
+        );
+      }
+      tree = result.tree;
+    }
+
+    if (!tree) {
+      return NextResponse.json(
+        { error: "No genealogy updates provided." },
+        { status: 400 },
+      );
+    }
+
+    const node = tree.nodes.find((n) => n.id === id);
     if (!node) {
       return NextResponse.json({ error: "Tree member not found." }, { status: 404 });
     }
 
     return NextResponse.json({
       node: serializeFamilyTreeNode(node),
-      tree: serializeFamilyTreeGraph(graph),
+      tree: serializeFamilyTreeGraph(tree),
     });
   } catch (error) {
     return familyTreeApiErrorResponse(error, "Failed to update tree member");
@@ -70,11 +101,19 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
   try {
     const { id } = await context.params;
-    await deleteFamilyTreeNode(authResult.treeOwnerId, id);
-    const graph = await getFamilyTreeGraph(authResult.treeOwnerId);
+    const result = await runGenealogyCommand(authResult.treeOwnerId, {
+      type: "deleteNode",
+      nodeId: id,
+    });
+    if (!result.ok) {
+      return NextResponse.json(
+        { ok: false, needsInput: result.needsInput },
+        { status: 409 },
+      );
+    }
     return NextResponse.json({
       ok: true,
-      tree: serializeFamilyTreeGraph(graph),
+      tree: serializeFamilyTreeGraph(result.tree),
     });
   } catch (error) {
     return familyTreeApiErrorResponse(error, "Failed to remove tree member");

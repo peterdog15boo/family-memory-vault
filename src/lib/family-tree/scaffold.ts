@@ -7,6 +7,10 @@
  */
 
 import type { FamilyTreeRelationType } from "@/lib/db/schema";
+import {
+  pickParentIdForCousinSide,
+  type CousinSide,
+} from "@/lib/family-tree/cousin-side";
 import { canonicalizeRelationshipEndpoints } from "@/lib/family-tree/relations";
 
 export type ScaffoldGraphNode = {
@@ -281,9 +285,18 @@ function ensureCousinBridgeParent(
   builder: PlanBuilder,
   childId: string,
   keyBase: string,
+  side?: CousinSide,
 ): string {
   const blood = bloodParentsOf(builder.working, childId);
-  if (blood[0]) return blood[0]!;
+  if (blood.length > 0) {
+    const labeled = blood.map((id) => {
+      const node = builder.working.nodes.find((n) => n.id === id);
+      return { id, label: node?.label ?? id };
+    });
+    return (
+      pickParentIdForCousinSide(labeled, side) ?? blood[0]!
+    );
+  }
 
   // Do not reuse a spouse's parents for cousin scaffolding — that
   // incorrectly attaches the new relative to the partner's bloodline.
@@ -300,6 +313,7 @@ function ensureCousinBridgeParent(
     addEdge(builder, momKey, dadKey, "partner_of");
   }
 
+  if (side === "paternal") return dadKey;
   return momKey;
 }
 
@@ -307,6 +321,7 @@ function planCousin(
   builder: PlanBuilder,
   a: string,
   b: string,
+  side?: CousinSide,
 ): string | null {
   if (cousinsStructurallyLinked(builder.working, a, b)) return null;
 
@@ -314,11 +329,13 @@ function planCousin(
     builder,
     a,
     `${NEW_PREFIX}cousin-a`,
+    side,
   );
   const parentB = ensureCousinBridgeParent(
     builder,
     b,
     `${NEW_PREFIX}cousin-b`,
+    side,
   );
 
   // Cousins share aunts/uncles: one parent from each side are siblings.
@@ -461,6 +478,8 @@ export function planFamilyTreeScaffold(
     fromNodeId: string;
     toNodeId: string;
     type: FamilyTreeRelationType;
+    /** Which parent's side bridges a cousin link. */
+    cousinSide?: CousinSide;
   },
 ): FamilyTreeScaffoldPlan {
   const empty: FamilyTreeScaffoldPlan = {
@@ -478,7 +497,12 @@ export function planFamilyTreeScaffold(
 
   switch (input.type) {
     case "cousin_of":
-      message = planCousin(builder, input.fromNodeId, input.toNodeId);
+      message = planCousin(
+        builder,
+        input.fromNodeId,
+        input.toNodeId,
+        input.cousinSide,
+      );
       break;
     case "niece_of":
       message = planNieceNephew(

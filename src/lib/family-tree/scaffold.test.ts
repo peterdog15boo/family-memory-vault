@@ -221,6 +221,40 @@ describe("planFamilyTreeScaffold", () => {
     expect(plan.message).toMatch(/sister-in-law/i);
   });
 
+  it("bridges cousin through Dad when side is paternal", () => {
+    const plan = planFamilyTreeScaffold(
+      graph(
+        ["alex", "casey", "mom", "dad"],
+        [
+          { fromNodeId: "mom", toNodeId: "alex", type: "parent_of" },
+          { fromNodeId: "dad", toNodeId: "alex", type: "parent_of" },
+          { fromNodeId: "dad", toNodeId: "mom", type: "partner_of" },
+        ],
+      ),
+      {
+        fromNodeId: "alex",
+        toNodeId: "casey",
+        type: "cousin_of",
+        cousinSide: "paternal",
+      },
+    );
+
+    expect(
+      plan.relationships.some(
+        (r) =>
+          r.type === "sibling_of" &&
+          (r.fromKey === "dad" || r.toKey === "dad"),
+      ),
+    ).toBe(true);
+    expect(
+      plan.relationships.some(
+        (r) =>
+          r.type === "sibling_of" &&
+          (r.fromKey === "mom" || r.toKey === "mom"),
+      ),
+    ).toBe(false);
+  });
+
   it("skips scaffold for parent_of", () => {
     const plan = planFamilyTreeScaffold(graph(["p", "c"]), {
       fromNodeId: "p",

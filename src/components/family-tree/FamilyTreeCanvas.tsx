@@ -425,6 +425,7 @@ export function FamilyTreeCanvas({
                     selectedNodeId === node.id &&
                     "family-tree-person-node--selected",
                   node.isPlaceholder && "family-tree-person-node--placeholder",
+                  node.needsReview && "family-tree-person-node--needs-review",
                   viewOnly && "family-tree-person-node--view",
                 )}
                 style={{
@@ -436,7 +437,11 @@ export function FamilyTreeCanvas({
                   if (viewOnly) return;
                   onSelectNode(node.id);
                 }}
-                aria-label={displayName}
+                aria-label={
+                  node.needsReview
+                    ? `${displayName} (needs review)`
+                    : displayName
+                }
                 aria-expanded={
                   viewOnly ? undefined : selectedNodeId === node.id
                 }
@@ -458,6 +463,11 @@ export function FamilyTreeCanvas({
                   )}
                 </span>
                 <span className="family-tree-person-name">{displayName}</span>
+                {node.needsReview ? (
+                  <span className="family-tree-person-review" title={node.reviewReason ?? "Needs review"}>
+                    Needs review
+                  </span>
+                ) : null}
               </button>
             );
           })}

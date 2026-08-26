@@ -25,10 +25,15 @@ import {
   type FamilyTreeDerivedEdge,
 } from "@/lib/family-tree/types";
 import {
-  findMislinkedCoParentSiblingEdges,
   isScaffoldTempKey,
   planFamilyTreeScaffold,
 } from "@/lib/family-tree/scaffold";
+import { runFamilyTreeRepairPass } from "@/lib/family-tree/repair-apply";
+import {
+  nodeNeedsReview,
+  reviewReasonFromNotes,
+  type RepairApplyResult,
+} from "@/lib/family-tree/repair";
 import { missingCoParentSpouseIds } from "@/lib/family-tree/co-parents";
 import {
   coParentLinkNotice,
@@ -36,6 +41,7 @@ import {
   spouseLinkNotice,
   type GenealogyIqNotice,
 } from "@/lib/family-tree/genealogy-iq";
+import type { CousinSide } from "@/lib/family-tree/cousin-side";
 import {
   FAMILY_TREE_CIRCULAR_RELATIONSHIP_MESSAGE,
   validateFamilyTreeRelationship,
@@ -346,6 +352,8 @@ export type CreateFamilyTreeRelationshipInput = {
    * child as spouses. Defaults to true for parent_of edges.
    */
   linkCoParentsAsSpouses?: boolean;
+  /** Which parent's side bridges a cousin_of scaffold. */
+  cousinSide?: CousinSide;
 };
 
 export type FamilyTreeRelationshipScaffoldResult = {
@@ -456,6 +464,7 @@ export async function createFamilyTreeRelationshipWithScaffold(
         fromNodeId: endpoints.fromNodeId,
         toNodeId: endpoints.toNodeId,
         type: input.type,
+        cousinSide: input.cousinSide,
       },
     );
 
@@ -914,6 +923,8 @@ export type FamilyTreeGraphNode = FamilyTreeNode & {
   isPlaceholder: boolean;
   person: FamilyTreePersonPreview | null;
   generation: number;
+  needsReview: boolean;
+  reviewReason: string | null;
 };
 
 export type FamilyTreeGraph = {
@@ -921,83 +932,23 @@ export type FamilyTreeGraph = {
   relationships: FamilyTreeRelationship[];
   derived: FamilyTreeDerivedEdge[];
   generations: Record<string, number>;
+  /** Present when a repair pass ran (or found nothing) on this load. */
+  repair: RepairApplyResult | null;
 };
 
 /**
- * Convert sibling links between co-parents (same child) into spouse links.
- * Fixes older cousin scaffolds that incorrectly marked Mom/Dad as siblings
- * when both parent the same person.
+ * Load the vault owner's family tree graph.
+ * Runs a safe, idempotent repair pass when corruption is detected
+ * (unless `skipRepair` is set).
  */
-async function repairMislinkedCoParentSiblings(
-  userId: string,
-  relationships: FamilyTreeRelationship[],
-): Promise<FamilyTreeRelationship[]> {
-  const mislinked = findMislinkedCoParentSiblingEdges(relationships);
-  if (mislinked.length === 0) return relationships;
-
-  const db = getDb();
-  let next = relationships;
-
-  for (const edge of mislinked) {
-    if (!edge.id) continue;
-
-    const endpoints = canonicalizeRelationshipEndpoints(
-      "partner_of",
-      edge.fromNodeId,
-      edge.toNodeId,
-    );
-    const alreadyPartners = next.some(
-      (r) =>
-        r.type === "partner_of" &&
-        r.fromNodeId === endpoints.fromNodeId &&
-        r.toNodeId === endpoints.toNodeId,
-    );
-
-    if (alreadyPartners) {
-      await db
-        .delete(familyTreeRelationships)
-        .where(
-          and(
-            eq(familyTreeRelationships.id, edge.id),
-            eq(familyTreeRelationships.userId, userId),
-          ),
-        );
-      next = next.filter((r) => r.id !== edge.id);
-      continue;
-    }
-
-    const [updated] = await db
-      .update(familyTreeRelationships)
-      .set({
-        type: "partner_of",
-        fromNodeId: endpoints.fromNodeId,
-        toNodeId: endpoints.toNodeId,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(familyTreeRelationships.id, edge.id),
-          eq(familyTreeRelationships.userId, userId),
-          eq(familyTreeRelationships.type, "sibling_of"),
-        ),
-      )
-      .returning();
-
-    if (updated) {
-      next = next.map((r) => (r.id === edge.id ? updated : r));
-    }
-  }
-
-  return next;
-}
-
 export async function getFamilyTreeGraph(
   userId: string,
+  options: { skipRepair?: boolean } = {},
 ): Promise<FamilyTreeGraph> {
   await assertFamilyTreeAllowed(userId);
   const db = getDb();
 
-  const [nodes, rawRelationships] = await Promise.all([
+  const [rawNodes, rawRelationships] = await Promise.all([
     db
       .select()
       .from(familyTreeNodes)
@@ -1010,10 +961,34 @@ export async function getFamilyTreeGraph(
       .orderBy(asc(familyTreeRelationships.createdAt)),
   ]);
 
-  const relationships = await repairMislinkedCoParentSiblings(
-    userId,
-    rawRelationships,
-  );
+  const repaired = options.skipRepair
+    ? {
+        nodes: rawNodes,
+        relationships: rawRelationships,
+        result: {
+          applied: false,
+          opsApplied: 0,
+          flaggedNodeIds: rawNodes
+            .filter((n) => nodeNeedsReview(n.notes))
+            .map((n) => n.id),
+          message: null,
+          before: {
+            nodeCount: rawNodes.length,
+            relationshipCount: rawRelationships.length,
+            relationshipKeys: [],
+            nodeLabels: {},
+          },
+          after: {
+            nodeCount: rawNodes.length,
+            relationshipCount: rawRelationships.length,
+            relationshipKeys: [],
+            nodeLabels: {},
+          },
+        } satisfies RepairApplyResult,
+      }
+    : await runFamilyTreeRepairPass(userId, rawNodes, rawRelationships);
+  const nodes = repaired.nodes;
+  const relationships = repaired.relationships;
 
   const personIds = [
     ...new Set(
@@ -1090,11 +1065,19 @@ export async function getFamilyTreeGraph(
         isPlaceholder: !linked,
         person,
         generation: generations[node.id] ?? 0,
+        needsReview: nodeNeedsReview(node.notes),
+        reviewReason: reviewReasonFromNotes(node.notes),
       };
     }),
     relationships,
     derived,
     generations,
+    repair:
+      repaired.result.applied ||
+      repaired.result.flaggedNodeIds.length > 0 ||
+      Boolean(repaired.result.message)
+        ? repaired.result
+        : null,
   };
 }
 
@@ -1135,3 +1118,12 @@ export async function listPeopleAvailableForTree(
       displayName: displayPersonName(p.name),
     }));
 }
+
+export type {
+  GenealogyEngineCommand,
+  GenealogyEngineResponse,
+  GenealogyEngineResult,
+  GenealogyEngineNeedsInput,
+  GenealogyEngineNeedsInputResult,
+} from "@/lib/family-tree/engine";
+export { runGenealogyCommand } from "@/lib/family-tree/engine";

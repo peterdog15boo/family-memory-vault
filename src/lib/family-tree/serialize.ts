@@ -29,6 +29,12 @@ export type SerializedFamilyTreeGraph = {
   relationships: SerializedFamilyTreeRelationship[];
   derived: FamilyTreeDerivedEdge[];
   generations: Record<string, number>;
+  repair?: {
+    applied: boolean;
+    opsApplied: number;
+    flaggedNodeIds: string[];
+    message: string | null;
+  } | null;
 };
 
 export function serializeFamilyTreeNode(
@@ -59,5 +65,13 @@ export function serializeFamilyTreeGraph(
     relationships: graph.relationships.map(serializeFamilyTreeRelationship),
     derived: graph.derived,
     generations: graph.generations,
+    repair: graph.repair
+      ? {
+          applied: graph.repair.applied,
+          opsApplied: graph.repair.opsApplied,
+          flaggedNodeIds: graph.repair.flaggedNodeIds,
+          message: graph.repair.message,
+        }
+      : null,
   };
 }

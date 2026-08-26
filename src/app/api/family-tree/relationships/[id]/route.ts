@@ -1,8 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  deleteFamilyTreeRelationship,
-  getFamilyTreeGraph,
-} from "@/lib/family-tree";
+import { runGenealogyCommand } from "@/lib/family-tree/engine";
 import {
   familyTreeApiErrorResponse,
   requireFamilyTreeEditAccess,
@@ -13,6 +10,7 @@ type RouteContext = { params: Promise<{ id: string }> };
 
 /**
  * DELETE /api/family-tree/relationships/[id]
+ * Delegates to the Genealogy Relationship Engine.
  */
 export async function DELETE(_request: Request, context: RouteContext) {
   const authResult = await requireFamilyTreeEditAccess();
@@ -20,11 +18,19 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
   try {
     const { id } = await context.params;
-    await deleteFamilyTreeRelationship(authResult.treeOwnerId, id);
-    const graph = await getFamilyTreeGraph(authResult.treeOwnerId);
+    const result = await runGenealogyCommand(authResult.treeOwnerId, {
+      type: "removeRelationship",
+      edgeId: id,
+    });
+    if (!result.ok) {
+      return NextResponse.json(
+        { ok: false, needsInput: result.needsInput },
+        { status: 409 },
+      );
+    }
     return NextResponse.json({
       ok: true,
-      tree: serializeFamilyTreeGraph(graph),
+      tree: serializeFamilyTreeGraph(result.tree),
     });
   } catch (error) {
     return familyTreeApiErrorResponse(error, "Failed to remove relationship");

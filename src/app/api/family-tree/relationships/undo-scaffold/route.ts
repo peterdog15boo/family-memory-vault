@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import {
-  getFamilyTreeGraph,
-  undoFamilyTreeScaffold,
-} from "@/lib/family-tree";
+import { runGenealogyCommand } from "@/lib/family-tree/engine";
 import {
   familyTreeApiErrorResponse,
   requireFamilyTreeEditAccess,
@@ -17,7 +14,7 @@ const undoBodySchema = z.object({
 
 /**
  * POST /api/family-tree/relationships/undo-scaffold
- * Undo auto-created placeholders + the relationship that triggered them.
+ * Delegates to the Genealogy Relationship Engine.
  */
 export async function POST(request: Request) {
   const authResult = await requireFamilyTreeEditAccess();
@@ -33,14 +30,19 @@ export async function POST(request: Request) {
       );
     }
 
-    await undoFamilyTreeScaffold({
-      userId: authResult.treeOwnerId,
+    const result = await runGenealogyCommand(authResult.treeOwnerId, {
+      type: "undoScaffold",
       nodeIds: parsed.data.nodeIds,
       relationshipIds: parsed.data.relationshipIds,
     });
+    if (!result.ok) {
+      return NextResponse.json(
+        { ok: false, needsInput: result.needsInput },
+        { status: 409 },
+      );
+    }
 
-    const graph = await getFamilyTreeGraph(authResult.treeOwnerId);
-    return NextResponse.json({ tree: serializeFamilyTreeGraph(graph) });
+    return NextResponse.json({ tree: serializeFamilyTreeGraph(result.tree) });
   } catch (error) {
     return familyTreeApiErrorResponse(error, "Failed to undo tree changes");
   }
