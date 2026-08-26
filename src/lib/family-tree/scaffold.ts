@@ -382,8 +382,8 @@ function planInLaw(
     if (safeToAddSibling(builder.working, a, partner)) {
       addEdge(builder, a, partner, "sibling_of");
       return kind === "sister_in_law"
-        ? "Connected through a partner so this sister-in-law relationship displays correctly."
-        : "Connected through a partner so this brother-in-law relationship displays correctly.";
+        ? "Connected through a spouse so this sister-in-law relationship displays correctly."
+        : "Connected through a spouse so this brother-in-law relationship displays correctly.";
     }
   }
 
@@ -402,8 +402,8 @@ function planInLaw(
     if (safeToAddSibling(builder.working, b, partner)) {
       addEdge(builder, b, partner, "sibling_of");
       return kind === "sister_in_law"
-        ? "Connected through a partner so this sister-in-law relationship displays correctly."
-        : "Connected through a partner so this brother-in-law relationship displays correctly.";
+        ? "Connected through a spouse so this sister-in-law relationship displays correctly."
+        : "Connected through a spouse so this brother-in-law relationship displays correctly.";
     }
   }
 
@@ -420,7 +420,7 @@ function planInLaw(
   const partnerKey = addNode(
     builder,
     `${NEW_PREFIX}inlaw-partner`,
-    "Partner",
+    "Spouse",
   );
   if (safeToAddPartner(builder.working, b, partnerKey)) {
     addEdge(builder, b, partnerKey, "partner_of");
@@ -430,8 +430,8 @@ function planInLaw(
   }
 
   return kind === "sister_in_law"
-    ? "Added a placeholder partner so this sister-in-law relationship displays correctly."
-    : "Added a placeholder partner so this brother-in-law relationship displays correctly.";
+    ? "Added a placeholder spouse so this sister-in-law relationship displays correctly."
+    : "Added a placeholder spouse so this brother-in-law relationship displays correctly.";
 }
 
 /**

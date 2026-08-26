@@ -508,7 +508,7 @@ export function FamilyTreeCanvas({
                     }}
                   >
                     <Heart className="size-3.5" aria-hidden />
-                    Partner
+                    Spouse
                   </button>
                 </div>
               ) : null}

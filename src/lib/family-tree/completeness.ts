@@ -245,9 +245,9 @@ function pickNextAction(
   if (needsPartner) {
     return {
       kind: "add_partner",
-      title: `Add a partner for ${needsPartner.label}`,
+      title: `Add a spouse for ${needsPartner.label}`,
       body: "Optional, but it often completes the picture for this generation.",
-      cta: "Add partner",
+      cta: "Add spouse",
       nodeId: needsPartner.id,
     };
   }
@@ -382,7 +382,7 @@ export function computeFamilyTreeCompleteness(
     },
     {
       id: "partnersFilled",
-      label: "Partners filled",
+      label: "Spouses filled",
       done: partnerDone,
       total: partnerTotal,
       percent: partnerTotal === 0 ? 0 : ratioPercent(partnerDone, partnerTotal),

@@ -211,7 +211,7 @@ export function FamilyTreeNodePopover({
               onClick={() => onAddPartner(node.id)}
             >
               <Heart className="size-4" aria-hidden />
-              Add partner
+              Add spouse
             </button>
           </div>
           <p className="mt-2 text-xs text-ink-muted">

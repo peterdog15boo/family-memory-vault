@@ -227,7 +227,7 @@ export function FamilyTreeBuilder({
   function addPartnerForNode(nodeId: string) {
     runMutation(async () => {
       const created = await createNode({
-        label: "Partner",
+        label: "Spouse",
         link: {
           type: "partner_of",
           otherNodeId: nodeId,

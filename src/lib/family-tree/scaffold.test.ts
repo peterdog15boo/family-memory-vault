@@ -160,7 +160,7 @@ describe("planFamilyTreeScaffold", () => {
     });
 
     expect(plan.nodes).toHaveLength(1);
-    expect(plan.nodes[0]?.label).toBe("Partner");
+    expect(plan.nodes[0]?.label).toBe("Spouse");
     expect(plan.relationships.some((r) => r.type === "partner_of")).toBe(true);
     expect(plan.relationships.some((r) => r.type === "sibling_of")).toBe(true);
     expect(plan.message).toMatch(/sister-in-law/i);

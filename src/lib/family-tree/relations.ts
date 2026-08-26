@@ -26,7 +26,7 @@ export const FAMILY_TREE_RELATION_EDGE_LABELS: Record<
   string
 > = {
   parent_of: "Parent",
-  partner_of: "Partner",
+  partner_of: "Spouse",
   sibling_of: "Sibling",
   cousin_of: "Cousin",
   niece_of: "Niece",
@@ -73,8 +73,8 @@ export const FAMILY_TREE_RELATION_CHOICES: FamilyTreeRelationChoice[] = [
   },
   {
     id: "partner",
-    label: "Is the spouse / partner of…",
-    hint: "Married or partners",
+    label: "Is the spouse of…",
+    hint: "Married or long-term",
     group: "core",
   },
   {
@@ -195,7 +195,7 @@ export function describeRelationFromViewer(
     case "parent_of":
       return viewerIsFrom ? "Parent of" : "Child of";
     case "partner_of":
-      return "Partner of";
+      return "Spouse of";
     case "sibling_of":
       return "Sibling of";
     case "cousin_of":
