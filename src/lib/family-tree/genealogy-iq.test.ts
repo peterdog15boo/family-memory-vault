@@ -3,6 +3,7 @@ import {
   canAutoSpouseCoParents,
   coParentsToAutoSpouse,
   inferredCoParentPairs,
+  isParentOfChild,
   missingCoParentSpouseIds,
   preferredExistingCoParentId,
   spouseIdsOf,
@@ -109,5 +110,16 @@ describe("genealogy IQ helpers", () => {
         ]),
       ),
     ).toEqual([["dad", "mom"]]);
+  });
+
+  it("never treats the child's spouse as an auto co-parent target", () => {
+    // Adding Mom→Jeff must not also invent Mom→Kathy just because Jeff↔Kathy.
+    const rels = edges([
+      ["jeff", "kathy", "partner_of"],
+      ["mom", "jeff", "parent_of"],
+    ]);
+    expect(missingCoParentSpouseIds(rels, "mom", "jeff")).toEqual([]);
+    expect(coParentsToAutoSpouse(rels, "mom", "jeff")).toEqual([]);
+    expect(isParentOfChild(rels, "mom", "kathy")).toBe(false);
   });
 });

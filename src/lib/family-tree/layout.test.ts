@@ -101,6 +101,9 @@ describe("computeFamilyTreeLayout", () => {
     const kathy = layout.nodes.find((n) => n.id === "kathy")!;
     const dad = layout.nodes.find((n) => n.id === "dad")!;
     expect(jeff.generation).toBe(kathy.generation);
+    expect(Math.abs(jeff.x - kathy.x)).toBeGreaterThanOrEqual(
+      TREE_LAYOUT.nodeWidth,
+    );
     expect(dad.y).toBeLessThan(jeff.y);
     expect(layout.edges.some((e) => e.id === "parent:dad->jeff")).toBe(true);
     expect(layout.edges.some((e) => e.type === "cousin_of")).toBe(true);
@@ -111,6 +114,91 @@ describe("computeFamilyTreeLayout", () => {
           (e.fromId === "jeff" && e.toId === "scott") ||
           (e.fromId === "scott" && e.toId === "jeff"),
       ),
+    ).toBe(false);
+  });
+
+  it("keeps Jeff and Kathy as distinct spouse nodes with separate parent couples", () => {
+    const layout = computeFamilyTreeLayout(
+      [
+        { id: "jeff-mom", label: "Mom" },
+        { id: "jeff-dad", label: "Dad" },
+        { id: "kathy-mom", label: "Mom" },
+        { id: "kathy-dad", label: "Dad" },
+        { id: "jeff", label: "Jeff" },
+        { id: "kathy", label: "Kathy" },
+        { id: "noah", label: "Noah" },
+      ],
+      [
+        { fromNodeId: "jeff-dad", toNodeId: "jeff-mom", type: "partner_of" },
+        { fromNodeId: "jeff-mom", toNodeId: "jeff", type: "parent_of" },
+        { fromNodeId: "jeff-dad", toNodeId: "jeff", type: "parent_of" },
+        {
+          fromNodeId: "kathy-dad",
+          toNodeId: "kathy-mom",
+          type: "partner_of",
+        },
+        { fromNodeId: "kathy-mom", toNodeId: "kathy", type: "parent_of" },
+        { fromNodeId: "kathy-dad", toNodeId: "kathy", type: "parent_of" },
+        { fromNodeId: "jeff", toNodeId: "kathy", type: "partner_of" },
+        { fromNodeId: "jeff", toNodeId: "noah", type: "parent_of" },
+        { fromNodeId: "kathy", toNodeId: "noah", type: "parent_of" },
+      ],
+    );
+
+    const jeff = layout.nodes.find((n) => n.id === "jeff")!;
+    const kathy = layout.nodes.find((n) => n.id === "kathy")!;
+    const noah = layout.nodes.find((n) => n.id === "noah")!;
+    const jeffMom = layout.nodes.find((n) => n.id === "jeff-mom")!;
+    const jeffDad = layout.nodes.find((n) => n.id === "jeff-dad")!;
+    const kathyMom = layout.nodes.find((n) => n.id === "kathy-mom")!;
+    const kathyDad = layout.nodes.find((n) => n.id === "kathy-dad")!;
+
+    // Two distinct people — never a merged overlapping cell.
+    expect(jeff.id).not.toBe(kathy.id);
+    expect(Math.abs(jeff.x - kathy.x)).toBeGreaterThanOrEqual(
+      TREE_LAYOUT.nodeWidth,
+    );
+    expect(jeff.y).toBe(kathy.y);
+
+    // Parents sit above their own child.
+    expect(jeffMom.y).toBeLessThan(jeff.y);
+    expect(jeffDad.y).toBeLessThan(jeff.y);
+    expect(kathyMom.y).toBeLessThan(kathy.y);
+    expect(kathyDad.y).toBeLessThan(kathy.y);
+
+    // Jeff's parents closer to Jeff than to Kathy (and vice versa).
+    const jeffMid = jeff.x + TREE_LAYOUT.nodeWidth / 2;
+    const kathyMid = kathy.x + TREE_LAYOUT.nodeWidth / 2;
+    const jeffParentsMid =
+      (jeffMom.x + jeffDad.x) / 2 + TREE_LAYOUT.nodeWidth / 2;
+    const kathyParentsMid =
+      (kathyMom.x + kathyDad.x) / 2 + TREE_LAYOUT.nodeWidth / 2;
+    expect(Math.abs(jeffParentsMid - jeffMid)).toBeLessThan(
+      Math.abs(jeffParentsMid - kathyMid) + 1,
+    );
+    expect(Math.abs(kathyParentsMid - kathyMid)).toBeLessThan(
+      Math.abs(kathyParentsMid - jeffMid) + 1,
+    );
+
+    // Noah under the couple.
+    expect(noah.y).toBeGreaterThan(jeff.y);
+    const coupleMid = (jeffMid + kathyMid) / 2;
+    expect(
+      Math.abs(noah.x + TREE_LAYOUT.nodeWidth / 2 - coupleMid),
+    ).toBeLessThan(TREE_LAYOUT.nodeWidth);
+
+    // Parent lines only to the correct child — no fan-in to a merged cell.
+    expect(
+      layout.edges.some((e) => e.id === "parent:jeff-mom->jeff"),
+    ).toBe(true);
+    expect(
+      layout.edges.some((e) => e.id === "parent:kathy-mom->kathy"),
+    ).toBe(true);
+    expect(
+      layout.edges.some((e) => e.id === "parent:jeff-mom->kathy"),
+    ).toBe(false);
+    expect(
+      layout.edges.some((e) => e.id === "parent:kathy-mom->jeff"),
     ).toBe(false);
   });
 });

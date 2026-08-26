@@ -67,7 +67,8 @@ export const TREE_LAYOUT = {
   nodeWidth: 100,
   nodeHeight: 118,
   hGap: 36,
-  partnerGap: 18,
+  /** Keep spouses visually distinct — never stacked into one cell. */
+  partnerGap: 32,
   /** Extra gap between unrelated family clusters on a row. */
   clusterGap: 56,
   vGap: 112,
@@ -120,8 +121,9 @@ function pathMidpoint(
 /**
  * Pack nodes into a readable tree:
  * - y by generation (recomputed from parent/partner/sibling edges)
- * - partners sit side-by-side
- * - children cluster under parent midpoints
+ * - partners sit side-by-side as two distinct nodes (never merged)
+ * - each spouse sits under their own parents when both bloodlines exist
+ * - shared children cluster under the couple midpoint
  * - unrelated clusters get horizontal breathing room
  * - every stored relationship draws a line; none are invented
  */
@@ -319,12 +321,11 @@ export function computeFamilyTreeLayout(
 
   const positions = new Map<string, { x: number; y: number }>();
   const unitWidth = TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap;
+  const minPartnerSep = TREE_LAYOUT.nodeWidth + TREE_LAYOUT.partnerGap;
   /** Track which sequential units were unrelated for cluster gaps. */
   const clusterBreakAfter = new Set<string>();
 
-  for (let g = 0; g <= maxGen; g++) {
-    const ids = gens[g]!;
-    // Detect cluster breaks between consecutive partner-units.
+  function partnerUnitsInOrder(ids: string[]): string[][] {
     const units: string[][] = [];
     let i = 0;
     while (i < ids.length) {
@@ -338,6 +339,76 @@ export function computeFamilyTreeLayout(
         i += 1;
       }
     }
+    return units;
+  }
+
+  function midXOfNodes(ids: string[]): number | null {
+    const xs = ids
+      .map((id) => positions.get(id)?.x)
+      .filter((n): n is number => n != null);
+    if (xs.length === 0) return null;
+    return (
+      xs.reduce((a, b) => a + b, 0) / xs.length + TREE_LAYOUT.nodeWidth / 2
+    );
+  }
+
+  function shiftUnit(unit: string[], dx: number) {
+    if (dx === 0) return;
+    for (const id of unit) {
+      const pos = positions.get(id);
+      if (!pos) continue;
+      positions.set(id, { x: pos.x + dx, y: pos.y });
+    }
+  }
+
+  /**
+   * Place a spouse couple as two distinct nodes: each under their own parents
+   * when possible, never collapsed into one overlapping cell.
+   */
+  function placeCoupleUnderParents(leftId: string, rightId: string) {
+    const leftPos = positions.get(leftId);
+    const rightPos = positions.get(rightId);
+    if (!leftPos || !rightPos) return;
+    const y = leftPos.y;
+
+    const leftParentMid = midXOfNodes(parentsByChild.get(leftId) ?? []);
+    const rightParentMid = midXOfNodes(parentsByChild.get(rightId) ?? []);
+
+    let leftCenter =
+      leftParentMid ?? leftPos.x + TREE_LAYOUT.nodeWidth / 2;
+    let rightCenter =
+      rightParentMid ?? rightPos.x + TREE_LAYOUT.nodeWidth / 2;
+
+    if (rightCenter - leftCenter < minPartnerSep) {
+      const mid = (leftCenter + rightCenter) / 2;
+      leftCenter = mid - minPartnerSep / 2;
+      rightCenter = mid + minPartnerSep / 2;
+    }
+
+    positions.set(leftId, {
+      x: leftCenter - TREE_LAYOUT.nodeWidth / 2,
+      y,
+    });
+    positions.set(rightId, {
+      x: rightCenter - TREE_LAYOUT.nodeWidth / 2,
+      y,
+    });
+  }
+
+  function placeSingleUnderParents(id: string) {
+    const pos = positions.get(id);
+    if (!pos) return;
+    const parentMid = midXOfNodes(parentsByChild.get(id) ?? []);
+    if (parentMid == null) return;
+    positions.set(id, {
+      x: parentMid - TREE_LAYOUT.nodeWidth / 2,
+      y: pos.y,
+    });
+  }
+
+  for (let g = 0; g <= maxGen; g++) {
+    const ids = gens[g]!;
+    const units = partnerUnitsInOrder(ids);
     for (let u = 0; u < units.length - 1; u++) {
       if (!blocksRelated(units[u]!, units[u + 1]!)) {
         clusterBreakAfter.add(units[u]![units[u]!.length - 1]!);
@@ -345,17 +416,12 @@ export function computeFamilyTreeLayout(
     }
 
     let x = 0;
-    i = 0;
-    while (i < ids.length) {
-      const id = ids[i]!;
-      const partner = partnerOf.get(id);
-      const partnerNext =
-        partner && ids[i + 1] === partner ? partner : undefined;
+    for (const unit of units) {
       const y = g * (TREE_LAYOUT.nodeHeight + TREE_LAYOUT.vGap);
-
-      if (partnerNext) {
-        positions.set(id, { x, y });
-        positions.set(partnerNext, {
+      if (unit.length === 2) {
+        const [a, b] = unit;
+        positions.set(a!, { x, y });
+        positions.set(b!, {
           x: x + TREE_LAYOUT.nodeWidth + TREE_LAYOUT.partnerGap,
           y,
         });
@@ -363,58 +429,63 @@ export function computeFamilyTreeLayout(
           TREE_LAYOUT.nodeWidth * 2 +
           TREE_LAYOUT.partnerGap +
           TREE_LAYOUT.hGap;
-        if (clusterBreakAfter.has(partnerNext)) {
-          x += TREE_LAYOUT.clusterGap;
-        }
-        i += 2;
+        if (clusterBreakAfter.has(b!)) x += TREE_LAYOUT.clusterGap;
       } else {
+        const id = unit[0]!;
         positions.set(id, { x, y });
         x += unitWidth;
-        if (clusterBreakAfter.has(id)) {
-          x += TREE_LAYOUT.clusterGap;
-        }
-        i += 1;
+        if (clusterBreakAfter.has(id)) x += TREE_LAYOUT.clusterGap;
       }
     }
   }
 
-  // Pull children under their parents (2 passes).
+  // Align each generation: couples stay atomic; spouses under their own parents.
   for (let pass = 0; pass < 2; pass++) {
     for (let g = 1; g <= maxGen; g++) {
-      const ids = gens[g]!;
-      let start = 0;
-      while (start < ids.length) {
-        const first = ids[start]!;
-        const parentKey = parentClusterKey(first);
-        let end = start + 1;
-        while (end < ids.length) {
-          if (parentClusterKey(ids[end]!) !== parentKey) break;
-          end += 1;
+      for (const unit of partnerUnitsInOrder(gens[g]!)) {
+        if (unit.length === 2) {
+          placeCoupleUnderParents(unit[0]!, unit[1]!);
+        } else if (unit[0]) {
+          placeSingleUnderParents(unit[0]);
         }
+      }
+    }
 
-        const cluster = ids.slice(start, end);
-        const parents = parentsByChild.get(first) ?? [];
-        if (parents.length > 0 && cluster.length > 0) {
-          const parentXs = parents
-            .map((p) => positions.get(p)?.x)
-            .filter((n): n is number => n != null);
-          if (parentXs.length > 0) {
-            const parentMid =
-              parentXs.reduce((a, b) => a + b, 0) / parentXs.length +
-              TREE_LAYOUT.nodeWidth / 2;
-            const clusterLeft = positions.get(cluster[0]!)!.x;
-            const clusterRight =
-              positions.get(cluster[cluster.length - 1]!)!.x +
-              TREE_LAYOUT.nodeWidth;
-            const clusterMid = (clusterLeft + clusterRight) / 2;
-            const dx = parentMid - clusterMid;
-            for (const id of cluster) {
-              const pos = positions.get(id)!;
-              positions.set(id, { x: pos.x + dx, y: pos.y });
-            }
+    // Pull parent couples above their children (maternal / paternal branches).
+    for (let g = maxGen - 1; g >= 0; g--) {
+      for (const unit of partnerUnitsInOrder(gens[g]!)) {
+        const childIds = new Set<string>();
+        for (const id of unit) {
+          for (const childId of childrenByParent.get(id) ?? []) {
+            childIds.add(childId);
           }
         }
-        start = end;
+        if (childIds.size === 0) continue;
+        const kidsMid = midXOfNodes([...childIds]);
+        if (kidsMid == null) continue;
+        const unitLeft = positions.get(unit[0]!)?.x;
+        const unitRightId = unit[unit.length - 1]!;
+        const unitRight = positions.get(unitRightId)?.x;
+        if (unitLeft == null || unitRight == null) continue;
+        const unitMid =
+          (unitLeft + unitRight + TREE_LAYOUT.nodeWidth) / 2;
+        shiftUnit(unit, kidsMid - unitMid);
+      }
+    }
+  }
+
+  // Final safety: same-row nodes must not overlap into a "merged" cell.
+  for (let g = 0; g <= maxGen; g++) {
+    const ids = [...gens[g]!].sort(
+      (a, b) => (positions.get(a)?.x ?? 0) - (positions.get(b)?.x ?? 0),
+    );
+    for (let i = 1; i < ids.length; i++) {
+      const prev = positions.get(ids[i - 1]!);
+      const cur = positions.get(ids[i]!);
+      if (!prev || !cur) continue;
+      const minLeft = prev.x + TREE_LAYOUT.nodeWidth + TREE_LAYOUT.partnerGap;
+      if (cur.x < minLeft) {
+        positions.set(ids[i]!, { x: minLeft, y: cur.y });
       }
     }
   }

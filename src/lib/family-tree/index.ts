@@ -610,6 +610,9 @@ async function assertPreservedFamilyTreeNodes(
 /**
  * When Parent A gains a child and already has a spouse, also create
  * parent_of links from that spouse → child so the kid sits under the couple.
+ *
+ * Genealogy IQ: this only links spouses of the *parent* as co-parents of the
+ * child. It never attaches a new parent of person A to person A's spouse.
  */
 async function linkExistingSpousesAsCoParents(input: {
   userId: string;
