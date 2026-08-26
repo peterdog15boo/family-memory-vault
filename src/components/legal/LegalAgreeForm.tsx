@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { TermsOfServiceDocument } from "@/components/legal/TermsOfServiceDocument";
 import { useTranslations } from "@/components/i18n/LocaleProvider";
+import { IdleActivityKeepalive } from "@/components/session/IdleActivityKeepalive";
 import {
   BETA_NDA_CLOSING,
   BETA_NDA_INTRO,
@@ -12,6 +13,7 @@ import {
 } from "@/lib/beta-nda/nda-text";
 import { BETA_NDA_VERSION } from "@/lib/beta-nda/constants";
 import { TERMS_VERSION } from "@/lib/terms/constants";
+import { resetIdleActivityClock } from "@/lib/session/idle-session-sync";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -78,6 +80,7 @@ export function LegalAgreeForm({
           setError(data.error || t("legalAgree.errorSave"));
           return;
         }
+        resetIdleActivityClock();
         router.replace(data.redirectTo || redirectTo || "/dashboard");
         router.refresh();
       } catch {
@@ -95,6 +98,7 @@ export function LegalAgreeForm({
 
   return (
     <div className="beta-nda-page legal-agree-page">
+      <IdleActivityKeepalive />
       <header className="beta-nda-header">
         <p className="beta-nda-eyebrow">{t("legalAgree.eyebrow")}</p>
         <h1 className="beta-nda-title">{t("legalAgree.title")}</h1>

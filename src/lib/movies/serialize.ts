@@ -10,6 +10,12 @@ import { getMovieDownloadUrl } from "@/lib/r2";
 /** Default signed movie URL lifetime (seconds). */
 export const MOVIE_SIGNED_URL_TTL_SECONDS = 60 * 60; // 1 hour — covers pause/seek mid-watch
 
+function movieAttachmentFilename(title: string): string {
+  const base =
+    (title || "movie").replace(/[^\w\s-]+/g, "").trim() || "movie";
+  return `${base}.mp4`;
+}
+
 export type SerializedMovie = {
   id: string;
   memoryId: string;
@@ -24,9 +30,9 @@ export type SerializedMovie = {
   errorMessage: string | null;
   createdAt: string;
   completedAt: string | null;
-  /** Signed play URL — only when status is ready. Short-lived. */
+  /** Signed play URL — only when status is ready. Short-lived (inline). */
   playUrl: string | null;
-  /** Same signed URL for download UI. Short-lived. */
+  /** Signed download URL with attachment disposition. Short-lived. */
   downloadUrl: string | null;
   thumbnailUrl: string | null;
   /** Durable app share page URL when an active share link exists. */
@@ -78,15 +84,26 @@ export async function serializeMovie(
     movie.outputKey?.trim()
   ) {
     try {
-      const signed = await getMovieDownloadUrl(
-        movie.outputKey,
-        movie.userId,
-        movie.id,
-        MOVIE_SIGNED_URL_TTL_SECONDS,
-      );
-      playUrl = signed.url;
-      downloadUrl = signed.url;
-      urlsExpireAt = signed.expiresAt;
+      const filename = movieAttachmentFilename(movie.title);
+      const [signedPlay, signedDownload] = await Promise.all([
+        getMovieDownloadUrl(
+          movie.outputKey,
+          movie.userId,
+          movie.id,
+          MOVIE_SIGNED_URL_TTL_SECONDS,
+          { contentDisposition: "inline", filename },
+        ),
+        getMovieDownloadUrl(
+          movie.outputKey,
+          movie.userId,
+          movie.id,
+          MOVIE_SIGNED_URL_TTL_SECONDS,
+          { contentDisposition: "attachment", filename },
+        ),
+      ]);
+      playUrl = signedPlay.url;
+      downloadUrl = signedDownload.url;
+      urlsExpireAt = signedPlay.expiresAt;
     } catch (error) {
       console.error("[movies] Failed to sign movie play URL", movie.id, error);
     }

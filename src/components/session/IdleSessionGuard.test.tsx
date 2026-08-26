@@ -16,12 +16,17 @@ import {
   IDLE_TOTAL_MS,
   IDLE_WARNING_MS,
 } from "@/lib/session/idle-timeout";
-import { IDLE_LAST_ACTIVITY_KEY } from "@/lib/session/idle-session-sync";
+import {
+  IDLE_AUTH_SESSION_KEY,
+  IDLE_LAST_ACTIVITY_KEY,
+} from "@/lib/session/idle-session-sync";
 
 const signOut = vi.fn(async () => undefined);
+const SESSION_ID = "sess_test_continuous";
 
 vi.mock("@clerk/nextjs", () => ({
   useClerk: () => ({ signOut }),
+  useAuth: () => ({ sessionId: SESSION_ID }),
 }));
 
 vi.mock("@/components/i18n/LocaleProvider", () => ({
@@ -206,6 +211,7 @@ describe("IdleSessionGuard checklist", () => {
 
   it("resume after 20+ minutes enforces logout without waiting for throttled timers", async () => {
     const now = Date.now();
+    localStorage.setItem(IDLE_AUTH_SESSION_KEY, SESSION_ID);
     localStorage.setItem(
       IDLE_LAST_ACTIVITY_KEY,
       String(now - IDLE_TOTAL_MS - 3 * 60 * 1000),
@@ -219,8 +225,27 @@ describe("IdleSessionGuard checklist", () => {
     });
   });
 
+  it("fresh Clerk session discards expired prior idle clock (no instant logout)", async () => {
+    const now = Date.now();
+    localStorage.setItem(IDLE_AUTH_SESSION_KEY, "sess_previous");
+    localStorage.setItem(
+      IDLE_LAST_ACTIVITY_KEY,
+      String(now - IDLE_TOTAL_MS - 3 * 60 * 1000),
+    );
+
+    renderGuard(freePolicy);
+    await flushMicrotasks();
+
+    expect(signOut).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(localStorage.getItem(IDLE_AUTH_SESSION_KEY)).toBe(SESSION_ID);
+    const stored = Number(localStorage.getItem(IDLE_LAST_ACTIVITY_KEY));
+    expect(stored).toBeGreaterThan(now - 5_000);
+  });
+
   it("resume after 16 minutes shows warning with residual grace", async () => {
     const now = Date.now();
+    localStorage.setItem(IDLE_AUTH_SESSION_KEY, SESSION_ID);
     localStorage.setItem(
       IDLE_LAST_ACTIVITY_KEY,
       String(now - IDLE_WARNING_MS - 60_000),

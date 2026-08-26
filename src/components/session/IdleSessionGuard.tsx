@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { useClerk } from "@clerk/nextjs";
+import { useClerk, useAuth } from "@clerk/nextjs";
 import { Loader2, ShieldAlert } from "lucide-react";
 import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { useOverlayA11y } from "@/hooks/useOverlayA11y";
@@ -19,9 +19,9 @@ import {
   type CriticalWorkSnapshot,
 } from "@/lib/session/critical-activity";
 import {
+  bootstrapIdleActivityForAuthSession,
   broadcastIdleSync,
   inactivitySignInPath,
-  readLastActivityAt,
   subscribeIdleSync,
   writeLastActivityAt,
 } from "@/lib/session/idle-session-sync";
@@ -223,6 +223,7 @@ export type IdleSessionGuardProps = {
 export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
   const t = useTranslations();
   const { signOut } = useClerk();
+  const { sessionId } = useAuth();
   const titleId = useId();
   const descId = useId();
   const countdownId = useId();
@@ -638,7 +639,7 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
     };
   }, [isOwner]);
 
-  // Init lastActivityAt + arm / disarm when preference changes.
+  // Init lastActivityAt + arm / disarm when preference or auth session changes.
   useEffect(() => {
     if (!isOwner) return;
     if (!policy.enabled) {
@@ -648,11 +649,15 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
     }
 
     const now = Date.now();
-    const stored = readLastActivityAt();
-    if (stored != null) {
-      lastActivityAtRef.current = stored;
-    } else {
-      setLastActivityAt(now, true);
+    const bootstrapped = bootstrapIdleActivityForAuthSession(sessionId, now);
+    lastActivityAtRef.current = bootstrapped;
+    // Fresh clock after new auth / discarded residual — never keep a stale warn UI.
+    if (
+      evaluateIdleState(bootstrapped, now).action === "none" &&
+      phaseRef.current !== "idle" &&
+      phaseRef.current !== "signing_out"
+    ) {
+      setPhase("idle");
     }
 
     checkIdleStateRef.current();
@@ -661,7 +666,7 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
     return () => {
       clearScheduleTimers();
     };
-  }, [isOwner, policy.enabled, clearScheduleTimers, setLastActivityAt]);
+  }, [isOwner, policy.enabled, sessionId, clearScheduleTimers]);
 
   // Activity + resume checks (visibility/focus/pageshow/online).
   useEffect(() => {

@@ -9,8 +9,10 @@ import { FirstFamilyMovieGuidedUpload } from "@/components/first-family-movie/Fi
 import { FirstFamilyMoviePeopleDiscovery } from "@/components/first-family-movie/FirstFamilyMoviePeopleDiscovery";
 import { FirstFamilyMovieSkipButton } from "@/components/first-family-movie/FirstFamilyMovieSkipButton";
 import { FirstFamilyMovieWelcome } from "@/components/first-family-movie/FirstFamilyMovieWelcome";
+import { IdleActivityKeepalive } from "@/components/session/IdleActivityKeepalive";
 import { usePrefersReducedMotion } from "@/components/media-section/usePrefersReducedMotion";
 import { trackFirstMovieEvent } from "@/lib/first-family-movie/track-client";
+import { resetIdleActivityClock } from "@/lib/session/idle-session-sync";
 import type { SerializedMovie } from "@/lib/movies/serialize";
 import { cn } from "@/lib/utils";
 
@@ -102,6 +104,7 @@ export function FirstFamilyMovieExperience({
     if (skipPending) return;
     setSkipPending(true);
     try {
+      resetIdleActivityClock();
       if (localPreview) {
         router.replace("/dashboard");
         router.refresh();
@@ -156,6 +159,7 @@ export function FirstFamilyMovieExperience({
   const goToApp = useCallback(
     async (path: string) => {
       await persistCompletion();
+      resetIdleActivityClock();
       router.replace(path);
       router.refresh();
     },
@@ -169,6 +173,7 @@ export function FirstFamilyMovieExperience({
         showCollage ? "bg-[#0c0a09]" : "bg-[color:var(--canvas)]",
       )}
     >
+      <IdleActivityKeepalive />
       {localPreview ? (
         <p
           className="pointer-events-none absolute left-3 top-3 z-50 rounded-md bg-black/55 px-2.5 py-1 font-sans text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-[#e8c9a4] backdrop-blur-sm"

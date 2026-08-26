@@ -21,9 +21,19 @@ import {
   subscribeUploadActivity,
 } from "@/lib/session/upload-activity";
 import {
+  bootstrapIdleActivityForAuthSession,
+  clearIdleAuthSessionId,
+  clearLastActivityAt,
   consumeInactivityLogoutFlag,
+  IDLE_AUTH_SESSION_KEY,
+  IDLE_LAST_ACTIVITY_KEY,
   inactivitySignInPath,
   markInactivityLogout,
+  readIdleAuthSessionId,
+  readLastActivityAt,
+  resetIdleActivityClock,
+  writeIdleAuthSessionId,
+  writeLastActivityAt,
 } from "@/lib/session/idle-session-sync";
 
 describe("idle timeout constants", () => {
@@ -135,5 +145,70 @@ describe("inactivity sign-in flag", () => {
     markInactivityLogout();
     expect(consumeInactivityLogoutFlag()).toBe(true);
     expect(consumeInactivityLogoutFlag()).toBe(false);
+  });
+});
+
+describe("bootstrapIdleActivityForAuthSession", () => {
+  const store = new Map<string, string>();
+
+  beforeEach(() => {
+    store.clear();
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: (key: string) => store.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          store.set(key, value);
+        },
+        removeItem: (key: string) => {
+          store.delete(key);
+        },
+        clear: () => store.clear(),
+      },
+    });
+  });
+
+  it("resets the clock for a new Clerk session even if prior activity expired", () => {
+    const now = 10_000_000;
+    writeIdleAuthSessionId("sess_old");
+    writeLastActivityAt(now - IDLE_TOTAL_MS - 60_000);
+
+    const next = bootstrapIdleActivityForAuthSession("sess_new", now);
+    expect(next).toBe(now);
+    expect(readLastActivityAt()).toBe(now);
+    expect(readIdleAuthSessionId()).toBe("sess_new");
+  });
+
+  it("keeps stored activity for the same continuous session", () => {
+    const now = 10_000_000;
+    const past = now - 60_000;
+    writeIdleAuthSessionId("sess_same");
+    writeLastActivityAt(past);
+
+    expect(bootstrapIdleActivityForAuthSession("sess_same", now)).toBe(past);
+    expect(readLastActivityAt()).toBe(past);
+  });
+
+  it("discards residual warn/logout state when sessionId is not yet known", () => {
+    const now = 10_000_000;
+    writeLastActivityAt(now - IDLE_TOTAL_MS - 1_000);
+
+    expect(bootstrapIdleActivityForAuthSession(null, now)).toBe(now);
+    expect(readLastActivityAt()).toBe(now);
+  });
+
+  it("resetIdleActivityClock writes a fresh timestamp", () => {
+    writeLastActivityAt(1);
+    expect(resetIdleActivityClock(99)).toBe(99);
+    expect(readLastActivityAt()).toBe(99);
+  });
+
+  it("clear helpers remove activity and auth binding", () => {
+    writeLastActivityAt(1);
+    writeIdleAuthSessionId("sess");
+    clearLastActivityAt();
+    clearIdleAuthSessionId();
+    expect(store.has(IDLE_LAST_ACTIVITY_KEY)).toBe(false);
+    expect(store.has(IDLE_AUTH_SESSION_KEY)).toBe(false);
   });
 });

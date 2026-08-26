@@ -2,9 +2,13 @@
  * Cross-tab idle session coordination + inactivity sign-in message.
  */
 
+import { evaluateIdleState } from "@/lib/session/idle-timeout";
+
 export const IDLE_SYNC_CHANNEL = "fmv-idle-session";
 export const IDLE_LOGOUT_REASON_KEY = "fmv:idle-logout-reason";
 export const IDLE_LAST_ACTIVITY_KEY = "fmv:idle-last-activity";
+/** Clerk session id bound to the current idle clock (localStorage). */
+export const IDLE_AUTH_SESSION_KEY = "fmv:idle-auth-session";
 
 export type IdleSyncMessage =
   | { type: "activity"; at: number }
@@ -70,6 +74,78 @@ export function readLastActivityAt(): number | null {
   } catch {
     return null;
   }
+}
+
+export function readIdleAuthSessionId(): string | null {
+  try {
+    return localStorage.getItem(IDLE_AUTH_SESSION_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function writeIdleAuthSessionId(sessionId: string): void {
+  try {
+    localStorage.setItem(IDLE_AUTH_SESSION_KEY, sessionId);
+  } catch {
+    // ignore
+  }
+}
+
+export function clearIdleAuthSessionId(): void {
+  try {
+    localStorage.removeItem(IDLE_AUTH_SESSION_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/** Fresh activity timestamp for vault entry after ritual / legal, etc. */
+export function resetIdleActivityClock(now = Date.now()): number {
+  writeLastActivityAt(now);
+  return now;
+}
+
+/**
+ * Resolve lastActivityAt when IdleSessionGuard arms.
+ *
+ * A new Clerk session never inherits a prior idle clock (including an
+ * already-expired timer left from before login). Continuous sessions keep
+ * the stored timestamp so backgrounded tabs still warn / log out.
+ *
+ * When sessionId is not yet known, discard residual warn/logout state
+ * silently so a login race cannot flash the expired dialog.
+ */
+export function bootstrapIdleActivityForAuthSession(
+  sessionId: string | null | undefined,
+  now = Date.now(),
+): number {
+  if (!sessionId) {
+    const stored = readLastActivityAt();
+    if (stored == null) {
+      writeLastActivityAt(now);
+      return now;
+    }
+    if (evaluateIdleState(stored, now).action !== "none") {
+      writeLastActivityAt(now);
+      return now;
+    }
+    return stored;
+  }
+
+  const bound = readIdleAuthSessionId();
+  if (bound !== sessionId) {
+    writeLastActivityAt(now);
+    writeIdleAuthSessionId(sessionId);
+    return now;
+  }
+
+  const stored = readLastActivityAt();
+  if (stored == null) {
+    writeLastActivityAt(now);
+    return now;
+  }
+  return stored;
 }
 
 type IdleSyncHandler = (message: IdleSyncMessage) => void;
@@ -140,6 +216,7 @@ export function broadcastIdleSync(message: IdleSyncMessage): void {
   if (message.type === "logout") {
     markInactivityLogout();
     clearLastActivityAt();
+    clearIdleAuthSessionId();
   }
 }
 

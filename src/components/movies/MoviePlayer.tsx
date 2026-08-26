@@ -7,9 +7,9 @@ import { useTranslations } from "@/components/i18n/LocaleProvider";
 import type { SerializedMovie } from "@/lib/movies/serialize";
 import { MovieShareDialog } from "@/components/movies/MovieShareDialog";
 import {
+  downloadMovieFile,
   movieAspectClass,
   movieAspectFromSettings,
-  movieDownloadFilename,
 } from "@/lib/movies/share";
 import { useOverlayA11y } from "@/hooks/useOverlayA11y";
 import { cn } from "@/lib/utils";
@@ -34,7 +34,6 @@ export function MoviePlayer({ movie, onClose }: MoviePlayerProps) {
   const [urlError, setUrlError] = useState<string | null>(null);
   const aspect = movieAspectFromSettings(playback.settings);
   const aspectClass = movieAspectClass(aspect);
-  const downloadName = movieDownloadFilename(playback.title);
 
   useOverlayA11y({
     open: true,
@@ -134,14 +133,16 @@ export function MoviePlayer({ movie, onClose }: MoviePlayerProps) {
           </div>
           <div className="flex shrink-0 items-center gap-1">
             {playback.downloadUrl ? (
-              <a
-                href={playback.downloadUrl}
-                download={downloadName}
+              <button
+                type="button"
+                onClick={() => {
+                  downloadMovieFile(playback);
+                }}
                 className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-white/90 transition hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
               >
                 <Download className="size-3.5" aria-hidden />
                 {t("movie.download")}
-              </a>
+              </button>
             ) : null}
             {playback.downloadUrl || playback.playUrl ? (
               <button

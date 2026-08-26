@@ -505,12 +505,20 @@ export async function getInternalDownloadUrl(
  *
  * Do not use getInternalDownloadUrl for end-user movie playback — that helper
  * is for workers/scanners and does not enforce the movies/ ownership prefix.
+ *
+ * Pass `contentDisposition: "attachment"` for download links so browsers save
+ * the file instead of navigating to inline video playback (cross-origin
+ * `download` attributes are ignored).
  */
 export async function getMovieDownloadUrl(
   key: string,
   userId: string,
   movieId: string,
   expiresIn: number = DEFAULT_DOWNLOAD_EXPIRES_IN_SECONDS,
+  options?: {
+    contentDisposition?: "inline" | "attachment";
+    filename?: string;
+  },
 ): Promise<PresignedUrlResult> {
   assertMovieObjectKey(key, userId, movieId);
   assertNotPrivateDocumentKey(key);
@@ -518,9 +526,18 @@ export async function getMovieDownloadUrl(
   // Align with MAX_SIGNED_URL_EXPIRES_IN_SECONDS so pause/seek mid-watch
   // does not hit ExpiredRequest on range requests.
   const expires = clampExpiresIn(expiresIn);
+  const filename =
+    (options?.filename || "movie.mp4").replace(/"/g, "").trim() || "movie.mp4";
+  const contentDisposition = options?.contentDisposition;
+
   const command = new GetObjectCommand({
     Bucket: getR2Bucket(),
     Key: key,
+    ...(contentDisposition
+      ? {
+          ResponseContentDisposition: `${contentDisposition}; filename="${filename}"`,
+        }
+      : {}),
   });
 
   const url = await getSignedUrl(getR2Client(), command, {

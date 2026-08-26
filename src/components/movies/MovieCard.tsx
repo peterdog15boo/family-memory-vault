@@ -14,9 +14,9 @@ import {
 import type { SerializedMovie } from "@/lib/movies/serialize";
 import { MovieShareDialog } from "@/components/movies/MovieShareDialog";
 import {
+  downloadMovieFile,
   movieAspectClass,
   movieAspectFromSettings,
-  movieDownloadFilename,
 } from "@/lib/movies/share";
 import { useCopy } from "@/components/i18n/LocaleProvider";
 import { cn } from "@/lib/utils";
@@ -44,7 +44,6 @@ export function MovieCard({
     movie.status === "queued" || movie.status === "processing";
   const failed = movie.status === "failed";
   const dateLabel = format(parseISO(movie.createdAt), "MMM d, yyyy");
-  const downloadName = movieDownloadFilename(movie.title);
   const aspect = movieAspectFromSettings(movie.settings);
   const aspectClass = movieAspectClass(aspect);
 
@@ -165,14 +164,17 @@ export function MovieCard({
             </button>
           ) : null}
           {ready && movie.downloadUrl ? (
-            <a
-              href={movie.downloadUrl}
-              download={downloadName}
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                downloadMovieFile(movie);
+              }}
               className="ui-btn ui-btn-secondary ui-btn-sm"
             >
               <Download className="size-3" aria-hidden />
               Download
-            </a>
+            </button>
           ) : null}
           {ready && (movie.downloadUrl || movie.playUrl) ? (
             <button

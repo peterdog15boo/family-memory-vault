@@ -55,9 +55,9 @@ import {
   type TransitionCatalogEntry,
 } from "@/lib/movies/transition-catalog";
 import {
+  downloadMovieFile,
   movieAspectClass,
   movieAspectFromSettings,
-  movieDownloadFilename,
 } from "@/lib/movies/share";
 import type { PlanCapabilities } from "@/lib/plans/gates";
 import { userFacingApiError } from "@/lib/http/user-messages";
@@ -1412,7 +1412,6 @@ function ReadyState({
   const [playback, setPlayback] = useState(movie);
   const aspect = movieAspectFromSettings(playback.settings);
   const aspectClass = movieAspectClass(aspect);
-  const downloadName = movieDownloadFilename(playback.title);
 
   // Mint a fresh signed URL when the ready screen mounts (poll URL may be stale).
   useEffect(() => {
@@ -1441,20 +1440,16 @@ function ReadyState({
       const data = (await response.json().catch(() => ({}))) as {
         movie?: SerializedMovie;
       };
-      const url = data.movie?.downloadUrl || playback.downloadUrl;
-      if (!url) return;
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = downloadName;
-      a.rel = "noreferrer";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    } catch {
-      if (playback.downloadUrl) {
-        window.location.href = playback.downloadUrl;
+      const fresh = data.movie;
+      if (fresh?.downloadUrl) {
+        setPlayback(fresh);
+        downloadMovieFile(fresh);
+        return;
       }
+    } catch {
+      /* fall through */
     }
+    downloadMovieFile(playback);
   }
 
   return (
