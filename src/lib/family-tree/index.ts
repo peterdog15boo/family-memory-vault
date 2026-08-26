@@ -25,6 +25,7 @@ import {
   type FamilyTreeDerivedEdge,
 } from "@/lib/family-tree/types";
 import {
+  findMislinkedCoParentSiblingEdges,
   isScaffoldTempKey,
   planFamilyTreeScaffold,
 } from "@/lib/family-tree/scaffold";
@@ -681,13 +682,81 @@ export type FamilyTreeGraph = {
   generations: Record<string, number>;
 };
 
+/**
+ * Convert sibling links between co-parents (same child) into spouse links.
+ * Fixes older cousin scaffolds that incorrectly marked Mom/Dad as siblings
+ * when both parent the same person.
+ */
+async function repairMislinkedCoParentSiblings(
+  userId: string,
+  relationships: FamilyTreeRelationship[],
+): Promise<FamilyTreeRelationship[]> {
+  const mislinked = findMislinkedCoParentSiblingEdges(relationships);
+  if (mislinked.length === 0) return relationships;
+
+  const db = getDb();
+  let next = relationships;
+
+  for (const edge of mislinked) {
+    if (!edge.id) continue;
+
+    const endpoints = canonicalizeRelationshipEndpoints(
+      "partner_of",
+      edge.fromNodeId,
+      edge.toNodeId,
+    );
+    const alreadyPartners = next.some(
+      (r) =>
+        r.type === "partner_of" &&
+        r.fromNodeId === endpoints.fromNodeId &&
+        r.toNodeId === endpoints.toNodeId,
+    );
+
+    if (alreadyPartners) {
+      await db
+        .delete(familyTreeRelationships)
+        .where(
+          and(
+            eq(familyTreeRelationships.id, edge.id),
+            eq(familyTreeRelationships.userId, userId),
+          ),
+        );
+      next = next.filter((r) => r.id !== edge.id);
+      continue;
+    }
+
+    const [updated] = await db
+      .update(familyTreeRelationships)
+      .set({
+        type: "partner_of",
+        fromNodeId: endpoints.fromNodeId,
+        toNodeId: endpoints.toNodeId,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(familyTreeRelationships.id, edge.id),
+          eq(familyTreeRelationships.userId, userId),
+          eq(familyTreeRelationships.type, "sibling_of"),
+        ),
+      )
+      .returning();
+
+    if (updated) {
+      next = next.map((r) => (r.id === edge.id ? updated : r));
+    }
+  }
+
+  return next;
+}
+
 export async function getFamilyTreeGraph(
   userId: string,
 ): Promise<FamilyTreeGraph> {
   await assertFamilyTreeAllowed(userId);
   const db = getDb();
 
-  const [nodes, relationships] = await Promise.all([
+  const [nodes, rawRelationships] = await Promise.all([
     db
       .select()
       .from(familyTreeNodes)
@@ -699,6 +768,11 @@ export async function getFamilyTreeGraph(
       .where(eq(familyTreeRelationships.userId, userId))
       .orderBy(asc(familyTreeRelationships.createdAt)),
   ]);
+
+  const relationships = await repairMislinkedCoParentSiblings(
+    userId,
+    rawRelationships,
+  );
 
   const personIds = [
     ...new Set(

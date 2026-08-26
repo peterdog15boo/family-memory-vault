@@ -220,23 +220,15 @@ type PlanBuilder = {
   relationships: ScaffoldPlannedEdge[];
   /** Working copy of graph including planned edges (existing ids + new keys). */
   working: ScaffoldGraph;
-  nextParentLabel: () => string;
 };
 
 function createBuilder(graph: ScaffoldGraph): PlanBuilder {
-  let parentOrdinal = 0;
-  const labels = ["Mom", "Dad", "Parent"] as const;
   return {
     nodes: [],
     relationships: [],
     working: {
       nodes: graph.nodes.map((n) => ({ ...n })),
       relationships: graph.relationships.map((r) => ({ ...r })),
-    },
-    nextParentLabel: () => {
-      const label = labels[Math.min(parentOrdinal, labels.length - 1)]!;
-      parentOrdinal += 1;
-      return label;
     },
   };
 }
@@ -279,21 +271,36 @@ function bloodParentsOf(graph: ScaffoldGraph, nodeId: string): string[] {
   return blood.length > 0 ? blood : [];
 }
 
-function ensureParentKey(
+/**
+ * Ensure a child has a blood parent that can bridge a cousin link.
+ * When the child has no parents yet, create a Mom/Dad spouse pair both
+ * connected as parents of that child (never as siblings of each other).
+ * Returns one parent id for the cross-family sibling bridge.
+ */
+function ensureCousinBridgeParent(
   builder: PlanBuilder,
   childId: string,
-  preferredKey: string,
+  keyBase: string,
 ): string {
   const blood = bloodParentsOf(builder.working, childId);
   if (blood[0]) return blood[0]!;
 
-  // Do not reuse a spouse's parents for cousin/niece scaffolding — that
+  // Do not reuse a spouse's parents for cousin scaffolding — that
   // incorrectly attaches the new relative to the partner's bloodline.
-  const key = addNode(builder, preferredKey, builder.nextParentLabel());
-  if (safeToAddParent(builder.working, key, childId)) {
-    addEdge(builder, key, childId, "parent_of");
+  const momKey = addNode(builder, `${keyBase}-mom`, "Mom");
+  const dadKey = addNode(builder, `${keyBase}-dad`, "Dad");
+
+  if (safeToAddParent(builder.working, momKey, childId)) {
+    addEdge(builder, momKey, childId, "parent_of");
   }
-  return key;
+  if (safeToAddParent(builder.working, dadKey, childId)) {
+    addEdge(builder, dadKey, childId, "parent_of");
+  }
+  if (safeToAddPartner(builder.working, momKey, dadKey)) {
+    addEdge(builder, momKey, dadKey, "partner_of");
+  }
+
+  return momKey;
 }
 
 function planCousin(
@@ -303,9 +310,19 @@ function planCousin(
 ): string | null {
   if (cousinsStructurallyLinked(builder.working, a, b)) return null;
 
-  const parentA = ensureParentKey(builder, a, `${NEW_PREFIX}cousin-parent-a`);
-  const parentB = ensureParentKey(builder, b, `${NEW_PREFIX}cousin-parent-b`);
+  const parentA = ensureCousinBridgeParent(
+    builder,
+    a,
+    `${NEW_PREFIX}cousin-a`,
+  );
+  const parentB = ensureCousinBridgeParent(
+    builder,
+    b,
+    `${NEW_PREFIX}cousin-b`,
+  );
 
+  // Cousins share aunts/uncles: one parent from each side are siblings.
+  // That sibling edge is between families — never between Mom/Dad of one child.
   if (
     parentA !== parentB &&
     safeToAddSibling(builder.working, parentA, parentB)
@@ -512,4 +529,48 @@ export function planFamilyTreeScaffold(
 
 export function isScaffoldTempKey(key: string): boolean {
   return isNewKey(key);
+}
+
+/**
+ * Detect sibling edges that clearly represent a parental couple:
+ * both endpoints are parents of the same child. Those should be spouses.
+ * (Correct cousin bridges — parents of *different* children — are left alone.)
+ */
+export function findMislinkedCoParentSiblingEdges(
+  relationships: ReadonlyArray<{
+    id?: string;
+    fromNodeId: string;
+    toNodeId: string;
+    type: FamilyTreeRelationType;
+  }>,
+): Array<{ fromNodeId: string; toNodeId: string; id?: string }> {
+  const childrenByParent = new Map<string, Set<string>>();
+  for (const r of relationships) {
+    if (r.type !== "parent_of") continue;
+    const kids = childrenByParent.get(r.fromNodeId) ?? new Set<string>();
+    kids.add(r.toNodeId);
+    childrenByParent.set(r.fromNodeId, kids);
+  }
+
+  const out: Array<{ fromNodeId: string; toNodeId: string; id?: string }> = [];
+  for (const r of relationships) {
+    if (r.type !== "sibling_of") continue;
+    const kidsA = childrenByParent.get(r.fromNodeId);
+    const kidsB = childrenByParent.get(r.toNodeId);
+    if (!kidsA || !kidsB) continue;
+    let shareChild = false;
+    for (const childId of kidsA) {
+      if (kidsB.has(childId)) {
+        shareChild = true;
+        break;
+      }
+    }
+    if (!shareChild) continue;
+    out.push({
+      fromNodeId: r.fromNodeId,
+      toNodeId: r.toNodeId,
+      id: r.id,
+    });
+  }
+  return out;
 }

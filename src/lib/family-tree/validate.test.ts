@@ -142,9 +142,13 @@ describe("family tree cycle validation", () => {
     const result = validateFamilyTreeRelationshipBatch(
       [],
       [
-        { fromNodeId: "mom", toNodeId: "alex", type: "parent_of" },
-        { fromNodeId: "dad", toNodeId: "casey", type: "parent_of" },
-        { fromNodeId: "mom", toNodeId: "dad", type: "sibling_of" },
+        { fromNodeId: "mom-a", toNodeId: "alex", type: "parent_of" },
+        { fromNodeId: "dad-a", toNodeId: "alex", type: "parent_of" },
+        { fromNodeId: "dad-a", toNodeId: "mom-a", type: "partner_of" },
+        { fromNodeId: "mom-b", toNodeId: "casey", type: "parent_of" },
+        { fromNodeId: "dad-b", toNodeId: "casey", type: "parent_of" },
+        { fromNodeId: "dad-b", toNodeId: "mom-b", type: "partner_of" },
+        { fromNodeId: "mom-a", toNodeId: "mom-b", type: "sibling_of" },
         { fromNodeId: "alex", toNodeId: "casey", type: "cousin_of" },
       ],
     );

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  findMislinkedCoParentSiblingEdges,
   planFamilyTreeScaffold,
   type ScaffoldGraph,
 } from "@/lib/family-tree/scaffold";
@@ -19,23 +20,75 @@ function graph(
 }
 
 describe("planFamilyTreeScaffold", () => {
-  it("creates two placeholder parents + sibling bridge for cousins", () => {
+  it("creates Mom/Dad spouse pairs for each cousin + sibling bridge across families", () => {
     const plan = planFamilyTreeScaffold(graph(["alex", "casey"]), {
       fromNodeId: "alex",
       toNodeId: "casey",
       type: "cousin_of",
     });
 
-    expect(plan.nodes).toHaveLength(2);
-    expect(plan.nodes.map((n) => n.label).sort()).toEqual(["Dad", "Mom"]);
-    expect(plan.relationships.filter((r) => r.type === "parent_of")).toHaveLength(
-      2,
-    );
-    expect(plan.relationships.some((r) => r.type === "sibling_of")).toBe(true);
+    expect(plan.nodes).toHaveLength(4);
+    expect(plan.nodes.map((n) => n.label).sort()).toEqual([
+      "Dad",
+      "Dad",
+      "Mom",
+      "Mom",
+    ]);
+
+    const parentLinks = plan.relationships.filter((r) => r.type === "parent_of");
+    expect(parentLinks).toHaveLength(4);
+    expect(
+      parentLinks.filter(
+        (r) => r.toKey === "alex" || r.fromKey === "alex",
+      ),
+    ).toHaveLength(2);
+    expect(
+      parentLinks.filter(
+        (r) => r.toKey === "casey" || r.fromKey === "casey",
+      ),
+    ).toHaveLength(2);
+
+    const spouseLinks = plan.relationships.filter((r) => r.type === "partner_of");
+    expect(spouseLinks).toHaveLength(2);
+
+    // Sibling bridge only between the two families — not between Mom/Dad of one child.
+    const siblingLinks = plan.relationships.filter((r) => r.type === "sibling_of");
+    expect(siblingLinks).toHaveLength(1);
     expect(plan.message).toMatch(/placeholder parents/i);
   });
 
-  it("reuses an existing parent and only creates the missing side", () => {
+  it("does not mark a new parent pair as siblings of each other", () => {
+    const plan = planFamilyTreeScaffold(graph(["scott", "cousin"]), {
+      fromNodeId: "scott",
+      toNodeId: "cousin",
+      type: "cousin_of",
+    });
+
+    const scottParents = plan.relationships
+      .filter((r) => r.type === "parent_of" && r.toKey === "scott")
+      .map((r) => r.fromKey);
+    expect(scottParents).toHaveLength(2);
+
+    expect(
+      plan.relationships.some(
+        (r) =>
+          r.type === "sibling_of" &&
+          scottParents.includes(r.fromKey) &&
+          scottParents.includes(r.toKey),
+      ),
+    ).toBe(false);
+
+    expect(
+      plan.relationships.some(
+        (r) =>
+          r.type === "partner_of" &&
+          scottParents.includes(r.fromKey) &&
+          scottParents.includes(r.toKey),
+      ),
+    ).toBe(true);
+  });
+
+  it("reuses an existing parent and only creates the missing side couple", () => {
     const plan = planFamilyTreeScaffold(
       graph(
         ["alex", "casey", "mom"],
@@ -48,7 +101,9 @@ describe("planFamilyTreeScaffold", () => {
       },
     );
 
-    expect(plan.nodes).toHaveLength(1);
+    expect(plan.nodes).toHaveLength(2);
+    expect(plan.nodes.map((n) => n.label).sort()).toEqual(["Dad", "Mom"]);
+    expect(plan.relationships.some((r) => r.type === "partner_of")).toBe(true);
     expect(plan.relationships.some((r) => r.type === "sibling_of")).toBe(true);
     expect(
       plan.relationships.some(
@@ -75,8 +130,8 @@ describe("planFamilyTreeScaffold", () => {
       },
     );
 
-    // Two new parents (Kathy + Scott) — never attach Scott through Jeff's dad.
-    expect(plan.nodes.length).toBeGreaterThanOrEqual(2);
+    // New parents for Kathy + Scott — never attach Scott through Jeff's dad.
+    expect(plan.nodes.length).toBeGreaterThanOrEqual(4);
     const parentLinks = plan.relationships.filter((r) => r.type === "parent_of");
     expect(
       parentLinks.some(
@@ -174,5 +229,27 @@ describe("planFamilyTreeScaffold", () => {
     });
     expect(plan.nodes).toHaveLength(0);
     expect(plan.message).toBeNull();
+  });
+});
+
+describe("findMislinkedCoParentSiblingEdges", () => {
+  it("flags siblings who share a child as a mislinked parental couple", () => {
+    const bad = findMislinkedCoParentSiblingEdges([
+      { id: "e1", fromNodeId: "mom", toNodeId: "scott", type: "parent_of" },
+      { id: "e2", fromNodeId: "dad", toNodeId: "scott", type: "parent_of" },
+      { id: "e3", fromNodeId: "dad", toNodeId: "mom", type: "sibling_of" },
+    ]);
+    expect(bad).toEqual([
+      { id: "e3", fromNodeId: "dad", toNodeId: "mom" },
+    ]);
+  });
+
+  it("does not flag a valid cousin parent sibling bridge", () => {
+    const bad = findMislinkedCoParentSiblingEdges([
+      { id: "e1", fromNodeId: "mom", toNodeId: "alex", type: "parent_of" },
+      { id: "e2", fromNodeId: "uncle", toNodeId: "casey", type: "parent_of" },
+      { id: "e3", fromNodeId: "mom", toNodeId: "uncle", type: "sibling_of" },
+    ]);
+    expect(bad).toHaveLength(0);
   });
 });
