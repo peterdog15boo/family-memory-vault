@@ -92,6 +92,7 @@ export type GenealogyEngineCommand =
       relationshipIds: string[];
     }
   | { type: "repairTree"; dryRun?: boolean }
+  | { type: "correctLayout" }
   | { type: "clearNodeReview"; nodeId: string };
 
 export type GenealogyEngineNeedsInput = {
@@ -557,6 +558,32 @@ export async function runGenealogyCommand(
         ok: true,
         tree: { ...tree, repair: repaired.result },
         notices,
+        scaffold: null,
+      };
+    }
+
+    case "correctLayout": {
+      // Layout positions are derived client-side from the graph. Ensure
+      // relationship repair has run, then return a fresh snapshot — the UI
+      // reflows with Layout IQ and recenters the camera.
+      const tree = await getFamilyTreeGraph(userId);
+      return {
+        ok: true,
+        tree,
+        notices: tree.repair?.message
+          ? [
+              {
+                kind: "spouse_link" as const,
+                message: tree.repair.message,
+              },
+            ]
+          : [
+              {
+                kind: "spouse_link" as const,
+                message:
+                  "We updated your family tree layout so relatives sit in traditional positions.",
+              },
+            ],
         scaffold: null,
       };
     }

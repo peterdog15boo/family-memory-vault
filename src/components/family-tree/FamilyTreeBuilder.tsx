@@ -15,6 +15,8 @@ import type {
 } from "@/lib/family-tree/serialize";
 import type { CousinSide } from "@/lib/family-tree/cousin-side";
 import type { GenealogyEngineCommand } from "@/lib/family-tree/engine";
+import { correctFamilyTreeLayout } from "@/lib/family-tree/layout-correct";
+import { isFamilyTreeRelationType } from "@/lib/family-tree/relations";
 import type { FamilyTreeRelationType } from "@/lib/db/schema";
 import { useOverlayA11y } from "@/hooks/useOverlayA11y";
 
@@ -92,6 +94,8 @@ export function FamilyTreeBuilder({
         ? initialTree.repair.message
         : null,
   );
+  const [layoutNotice, setLayoutNotice] = useState<string | null>(null);
+  const [layoutRevision, setLayoutRevision] = useState(0);
   const [cousinPrompt, setCousinPrompt] = useState<{
     message: string;
     personId: string;
@@ -109,6 +113,42 @@ export function FamilyTreeBuilder({
   useEffect(() => {
     setViewMounted(true);
   }, []);
+
+  // One-time layout correction assess on load — positions are derived from
+  // relationships; this detects when Layout IQ reflows a previously naive chart.
+  useEffect(() => {
+    if (tree.nodes.length === 0) return;
+    const edges = tree.relationships
+      .filter((r) => isFamilyTreeRelationType(r.type))
+      .map((r) => ({
+        fromNodeId: r.fromNodeId,
+        toNodeId: r.toNodeId,
+        type: r.type,
+      }));
+    const result = correctFamilyTreeLayout(
+      tree.nodes.map((n) => ({
+        id: n.id,
+        generation: n.generation,
+        label: n.label,
+      })),
+      edges,
+    );
+    if (!result.corrected || !result.message) return;
+
+    const noticeKey = `ft-layout-corrected:${tree.nodes
+      .map((n) => n.id)
+      .sort()
+      .join(",")
+      .slice(0, 120)}`;
+    try {
+      if (sessionStorage.getItem(noticeKey) === "1") return;
+      sessionStorage.setItem(noticeKey, "1");
+    } catch {
+      // sessionStorage may be unavailable
+    }
+    setLayoutNotice(result.message);
+    setLayoutRevision((n) => n + 1);
+  }, [tree.nodes, tree.relationships]);
 
   useEffect(() => {
     return () => {
@@ -371,6 +411,17 @@ export function FamilyTreeBuilder({
     });
   }
 
+  function fixTreeLayout() {
+    runMutation(async () => {
+      await runEngineCommand({ type: "correctLayout" });
+      await refreshAvailable();
+      setLayoutRevision((n) => n + 1);
+      setLayoutNotice(
+        "We updated your family tree layout so relatives sit in traditional positions.",
+      );
+    });
+  }
+
   function focusAddPerson() {
     const el = document.getElementById("family-tree-add-by-name");
     el?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -492,6 +543,23 @@ export function FamilyTreeBuilder({
     </div>
   ) : null;
 
+  const layoutBanner = layoutNotice ? (
+    <div
+      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-ink/10 bg-canvas px-3 py-2.5 text-sm text-ink shadow-sm"
+      role="status"
+    >
+      <p className="min-w-0 flex-1 leading-snug">{layoutNotice}</p>
+      <button
+        type="button"
+        className="rounded-md p-1.5 text-ink-muted hover:bg-ink/5 hover:text-ink"
+        aria-label="Dismiss"
+        onClick={() => setLayoutNotice(null)}
+      >
+        <X className="size-3.5" aria-hidden />
+      </button>
+    </div>
+  ) : null;
+
   const completeness = (
     <FamilyTreeCompleteness
       tree={tree}
@@ -575,6 +643,7 @@ export function FamilyTreeBuilder({
                 onAddChild={() => undefined}
                 onAddPartner={() => undefined}
                 viewOnly
+                layoutRevision={layoutRevision}
                 className="family-tree-viewport-shell--fill"
               />
             </div>
@@ -604,6 +673,7 @@ export function FamilyTreeBuilder({
         {scaffoldBanner}
         {cousinSideBanner}
         {repairBanner}
+        {layoutBanner}
         {iqBanner}
         {completeness}
         {toolkit}
@@ -636,6 +706,7 @@ export function FamilyTreeBuilder({
           onAddChild={() => undefined}
           onAddPartner={() => undefined}
           viewOnly
+          layoutRevision={layoutRevision}
         />
         {viewOverlay}
       </div>
@@ -652,6 +723,7 @@ export function FamilyTreeBuilder({
       {scaffoldBanner}
       {cousinSideBanner}
       {repairBanner}
+      {layoutBanner}
       {iqBanner}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -659,14 +731,24 @@ export function FamilyTreeBuilder({
           Build connections below, or open a clean view of your tree.
           {!isOwner ? " You’re helping build a shared family tree." : null}
         </p>
-        <button
-          type="button"
-          className="ui-btn ui-btn-secondary ui-btn-sm"
-          onClick={openViewMode}
-        >
-          <Eye className="size-3.5" aria-hidden />
-          View Tree
-        </button>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="ui-btn ui-btn-ghost ui-btn-sm"
+            disabled={pending}
+            onClick={fixTreeLayout}
+          >
+            Fix tree layout
+          </button>
+          <button
+            type="button"
+            className="ui-btn ui-btn-secondary ui-btn-sm"
+            onClick={openViewMode}
+          >
+            <Eye className="size-3.5" aria-hidden />
+            View Tree
+          </button>
+        </div>
       </div>
 
       {completeness}
@@ -679,6 +761,7 @@ export function FamilyTreeBuilder({
         onAddParent={addParentForChild}
         onAddChild={addChildForParent}
         onAddPartner={addPartnerForNode}
+        layoutRevision={layoutRevision}
       />
 
       {toolkit}

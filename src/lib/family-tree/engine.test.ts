@@ -25,9 +25,10 @@ describe("GenealogyEngineCommand shape", () => {
       { type: "deleteNode", nodeId: "n1" },
       { type: "undoScaffold", nodeIds: [], relationshipIds: [] },
       { type: "repairTree" },
+      { type: "correctLayout" },
       { type: "clearNodeReview", nodeId: "n1" },
     ];
-    expect(commands).toHaveLength(16);
-    expect(new Set(commands.map((c) => c.type)).size).toBe(15);
+    expect(commands).toHaveLength(17);
+    expect(new Set(commands.map((c) => c.type)).size).toBe(16);
   });
 });

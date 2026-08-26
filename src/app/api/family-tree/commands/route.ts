@@ -96,6 +96,9 @@ const commandSchema = z.discriminatedUnion("type", [
     type: z.literal("repairTree"),
     dryRun: z.boolean().optional(),
   }),
+  z.object({
+    type: z.literal("correctLayout"),
+  }),
 ]);
 
 /**

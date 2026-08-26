@@ -2,10 +2,18 @@
  * Family-tree visual layout — generations, partner clustering, curved edges.
  * Positions and edge geometry are derived only from stored relationships
  * (never invents links). Generation ranks are recomputed from the same edges.
+ *
+ * Layout IQ (`layout-iq.ts`) orders people within each generation into
+ * traditional positions (spouse side-by-side, siblings on the outer family side).
  */
 
 import type { FamilyTreeRelationType } from "@/lib/db/schema";
 import { inferredCoParentPairs } from "@/lib/family-tree/genealogy-iq";
+import {
+  applyInLawSoftSiblings,
+  orderGenerationForLayout,
+  outerSiblingsOf,
+} from "@/lib/family-tree/layout-iq";
 import { edgeLabelForRelation } from "@/lib/family-tree/relations";
 import { assignGenerationRanks } from "@/lib/family-tree/types";
 
@@ -121,6 +129,7 @@ function pathMidpoint(
 /**
  * Pack nodes into a readable tree:
  * - y by generation (recomputed from parent/partner/sibling edges)
+ * - Layout IQ orders each row: siblings on each spouse's outer side
  * - partners sit side-by-side as two distinct nodes (never merged)
  * - each spouse sits under their own parents when both bloodlines exist
  * - shared children cluster under the couple midpoint
@@ -152,6 +161,7 @@ export function computeFamilyTreeLayout(
   const childrenByParent = new Map<string, string[]>();
   const partnerOf = new Map<string, string>();
   const siblingAdj = new Map<string, Set<string>>();
+  const cousinAdj = new Map<string, Set<string>>();
 
   for (const edge of validEdges) {
     if (edge.type === "parent_of") {
@@ -171,6 +181,13 @@ export function computeFamilyTreeLayout(
       const b = siblingAdj.get(edge.toNodeId) ?? new Set<string>();
       b.add(edge.fromNodeId);
       siblingAdj.set(edge.toNodeId, b);
+    } else if (edge.type === "cousin_of") {
+      const a = cousinAdj.get(edge.fromNodeId) ?? new Set<string>();
+      a.add(edge.toNodeId);
+      cousinAdj.set(edge.fromNodeId, a);
+      const b = cousinAdj.get(edge.toNodeId) ?? new Set<string>();
+      b.add(edge.fromNodeId);
+      cousinAdj.set(edge.toNodeId, b);
     }
   }
 
@@ -182,6 +199,18 @@ export function computeFamilyTreeLayout(
       partnerOf.set(b, a);
     }
   }
+
+  // Soft-link in-laws onto the spouse's outer side for traditional placement.
+  applyInLawSoftSiblings(
+    siblingAdj,
+    partnerOf,
+    validEdges
+      .filter(
+        (e) =>
+          e.type === "sister_in_law_of" || e.type === "brother_in_law_of",
+      )
+      .map((e) => [e.fromNodeId, e.toNodeId] as const),
+  );
 
   const generations = assignGenerationRanks(
     nodes.map((n) => n.id),
@@ -208,9 +237,12 @@ export function computeFamilyTreeLayout(
     gens[g]!.push(n.id);
   }
 
-  function parentClusterKey(id: string): string {
-    return [...(parentsByChild.get(id) ?? [])].sort().join("+") || `solo:${id}`;
-  }
+  const layoutIqCtx = {
+    partnerOf,
+    siblingAdj,
+    parentsByChild,
+    cousinAdj,
+  };
 
   function blocksRelated(aIds: string[], bIds: string[]): boolean {
     const aParents = new Set(aIds.flatMap((id) => parentsByChild.get(id) ?? []));
@@ -225,98 +257,15 @@ export function computeFamilyTreeLayout(
       for (const b of bIds) {
         if (siblingAdj.get(a)?.has(b)) return true;
         if (partnerOf.get(a) === b) return true;
+        if (cousinAdj.get(a)?.has(b)) return true;
       }
     }
     return false;
   }
 
+  // Layout IQ: traditional left→right order within each generation.
   for (let g = 0; g <= maxGen; g++) {
-    const ids = gens[g]!;
-    const ordered: string[] = [];
-    const seen = new Set<string>();
-
-    const siblingGroups = new Map<string, string[]>();
-    for (const id of ids) {
-      const key = parentClusterKey(id);
-      const group = siblingGroups.get(key) ?? [];
-      group.push(id);
-      siblingGroups.set(key, group);
-    }
-
-    // Expand each sibling group into partner-aware units, then order units.
-    type Unit = { ids: string[]; sortKey: number };
-    const units: Unit[] = [];
-
-    for (const group of siblingGroups.values()) {
-      const localSeen = new Set<string>();
-      for (const id of group) {
-        if (localSeen.has(id) || seen.has(id)) continue;
-        const partner = partnerOf.get(id);
-        if (partner && ids.includes(partner) && !seen.has(partner)) {
-          units.push({ ids: [id, partner], sortKey: 0 });
-          localSeen.add(id);
-          localSeen.add(partner);
-        } else {
-          units.push({ ids: [id], sortKey: 0 });
-          localSeen.add(id);
-        }
-      }
-    }
-
-    for (const unit of units) {
-      const parentXs: number[] = [];
-      for (const id of unit.ids) {
-        for (const p of parentsByChild.get(id) ?? []) {
-          // Parents may not be positioned yet on first pass — use id order.
-          parentXs.push([...p].reduce((a, c) => a + c.charCodeAt(0), 0));
-        }
-      }
-      unit.sortKey =
-        parentXs.length > 0
-          ? parentXs.reduce((a, b) => a + b, 0) / parentXs.length
-          : unit.ids[0]!.charCodeAt(0);
-    }
-
-    units.sort((a, b) => a.sortKey - b.sortKey || a.ids[0]!.localeCompare(b.ids[0]!));
-
-    // Prefer keeping related units contiguous (cousin branches stay together).
-    const placedUnits: Unit[] = [];
-    const remaining = [...units];
-    while (remaining.length > 0) {
-      if (placedUnits.length === 0) {
-        placedUnits.push(remaining.shift()!);
-        continue;
-      }
-      const last = placedUnits[placedUnits.length - 1]!;
-      let bestIdx = 0;
-      let bestScore = -1;
-      for (let i = 0; i < remaining.length; i++) {
-        const score = blocksRelated(last.ids, remaining[i]!.ids) ? 2 : 0;
-        const score2 =
-          placedUnits.some((u) => blocksRelated(u.ids, remaining[i]!.ids))
-            ? 1
-            : 0;
-        const total = score + score2;
-        if (total > bestScore) {
-          bestScore = total;
-          bestIdx = i;
-        }
-      }
-      placedUnits.push(remaining.splice(bestIdx, 1)[0]!);
-    }
-
-    for (const unit of placedUnits) {
-      for (const id of unit.ids) {
-        if (seen.has(id)) continue;
-        ordered.push(id);
-        seen.add(id);
-      }
-    }
-
-    for (const id of ids) {
-      if (!seen.has(id)) ordered.push(id);
-    }
-    gens[g] = ordered;
+    gens[g] = orderGenerationForLayout(gens[g]!, layoutIqCtx);
   }
 
   const positions = new Map<string, { x: number; y: number }>();
@@ -331,6 +280,8 @@ export function computeFamilyTreeLayout(
     while (i < ids.length) {
       const id = ids[i]!;
       const partner = partnerOf.get(id);
+      // Only treat as a couple unit when the partner is the *next* id —
+      // Layout IQ places spouses consecutively as [left, right].
       if (partner && ids[i + 1] === partner) {
         units.push([id, partner]);
         i += 2;
@@ -474,18 +425,114 @@ export function computeFamilyTreeLayout(
     }
   }
 
+  /**
+   * Layout IQ snap: after couples settle under their parents, pin blood
+   * siblings to that person's outer side (never past the spouse).
+   */
+  function snapSiblingsToOuterSides() {
+    const idSetByGen = gens.map((ids) => new Set(ids));
+    for (let g = 0; g <= maxGen; g++) {
+      const ids = gens[g]!;
+      const idSet = idSetByGen[g]!;
+      const handled = new Set<string>();
+      const y = g * (TREE_LAYOUT.nodeHeight + TREE_LAYOUT.vGap);
+
+      for (const id of ids) {
+        if (handled.has(id)) continue;
+        const partner = partnerOf.get(id);
+        if (!partner || !idSet.has(partner)) continue;
+        handled.add(id);
+        handled.add(partner);
+
+        const aPos = positions.get(id);
+        const bPos = positions.get(partner);
+        if (!aPos || !bPos) continue;
+
+        const leftId = aPos.x <= bPos.x ? id : partner;
+        const rightId = aPos.x <= bPos.x ? partner : id;
+        const leftPos = positions.get(leftId)!;
+        const rightPos = positions.get(rightId)!;
+        const exclude = new Set([leftId, rightId]);
+
+        const leftSibs = outerSiblingsOf(
+          leftId,
+          idSet,
+          layoutIqCtx,
+          exclude,
+        ).filter((s) => !handled.has(s));
+        const rightSibs = outerSiblingsOf(
+          rightId,
+          idSet,
+          layoutIqCtx,
+          exclude,
+        ).filter((s) => !handled.has(s) && !leftSibs.includes(s));
+
+        for (const s of leftSibs) handled.add(s);
+        for (const s of rightSibs) handled.add(s);
+
+        // Pack left siblings immediately left of the left spouse (outer → inner).
+        let cursor = leftPos.x;
+        for (let i = leftSibs.length - 1; i >= 0; i--) {
+          cursor -= TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap;
+          positions.set(leftSibs[i]!, { x: cursor, y: leftPos.y });
+        }
+
+        // Pack right siblings immediately right of the right spouse.
+        cursor = rightPos.x + TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap;
+        for (const sib of rightSibs) {
+          positions.set(sib, { x: cursor, y: rightPos.y });
+          cursor += TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap;
+        }
+      }
+
+      // Unmarried sibling sets that share parents: pack tightly in Layout IQ order.
+      const remaining = ids.filter((id) => {
+        if (handled.has(id)) return false;
+        const sibs = outerSiblingsOf(id, idSet, layoutIqCtx, new Set());
+        return sibs.some((s) => !handled.has(s));
+      });
+      for (const seed of remaining) {
+        if (handled.has(seed)) continue;
+        const cluster = [
+          seed,
+          ...outerSiblingsOf(seed, idSet, layoutIqCtx, new Set([seed])),
+        ].filter((id) => !handled.has(id));
+        if (cluster.length <= 1) continue;
+        // Preserve relative Layout IQ order within the cluster.
+        cluster.sort((a, b) => ids.indexOf(a) - ids.indexOf(b));
+        const anchor = positions.get(cluster[0]!);
+        if (!anchor) continue;
+        let cursor = anchor.x;
+        for (const id of cluster) {
+          positions.set(id, { x: cursor, y: anchor.y ?? y });
+          handled.add(id);
+          cursor += TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap;
+        }
+      }
+    }
+  }
+
+  snapSiblingsToOuterSides();
+
   // Final safety: same-row nodes must not overlap into a "merged" cell.
+  // Sort by current x so Layout IQ sibling snaps (outer sides) stay intact.
   for (let g = 0; g <= maxGen; g++) {
     const ids = [...gens[g]!].sort(
       (a, b) => (positions.get(a)?.x ?? 0) - (positions.get(b)?.x ?? 0),
     );
     for (let i = 1; i < ids.length; i++) {
-      const prev = positions.get(ids[i - 1]!);
-      const cur = positions.get(ids[i]!);
+      const prevId = ids[i - 1]!;
+      const curId = ids[i]!;
+      const prev = positions.get(prevId);
+      const cur = positions.get(curId);
       if (!prev || !cur) continue;
-      const minLeft = prev.x + TREE_LAYOUT.nodeWidth + TREE_LAYOUT.partnerGap;
+      const minGap =
+        partnerOf.get(prevId) === curId
+          ? TREE_LAYOUT.partnerGap
+          : TREE_LAYOUT.hGap;
+      const minLeft = prev.x + TREE_LAYOUT.nodeWidth + minGap;
       if (cur.x < minLeft) {
-        positions.set(ids[i]!, { x: minLeft, y: cur.y });
+        positions.set(curId, { x: minLeft, y: cur.y });
       }
     }
   }

@@ -31,6 +31,11 @@ type Props = {
   onAddPartner: (nodeId: string) => void;
   /** Hide edit chrome — pan/zoom only. */
   viewOnly?: boolean;
+  /**
+   * Bump to force fit-to-view after a layout correction pass
+   * (positions are recomputed from relationships; this recenters the camera).
+   */
+  layoutRevision?: number;
   className?: string;
 };
 
@@ -49,6 +54,7 @@ export function FamilyTreeCanvas({
   onAddChild,
   onAddPartner,
   viewOnly = false,
+  layoutRevision = 0,
   className,
 }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -159,6 +165,15 @@ export function FamilyTreeCanvas({
     }
     prevNodeCountRef.current = layout.nodes.length;
   }, [fitToView, layout.nodes.length]);
+
+  // Layout correction / explicit "Fix tree layout" — re-fit camera to reflow.
+  const prevLayoutRevisionRef = useRef(layoutRevision);
+  useEffect(() => {
+    if (layoutRevision === prevLayoutRevisionRef.current) return;
+    prevLayoutRevisionRef.current = layoutRevision;
+    if (layout.nodes.length === 0) return;
+    fitToView();
+  }, [fitToView, layout.nodes.length, layoutRevision]);
 
   useEffect(() => {
     setAddMenuOpen(false);
