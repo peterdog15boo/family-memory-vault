@@ -4,10 +4,6 @@
  */
 
 import type { FamilyTreeRelationType } from "@/lib/db/schema";
-import {
-  canonicalizeRelationshipEndpoints,
-  isFamilyTreeRelationType,
-} from "@/lib/family-tree/relations";
 
 export {
   canonicalizeRelationshipEndpoints,

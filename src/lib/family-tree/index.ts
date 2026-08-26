@@ -110,7 +110,7 @@ export async function createFamilyTreeNode(
 
   const label = labelSchema.parse(input.label);
   const notes = input.notes?.trim() || null;
-  let personId: string | null = input.personId?.trim() || null;
+  const personId: string | null = input.personId?.trim() || null;
   let resolvedLabel = label;
 
   if (personId) {
