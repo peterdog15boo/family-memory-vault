@@ -1682,6 +1682,7 @@ body {
 .family-tree-branches {
   position: absolute;
   inset: 0;
+  z-index: 0;
   pointer-events: none;
   overflow: visible;
 }
@@ -1694,10 +1695,10 @@ body {
 }
 
 .family-tree-branch--partner {
-  stroke: color-mix(in srgb, var(--accent, #c4a574) 70%, #d4a5c0);
-  stroke-width: 2.75;
-  stroke-dasharray: 1 0;
-  opacity: 0.95;
+  stroke: #b07d9a;
+  stroke-width: 3.25;
+  stroke-dasharray: none;
+  opacity: 1;
 }
 
 .family-tree-branch--relation {

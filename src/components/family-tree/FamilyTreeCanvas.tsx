@@ -101,7 +101,7 @@ export function FamilyTreeCanvas({
       })),
       edges,
     );
-  }, [tree]);
+  }, [tree.nodes, tree.relationships]);
 
   const nodeById = useMemo(
     () => new Map(tree.nodes.map((n) => [n.id, n])),
@@ -379,7 +379,7 @@ export function FamilyTreeCanvas({
             aria-hidden
           >
             {layout.edges.map((edge) => (
-              <g key={edge.id}>
+              <g key={edge.id} data-edge-type={edge.type} data-edge-id={edge.id}>
                 <path
                   d={edge.path}
                   className={cn(
@@ -392,10 +392,16 @@ export function FamilyTreeCanvas({
                     edge.type === "parent_of"
                       ? {
                           stroke: "#a67c52",
-                          strokeOpacity: 0.85,
+                          strokeOpacity: 0.9,
                           strokeWidth: 3.5,
                         }
-                      : undefined
+                      : edge.type === "partner_of"
+                        ? {
+                            stroke: "#b07d9a",
+                            strokeOpacity: 0.95,
+                            strokeWidth: 3.25,
+                          }
+                        : undefined
                   }
                   fill="none"
                 />

@@ -97,10 +97,33 @@ function cubicPath(
   return `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
 }
 
-function partnerArc(x1: number, y1: number, x2: number, y2: number): string {
-  const midX = (x1 + x2) / 2;
-  const lift = Math.min(28, Math.abs(x2 - x1) * 0.22 + 10);
-  return `M ${x1} ${y1} Q ${midX} ${y1 - lift}, ${x2} ${y2}`;
+function partnerMarriageBar(
+  left: { x: number; y: number },
+  right: { x: number; y: number },
+): { path: string; labelX: number; labelY: number } {
+  const a = left.x <= right.x ? left : right;
+  const b = left.x <= right.x ? right : left;
+  // Bar through the upper third of the node card, in the horizontal gap.
+  const y = a.y + Math.min(36, TREE_LAYOUT.nodeHeight * 0.28);
+  const x1 = a.x + TREE_LAYOUT.nodeWidth;
+  const x2 = b.x;
+  const gap = x2 - x1;
+  // If nodes overlap or nearly touch, arch clearly above both cards.
+  if (gap < 8) {
+    const cx1 = a.x + TREE_LAYOUT.nodeWidth / 2;
+    const cx2 = b.x + TREE_LAYOUT.nodeWidth / 2;
+    const top = Math.min(a.y, b.y) - 28;
+    return {
+      path: `M ${cx1} ${a.y} L ${cx1} ${top} L ${cx2} ${top} L ${cx2} ${b.y}`,
+      labelX: (cx1 + cx2) / 2,
+      labelY: top - 10,
+    };
+  }
+  return {
+    path: `M ${x1} ${y} L ${x2} ${y}`,
+    labelX: (x1 + x2) / 2,
+    labelY: y - 12,
+  };
 }
 
 function relationArc(x1: number, y1: number, x2: number, y2: number): string {
@@ -574,12 +597,10 @@ export function computeFamilyTreeLayout(
     const tx = to.x + TREE_LAYOUT.nodeWidth / 2;
 
     if (edge.type === "partner_of") {
-      const fy = from.y + TREE_LAYOUT.nodeHeight * 0.42;
-      const ty = to.y + TREE_LAYOUT.nodeHeight * 0.42;
-      edge.path = partnerArc(fx, fy, tx, ty);
-      const mid = pathMidpoint(fx, fy - 14, tx, ty - 14);
-      edge.labelX = mid.x;
-      edge.labelY = mid.y;
+      const bar = partnerMarriageBar(from, to);
+      edge.path = bar.path;
+      edge.labelX = bar.labelX;
+      edge.labelY = bar.labelY;
       return;
     }
 
@@ -598,13 +619,27 @@ export function computeFamilyTreeLayout(
     edge.labelY = mid.y - 8;
   }
 
+  /**
+   * Project every saved relationship onto the canvas.
+   * Layout units/soft-pairs never invent or omit connectors — if both
+   * endpoints are placed, the edge is drawn.
+   */
   const laidEdges: LaidOutEdge[] = [];
   const seenEdgeIds = new Set<string>();
 
   for (const edge of validEdges) {
     const from = posById.get(edge.fromNodeId);
     const to = posById.get(edge.toNodeId);
-    if (!from || !to) continue;
+    if (!from || !to) {
+      console.warn("[family-tree.layout] edge skipped — endpoint not placed", {
+        type: edge.type,
+        fromNodeId: edge.fromNodeId,
+        toNodeId: edge.toNodeId,
+        fromPlaced: Boolean(from),
+        toPlaced: Boolean(to),
+      });
+      continue;
+    }
 
     let id: string;
     if (edge.type === "parent_of") {
@@ -623,8 +658,9 @@ export function computeFamilyTreeLayout(
       fromId: from.id,
       toId: to.id,
       path: "",
+      // Structure edges: no mid-gap label that can hide the connector.
       label:
-        edge.type === "parent_of"
+        edge.type === "parent_of" || edge.type === "partner_of"
           ? undefined
           : edgeLabelForRelation(edge.type),
       emphasis:

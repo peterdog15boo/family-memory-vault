@@ -200,6 +200,33 @@ describe("computeFamilyTreeLayout", () => {
     expect(
       layout.edges.some((e) => e.id === "parent:kathy-mom->jeff"),
     ).toBe(false);
+
+    // Spouse lines for each parent couple + Jeff↔Kathy must be projected.
+    expect(
+      layout.edges.some((e) => e.id === "partner:jeff-dad|jeff-mom"),
+    ).toBe(true);
+    expect(
+      layout.edges.some((e) => e.id === "partner:kathy-dad|kathy-mom"),
+    ).toBe(true);
+    expect(layout.edges.some((e) => e.id === "partner:jeff|kathy")).toBe(
+      true,
+    );
+    for (const id of [
+      "partner:jeff-dad|jeff-mom",
+      "partner:kathy-dad|kathy-mom",
+      "partner:jeff|kathy",
+    ]) {
+      const edge = layout.edges.find((e) => e.id === id)!;
+      expect(edge.path.length).toBeGreaterThan(0);
+      expect(edge.path).not.toMatch(/NaN/);
+    }
+
+    // Every stored parent_of / partner_of is on the chart.
+    const structural = layout.edges.filter(
+      (e) => e.type === "parent_of" || e.type === "partner_of",
+    );
+    expect(structural.filter((e) => e.type === "parent_of")).toHaveLength(6);
+    expect(structural.filter((e) => e.type === "partner_of")).toHaveLength(3);
   });
 });
 
