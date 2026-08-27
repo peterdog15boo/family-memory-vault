@@ -4,6 +4,10 @@ import {
   isPlatformPasskeyAvailable,
   isWebAuthnAvailable,
   passkeyErrorMessage,
+  shouldOfferPasskeyEnroll,
+  markPasskeyEnrollDismissed,
+  markPasskeyEnrollSnoozed,
+  markPasskeyEnrollSessionShown,
 } from "@/lib/auth/passkeys";
 
 vi.mock("@clerk/shared/webauthn", () => ({
@@ -17,13 +21,36 @@ import {
 } from "@clerk/shared/webauthn";
 
 describe("passkeys capability helpers", () => {
+  const memoryStore = () => {
+    const map = new Map<string, string>();
+    return {
+      getItem: (k: string) => map.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        map.set(k, String(v));
+      },
+      removeItem: (k: string) => {
+        map.delete(k);
+      },
+      clear: () => {
+        map.clear();
+      },
+      get length() {
+        return map.size;
+      },
+      key: (i: number) => [...map.keys()][i] ?? null,
+    };
+  };
+
   beforeEach(() => {
     vi.mocked(isWebAuthnSupported).mockReturnValue(true);
     vi.mocked(isWebAuthnPlatformAuthenticatorSupported).mockResolvedValue(true);
+    vi.stubGlobal("sessionStorage", memoryStore());
+    vi.stubGlobal("localStorage", memoryStore());
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("reports WebAuthn available via Clerk helper", () => {
@@ -61,5 +88,61 @@ describe("passkeys capability helpers", () => {
       ),
     ).toBe("Upgrade to use passkeys.");
     expect(passkeyErrorMessage({}, "fallback")).toBe("fallback");
+  });
+
+  it("offers enroll only when supported, empty, and not dismissed", () => {
+    expect(
+      shouldOfferPasskeyEnroll({
+        userId: "user_1",
+        hasPasskeys: false,
+        platformSupported: true,
+      }),
+    ).toBe(true);
+
+    expect(
+      shouldOfferPasskeyEnroll({
+        userId: "user_1",
+        hasPasskeys: true,
+        platformSupported: true,
+      }),
+    ).toBe(false);
+
+    expect(
+      shouldOfferPasskeyEnroll({
+        userId: "user_1",
+        hasPasskeys: false,
+        platformSupported: false,
+      }),
+    ).toBe(false);
+
+    markPasskeyEnrollDismissed("user_1");
+    expect(
+      shouldOfferPasskeyEnroll({
+        userId: "user_1",
+        hasPasskeys: false,
+        platformSupported: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("respects snooze and one-offer-per-session", () => {
+    markPasskeyEnrollSnoozed("user_2");
+    expect(
+      shouldOfferPasskeyEnroll({
+        userId: "user_2",
+        hasPasskeys: false,
+        platformSupported: true,
+      }),
+    ).toBe(false);
+
+    localStorage.clear();
+    markPasskeyEnrollSessionShown();
+    expect(
+      shouldOfferPasskeyEnroll({
+        userId: "user_2",
+        hasPasskeys: false,
+        platformSupported: true,
+      }),
+    ).toBe(false);
   });
 });

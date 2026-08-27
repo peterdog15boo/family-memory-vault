@@ -244,6 +244,12 @@ export const enUS = {
     passkeyRemoveError: "Couldn’t remove that passkey. Try again.",
     passkeyUnnamed: "This device",
     passkeyCreated: "Added {date}",
+    passkeyEnrollTitle: "Sign in faster next time?",
+    passkeyEnrollBody:
+      "Add Face ID, Touch ID, or Windows Hello so you can open your vault without typing a password — optional and easy to remove later in Settings.",
+    passkeyEnrollEnable: "Set up Face ID / Passkey",
+    passkeyEnrollNotNow: "Not now",
+    passkeyEnrollNever: "Don’t ask again on this device",
     idleTimeout: "Log me out after inactivity",
     idleTimeoutHelp:
       "For security, we’ll ask if you’re still there after 15 minutes of inactivity.",

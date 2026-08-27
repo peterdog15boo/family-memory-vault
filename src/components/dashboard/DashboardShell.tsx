@@ -21,6 +21,7 @@ import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
 import { DashboardUserMenu } from "@/components/dashboard/DashboardUserMenu";
 import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { CelebrationHost } from "@/components/celebrations/CelebrationHost";
+import { PasskeyEnrollPrompt } from "@/components/auth/PasskeyEnrollPrompt";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { PushSubscriptionSync } from "@/components/notifications/PushSubscriptionSync";
 import { IdleSessionGuard } from "@/components/session/IdleSessionGuard";
@@ -154,6 +155,7 @@ function DashboardShellInner({
 
       <AvaHelper initialProgress={initialAvaProgress} />
       <CelebrationHost />
+      <PasskeyEnrollPrompt />
       <PushSubscriptionSync />
       <IdleSessionGuard initialPolicy={idleTimeoutPolicy} />
       <AskAiFab />
