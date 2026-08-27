@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Check, Copy, Loader2, Mail, Send } from "lucide-react";
 import {
   buildFeedbackReplyDraft,
@@ -51,6 +52,7 @@ export function FeedbackEmailTester({
   report,
   emailConfigured = true,
 }: FeedbackEmailTesterProps) {
+  const router = useRouter();
   const titleId = useId();
   const subjectId = useId();
   const bodyId = useId();
@@ -138,6 +140,7 @@ export function FeedbackEmailTester({
             : `Reply sent to ${data.to ?? "tester"}`,
         );
         setOpen(false);
+        router.refresh();
       } catch {
         setError("Could not send email");
       }

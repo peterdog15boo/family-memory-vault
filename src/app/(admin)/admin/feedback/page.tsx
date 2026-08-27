@@ -11,6 +11,7 @@ import {
   getAdminFeedbackSubmission,
   getFeedbackScreenshotUrl,
   getFeedbackTesterFirstName,
+  getFeedbackEmailHistoryLines,
   isFeedbackMode,
   listAdminFeedbackSubmissions,
 } from "@/lib/admin/feedback";
@@ -66,6 +67,15 @@ export default async function AdminFeedbackPage({ searchParams }: PageProps) {
     }),
     countAdminFeedbackByStatus(),
   ]);
+
+  const emailHistoryById = await getFeedbackEmailHistoryLines(
+    items.map((item) => item.id),
+  );
+  // Ensure selected ticket (if outside current page filter) still has a line.
+  if (params.id?.trim() && !emailHistoryById.has(params.id.trim())) {
+    const extra = await getFeedbackEmailHistoryLines([params.id.trim()]);
+    for (const [id, line] of extra) emailHistoryById.set(id, line);
+  }
 
   const selectedId = params.id?.trim() || null;
   const selectedRow = selectedId
@@ -151,7 +161,7 @@ export default async function AdminFeedbackPage({ searchParams }: PageProps) {
       ) : (
         <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
           <div className="overflow-x-auto rounded-xl border border-ink/10">
-            <table className="w-full min-w-[40rem] text-left text-sm">
+            <table className="w-full min-w-[48rem] text-left text-sm">
               <thead className="border-b border-ink/10 bg-canvas-deep/40 text-[11px] uppercase tracking-wide text-ink-muted">
                 <tr>
                   <th className="px-3 py-2.5 font-medium">Ticket</th>
@@ -159,6 +169,7 @@ export default async function AdminFeedbackPage({ searchParams }: PageProps) {
                   <th className="px-3 py-2.5 font-medium">Title</th>
                   <th className="px-3 py-2.5 font-medium">Category</th>
                   <th className="px-3 py-2.5 font-medium">Status</th>
+                  <th className="px-3 py-2.5 font-medium">Email</th>
                   <th className="px-3 py-2.5 font-medium">When</th>
                 </tr>
               </thead>
@@ -220,6 +231,16 @@ export default async function AdminFeedbackPage({ searchParams }: PageProps) {
                           }
                         />
                       </td>
+                      <td
+                        className="max-w-[14rem] px-3 py-2.5 align-top text-[11px] leading-snug text-ink-muted"
+                        title={
+                          emailHistoryById.get(item.id) ?? "No email sent yet"
+                        }
+                      >
+                        <span className="line-clamp-2">
+                          {emailHistoryById.get(item.id) ?? "No email sent yet"}
+                        </span>
+                      </td>
                       <td className="px-3 py-2.5 align-top whitespace-nowrap text-xs text-ink-muted">
                         {formatWhen(item.createdAt)}
                       </td>
@@ -278,6 +299,10 @@ export default async function AdminFeedbackPage({ searchParams }: PageProps) {
                     .filter(Boolean)
                     .join(" · ") || "—"}
                 </DetailBlock>
+
+                <p className="text-xs text-ink-muted" role="status">
+                  {emailHistoryById.get(selectedRow.id) ?? "No email sent yet"}
+                </p>
 
                 <FeedbackEmailTester
                   feedbackId={selectedRow.id}

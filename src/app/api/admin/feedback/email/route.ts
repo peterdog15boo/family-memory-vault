@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { logAdminAudit } from "@/lib/admin/audit";
 import { getAdminFeedbackSubmission } from "@/lib/admin/feedback";
+import { FEEDBACK_EMAIL_REPLY_ACTION } from "@/lib/admin/feedback-email-history";
 import { requireAdminApi } from "@/lib/auth/admin";
 import {
   feedbackTesterReplyEmail,
@@ -89,7 +90,7 @@ export async function POST(request: Request) {
 
     await logAdminAudit({
       actorId: authResult.userId,
-      action: "feedback.email_reply",
+      action: FEEDBACK_EMAIL_REPLY_ACTION,
       targetType: "feedback_submission",
       targetId: row.id,
       metadata: {

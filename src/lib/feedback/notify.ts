@@ -4,7 +4,9 @@
  * Also sends a one-time acknowledgment to the reporter when configured.
  */
 
+import { logAdminAudit } from "@/lib/admin/audit";
 import { getFeedbackTesterFirstName } from "@/lib/admin/feedback";
+import { FEEDBACK_EMAIL_ACK_ACTION } from "@/lib/admin/feedback-email-history";
 import { buildFeedbackReplyDraft } from "@/lib/admin/feedback-reply";
 import { getEnvAdminUserIds } from "@/lib/auth/admin";
 import { getDb } from "@/lib/db";
@@ -215,7 +217,51 @@ export async function acknowledgeFeedbackSubmission(
   if (!result.ok) {
     return { ok: false, error: result.error ?? "Ack email failed" };
   }
+
+  // Persist to the same admin send log used by manual replies (history UI).
+  // Does not affect send outcome — ticket already saved; ack already sent.
+  const actorId = await resolveFeedbackEmailLogActorId(row.userId);
+  if (actorId) {
+    await logAdminAudit({
+      actorId,
+      action: FEEDBACK_EMAIL_ACK_ACTION,
+      targetType: "feedback_submission",
+      targetId: row.id,
+      metadata: {
+        ticketId: row.ticketId,
+        mode: row.mode,
+        to,
+        subject: draft.subject,
+        messageId: result.id ?? null,
+        loggedOnly: Boolean(result.logged),
+        automatic: true,
+      },
+    });
+  }
+
   return { ok: true, logged: Boolean(result.logged) };
+}
+
+/** Actor for audit FK — prefer reporter, else an env/DB admin. */
+async function resolveFeedbackEmailLogActorId(
+  userId: string | null | undefined,
+): Promise<string | null> {
+  if (userId?.trim()) return userId.trim();
+
+  const envIds = getEnvAdminUserIds();
+  if (envIds[0]) return envIds[0];
+
+  try {
+    const db = getDb();
+    const [admin] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.isAdmin, true))
+      .limit(1);
+    return admin?.id ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**

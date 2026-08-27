@@ -2,11 +2,19 @@
  * Admin helpers for beta FeedbackSubmission triage.
  */
 
-import { and, desc, eq, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
+import {
+  FEEDBACK_EMAIL_ACK_ACTION,
+  FEEDBACK_EMAIL_REPLY_ACTION,
+  feedbackEmailActionToKind,
+  formatFeedbackEmailHistoryLine,
+  type FeedbackEmailSendEvent,
+} from "@/lib/admin/feedback-email-history";
 import { getDb } from "@/lib/db";
 import {
   FEEDBACK_SUBMISSION_STATUSES,
+  adminAuditLogs,
   feedbackSubmissions,
   users,
   type FeedbackSubmission,
@@ -15,6 +23,11 @@ import {
 import { FEEDBACK_MODES, type FeedbackMode } from "@/lib/feedback/categories";
 import { getInternalDownloadUrl, R2_PREFIXES } from "@/lib/r2";
 import { isR2Configured } from "@/lib/upload/constants";
+
+export {
+  formatFeedbackEmailHistoryLine,
+  type FeedbackEmailSendEvent,
+} from "@/lib/admin/feedback-email-history";
 
 export const feedbackSubmissionStatusSchema = z.enum(
   FEEDBACK_SUBMISSION_STATUSES,
@@ -164,4 +177,59 @@ export async function getFeedbackScreenshotUrl(
 
 export function isFeedbackMode(value: string): value is FeedbackMode {
   return (FEEDBACK_MODES as readonly string[]).includes(value);
+}
+
+/**
+ * Load send-log events (auto-ack + admin replies) for many tickets.
+ * Admin-only consumers — backed by admin_audit_logs.
+ */
+export async function listFeedbackEmailEventsBySubmissionIds(
+  submissionIds: string[],
+): Promise<Map<string, FeedbackEmailSendEvent[]>> {
+  const result = new Map<string, FeedbackEmailSendEvent[]>();
+  const ids = [...new Set(submissionIds.map((id) => id.trim()).filter(Boolean))];
+  for (const id of ids) result.set(id, []);
+  if (ids.length === 0) return result;
+
+  const db = getDb();
+  const rows = await db
+    .select({
+      targetId: adminAuditLogs.targetId,
+      action: adminAuditLogs.action,
+      createdAt: adminAuditLogs.createdAt,
+    })
+    .from(adminAuditLogs)
+    .where(
+      and(
+        eq(adminAuditLogs.targetType, "feedback_submission"),
+        inArray(adminAuditLogs.targetId, ids),
+        inArray(adminAuditLogs.action, [
+          FEEDBACK_EMAIL_ACK_ACTION,
+          FEEDBACK_EMAIL_REPLY_ACTION,
+        ]),
+      ),
+    )
+    .orderBy(asc(adminAuditLogs.createdAt));
+
+  for (const row of rows) {
+    const kind = feedbackEmailActionToKind(row.action);
+    if (!kind) continue;
+    const list = result.get(row.targetId) ?? [];
+    list.push({ kind, at: row.createdAt });
+    result.set(row.targetId, list);
+  }
+
+  return result;
+}
+
+export async function getFeedbackEmailHistoryLines(
+  submissionIds: string[],
+): Promise<Map<string, string>> {
+  const eventsById =
+    await listFeedbackEmailEventsBySubmissionIds(submissionIds);
+  const lines = new Map<string, string>();
+  for (const [id, events] of eventsById) {
+    lines.set(id, formatFeedbackEmailHistoryLine(events));
+  }
+  return lines;
 }
