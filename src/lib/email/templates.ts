@@ -580,6 +580,34 @@ export function feedbackSubmissionAdminEmail(data: {
   };
 }
 
+/**
+ * Admin thank-you reply to a feedback reporter (bug or feature).
+ * Body is freeform plain text from the compose panel.
+ */
+export function feedbackTesterReplyEmail(data: {
+  subject: string;
+  body: string;
+  ticketId?: string | null;
+}): EmailContent {
+  const subject = data.subject.trim() || "Thanks from Family Memory Vault";
+  const text = data.body.trim();
+  // Keep blank lines as spacing; paragraphs() escapes each line.
+  const bodyHtml = paragraphs(text.split("\n"));
+
+  return {
+    subject,
+    text,
+    html: layout({
+      preview: subject,
+      heading: BRAND,
+      bodyHtml,
+      footerNote: data.ticketId
+        ? `Regarding ${escapeHtml(data.ticketId)} · ${BRAND}`
+        : `Sent by the ${BRAND} team.`,
+    }),
+  };
+}
+
 export function milestoneEmail(data: {
   firstName?: string | null;
   badgeTitle: string;

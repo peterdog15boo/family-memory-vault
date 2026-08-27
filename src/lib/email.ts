@@ -42,6 +42,7 @@ export {
   paymentFailedEmail,
   memoryBoxOrderAdminEmail,
   feedbackSubmissionAdminEmail,
+  feedbackTesterReplyEmail,
   milestoneEmail,
   weeklyDigestEmail,
   inviteFamilyTipEmail,

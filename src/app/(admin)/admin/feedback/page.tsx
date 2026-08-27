@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { Bug, Lightbulb, MessageSquareHeart } from "lucide-react";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
+import { FeedbackEmailTester } from "@/components/admin/FeedbackEmailTester";
 import { FeedbackStatusSelect } from "@/components/admin/FeedbackStatusSelect";
 import {
   countAdminFeedbackByStatus,
@@ -9,6 +10,7 @@ import {
   FEEDBACK_STATUS_LABELS,
   getAdminFeedbackSubmission,
   getFeedbackScreenshotUrl,
+  getFeedbackTesterFirstName,
   isFeedbackMode,
   listAdminFeedbackSubmissions,
 } from "@/lib/admin/feedback";
@@ -17,6 +19,7 @@ import {
   FEEDBACK_SUBMISSION_STATUSES,
   type FeedbackSubmissionStatus,
 } from "@/lib/db/schema";
+import { isEmailConfigured } from "@/lib/email";
 import type { FeedbackMode } from "@/lib/feedback/categories";
 import { cn } from "@/lib/utils";
 
@@ -71,6 +74,10 @@ export default async function AdminFeedbackPage({ searchParams }: PageProps) {
     : null;
   const screenshotUrl = selectedRow
     ? await getFeedbackScreenshotUrl(selectedRow.screenshotKey)
+    : null;
+
+  const testerName = selectedRow
+    ? await getFeedbackTesterFirstName(selectedRow.userId)
     : null;
 
   const newCount = counts.new;
@@ -271,6 +278,18 @@ export default async function AdminFeedbackPage({ searchParams }: PageProps) {
                     .filter(Boolean)
                     .join(" · ") || "—"}
                 </DetailBlock>
+
+                <FeedbackEmailTester
+                  feedbackId={selectedRow.id}
+                  ticketId={selectedRow.ticketId}
+                  mode={
+                    selectedRow.mode === "feature" ? "feature" : "bug"
+                  }
+                  email={selectedRow.email}
+                  testerName={testerName}
+                  emailConfigured={isEmailConfigured()}
+                />
+
                 <DetailBlock label="Page">
                   <a
                     href={selectedRow.pageUrl}

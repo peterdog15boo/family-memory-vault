@@ -8,6 +8,7 @@ import { getDb } from "@/lib/db";
 import {
   FEEDBACK_SUBMISSION_STATUSES,
   feedbackSubmissions,
+  users,
   type FeedbackSubmission,
   type FeedbackSubmissionStatus,
 } from "@/lib/db/schema";
@@ -103,6 +104,26 @@ export async function getAdminFeedbackSubmission(
     .where(eq(feedbackSubmissions.id, id.trim()))
     .limit(1);
   return row ?? null;
+}
+
+/** First name for thank-you drafts (admin-only; never exposed on public APIs). */
+export async function getFeedbackTesterFirstName(
+  userId: string | null | undefined,
+): Promise<string | null> {
+  if (!userId?.trim()) return null;
+  try {
+    const db = getDb();
+    const [row] = await db
+      .select({ displayName: users.displayName })
+      .from(users)
+      .where(eq(users.id, userId.trim()))
+      .limit(1);
+    const name = row?.displayName?.trim();
+    if (!name) return null;
+    return name.split(/\s+/)[0] ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function updateFeedbackSubmissionStatus(input: {
