@@ -1,5 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { LogEvents } from "@/lib/observability/events";
 import { logger } from "@/lib/observability/logger";
 import { IDLE_EXPIRED_PATH, resolvePostAuthPath } from "@/lib/routes";
@@ -75,8 +75,8 @@ function makeRequestId(): string {
   return `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function signInUrlFor(request: Request): string {
-  const url = new URL(request.url);
+function signInUrlFor(request: NextRequest): string {
+  const url = request.nextUrl;
   const returnPath = `${url.pathname}${url.search}`;
   const signIn = new URL("/sign-in", request.url);
   // Preserve deep links (e.g. /family/accept?token=…) after Clerk auth.
@@ -86,12 +86,12 @@ function signInUrlFor(request: Request): string {
   return signIn.toString();
 }
 
-function idleExpiredRedirect(request: Request): NextResponse {
+function idleExpiredRedirect(request: NextRequest): NextResponse {
   return NextResponse.redirect(new URL(IDLE_EXPIRED_PATH, request.url));
 }
 
 function shouldSilentIdleRedirect(
-  request: Request,
+  request: NextRequest,
   sessionId: string | null | undefined,
 ): boolean {
   if (!sessionId) return false;
