@@ -3,6 +3,7 @@ import {
   isPasskeyUserCancellation,
   isPlatformPasskeyAvailable,
   isWebAuthnAvailable,
+  passkeyErrorMessage,
 } from "@/lib/auth/passkeys";
 
 vi.mock("@clerk/shared/webauthn", () => ({
@@ -50,5 +51,15 @@ describe("passkeys capability helpers", () => {
       isPasskeyUserCancellation({ code: "passkey_retrieval_cancelled" }),
     ).toBe(true);
     expect(isPasskeyUserCancellation({ code: "network_error" })).toBe(false);
+  });
+
+  it("surfaces Clerk long_message when present", () => {
+    expect(
+      passkeyErrorMessage(
+        { errors: [{ longMessage: "Upgrade to use passkeys." }] },
+        "fallback",
+      ),
+    ).toBe("Upgrade to use passkeys.");
+    expect(passkeyErrorMessage({}, "fallback")).toBe("fallback");
   });
 });

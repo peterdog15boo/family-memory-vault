@@ -6,6 +6,7 @@ import { Fingerprint, Loader2 } from "lucide-react";
 import {
   isPasskeyUserCancellation,
   isPlatformPasskeyAvailable,
+  passkeyErrorMessage,
 } from "@/lib/auth/passkeys";
 import { cn } from "@/lib/utils";
 
@@ -57,8 +58,10 @@ export function PasskeySignInButton({
       if (error) {
         if (!isPasskeyUserCancellation(error)) {
           setErrorMessage(
-            error.message ||
+            passkeyErrorMessage(
+              error,
               "Passkey sign-in didn’t complete. Try Google or email instead.",
+            ),
           );
         }
         return;

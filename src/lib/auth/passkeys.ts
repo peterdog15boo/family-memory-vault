@@ -67,3 +67,26 @@ export function isPasskeyUserCancellation(error: unknown): boolean {
   }
   return false;
 }
+
+/**
+ * Prefer Clerk’s human-readable message (dashboard notice / API long_message)
+ * when passkey create/sign-in fails.
+ */
+export function passkeyErrorMessage(
+  error: unknown,
+  fallback: string,
+): string {
+  if (!error || typeof error !== "object") return fallback;
+  const err = error as {
+    message?: string;
+    longMessage?: string;
+    errors?: Array<{ longMessage?: string; message?: string; code?: string }>;
+  };
+  const nested = err.errors?.[0];
+  const text =
+    nested?.longMessage?.trim() ||
+    nested?.message?.trim() ||
+    err.longMessage?.trim() ||
+    err.message?.trim();
+  return text || fallback;
+}

@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
-import { useUser } from "@clerk/nextjs";
+import { useReverification, useUser } from "@clerk/nextjs";
+import { isReverificationCancelledError } from "@clerk/nextjs/errors";
 import { Fingerprint, Loader2, Trash2 } from "lucide-react";
 import { useTranslations } from "@/components/i18n/LocaleProvider";
 import {
   isPasskeyUserCancellation,
   isPlatformPasskeyAvailable,
+  passkeyErrorMessage,
 } from "@/lib/auth/passkeys";
 import { announce } from "@/lib/a11y/announce";
 import { cn } from "@/lib/utils";
@@ -14,6 +16,9 @@ import { cn } from "@/lib/utils";
 /**
  * Add / list / remove passkeys after sign-in. Hidden when this device has no
  * platform authenticator (no broken biometric CTA on plain desktops).
+ *
+ * Clerk requires session reverification before add/remove passkey — we wrap
+ * those calls so the verify modal appears instead of a silent failure.
  */
 export function PasskeySettings() {
   const { user, isLoaded } = useUser();
@@ -24,6 +29,18 @@ export function PasskeySettings() {
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const errorId = useId();
+
+  const createPasskey = useReverification(async () => {
+    if (!user) throw new Error("Not signed in");
+    return user.createPasskey();
+  });
+
+  const deletePasskey = useReverification(async (passkeyId: string) => {
+    if (!user) throw new Error("Not signed in");
+    const target = user.passkeys.find((p) => p.id === passkeyId);
+    if (!target) throw new Error("Passkey not found");
+    return target.delete();
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -43,19 +60,24 @@ export function PasskeySettings() {
 
   const passkeys = user?.passkeys ?? [];
   const canAdd = supported && Boolean(user);
+  const onLocalhost =
+    typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1");
 
   async function addPasskey() {
     if (!user || busy) return;
     setBusy(true);
     setError(null);
     try {
-      await user.createPasskey();
+      await createPasskey();
       announce(t("settings.passkeyAdded"));
       await user.reload();
     } catch (err) {
-      if (!isPasskeyUserCancellation(err)) {
-        setError(t("settings.passkeyAddError"));
+      if (isReverificationCancelledError(err) || isPasskeyUserCancellation(err)) {
+        return;
       }
+      setError(passkeyErrorMessage(err, t("settings.passkeyAddError")));
     } finally {
       setBusy(false);
     }
@@ -63,16 +85,17 @@ export function PasskeySettings() {
 
   async function removePasskey(id: string) {
     if (!user || removingId) return;
-    const target = passkeys.find((p) => p.id === id);
-    if (!target) return;
     setRemovingId(id);
     setError(null);
     try {
-      await target.delete();
+      await deletePasskey(id);
       announce(t("settings.passkeyRemoved"));
       await user.reload();
-    } catch {
-      setError(t("settings.passkeyRemoveError"));
+    } catch (err) {
+      if (isReverificationCancelledError(err) || isPasskeyUserCancellation(err)) {
+        return;
+      }
+      setError(passkeyErrorMessage(err, t("settings.passkeyRemoveError")));
     } finally {
       setRemovingId(null);
     }
@@ -93,6 +116,16 @@ export function PasskeySettings() {
               ? t("settings.passkeysLead")
               : t("settings.passkeysUnsupported")}
           </p>
+          {supported ? (
+            <p className="mt-2 text-xs text-ink-muted">
+              {t("settings.passkeysVerifyHint")}
+            </p>
+          ) : null}
+          {supported && onLocalhost ? (
+            <p className="mt-2 text-xs text-ink-muted">
+              {t("settings.passkeysLocalhostHint")}
+            </p>
+          ) : null}
         </div>
       </div>
 

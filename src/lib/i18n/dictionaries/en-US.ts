@@ -227,6 +227,10 @@ export const enUS = {
     passkeysTitle: "Passkeys",
     passkeysLead:
       "Sign in with Face ID, Touch ID, or Windows Hello on this device. Add a passkey only after you already have an account.",
+    passkeysVerifyHint:
+      "Clerk will ask you to verify your email (or password) before adding or removing a passkey — that’s required for account security.",
+    passkeysLocalhostHint:
+      "You’re on localhost: this passkey will only work on localhost. For familymemoryvault.ai, add a passkey while signed in on that site.",
     passkeysUnsupported:
       "This device doesn’t support Face ID, Touch ID, or Windows Hello, so biometric passkeys aren’t available here. You can still sign in with Google or email.",
     passkeysEmpty: "No passkeys on this account yet.",
@@ -234,7 +238,7 @@ export const enUS = {
     passkeyAdding: "Waiting for device…",
     passkeyAdded: "Passkey added.",
     passkeyAddError:
-      "Couldn’t add a passkey. Make sure Face ID / Touch ID / Windows Hello is set up, then try again.",
+      "Couldn’t add a passkey. Verify your email if prompted, make sure Face ID / Touch ID / Windows Hello is set up, then try again.",
     passkeyRemove: "Remove passkey",
     passkeyRemoved: "Passkey removed.",
     passkeyRemoveError: "Couldn’t remove that passkey. Try again.",
