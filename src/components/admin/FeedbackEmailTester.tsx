@@ -2,7 +2,10 @@
 
 import { useEffect, useId, useState, useTransition } from "react";
 import { Check, Copy, Loader2, Mail, Send } from "lucide-react";
-import { buildFeedbackReplyDraft } from "@/lib/admin/feedback-reply";
+import {
+  buildFeedbackReplyDraft,
+  type FeedbackReplyReport,
+} from "@/lib/admin/feedback-reply";
 import type { FeedbackMode } from "@/lib/feedback/categories";
 import { cn } from "@/lib/utils";
 
@@ -12,7 +15,8 @@ type FeedbackEmailTesterProps = {
   mode: FeedbackMode;
   email: string | null;
   testerName?: string | null;
-  /** Server hint — Resend key present. Send still works in log-only mode. */
+  report: FeedbackReplyReport;
+  /** Server hint — Resend key present. */
   emailConfigured?: boolean;
 };
 
@@ -44,6 +48,7 @@ export function FeedbackEmailTester({
   mode,
   email,
   testerName,
+  report,
   emailConfigured = true,
 }: FeedbackEmailTesterProps) {
   const titleId = useId();
@@ -59,6 +64,14 @@ export function FeedbackEmailTester({
 
   const hasEmail = Boolean(email?.trim());
 
+  function makeDraft() {
+    return buildFeedbackReplyDraft({
+      mode,
+      testerName,
+      report,
+    });
+  }
+
   useEffect(() => {
     if (!copied) return;
     const id = window.setTimeout(() => setCopied(null), 2000);
@@ -68,8 +81,7 @@ export function FeedbackEmailTester({
   function openCompose() {
     setError(null);
     setStatus(null);
-    const draft = buildFeedbackReplyDraft({ mode, testerName });
-    // Blank line after greeting leaves room for a personal note before send.
+    const draft = makeDraft();
     setSubject(draft.subject);
     setBody(draft.body);
     setOpen(true);
@@ -87,11 +99,11 @@ export function FeedbackEmailTester({
   function handleCopyMessage() {
     const draft = open
       ? { subject: subject.trim(), body: body.trim() }
-      : buildFeedbackReplyDraft({ mode, testerName });
+      : makeDraft();
     const text = `Subject: ${draft.subject}\n\n${draft.body}`;
     void copyText(text).then((ok) => {
       setCopied(ok ? "message" : null);
-      setStatus(ok ? "Message copied" : null);
+      setStatus(ok ? "Full draft copied" : null);
       setError(ok ? null : "Could not copy message");
     });
   }
@@ -191,7 +203,7 @@ export function FeedbackEmailTester({
           ) : (
             <Copy className="size-3.5" aria-hidden />
           )}
-          {copied === "message" ? "Message copied" : "Copy message"}
+          {copied === "message" ? "Draft copied" : "Copy full draft"}
         </button>
       </div>
 
@@ -205,8 +217,8 @@ export function FeedbackEmailTester({
             Compose reply · {ticketId}
           </p>
           <p className="text-[11px] text-ink-muted">
-            Prefills a {mode === "feature" ? "feature" : "bug"} thank-you. Add a
-            personal note under the greeting before sending.
+            Full {mode === "feature" ? "feature" : "bug"} acknowledgment with
+            quoted report and signature. Edit freely before sending.
           </p>
 
           <div>
@@ -236,8 +248,8 @@ export function FeedbackEmailTester({
               id={bodyId}
               value={body}
               onChange={(e) => setBody(e.target.value)}
-              rows={8}
-              className="mt-1 w-full rounded-md border border-ink/15 bg-canvas px-2.5 py-1.5 text-xs leading-relaxed text-ink outline-none focus:border-accent/40 focus:ring-2 focus:ring-accent/20"
+              rows={16}
+              className="mt-1 w-full rounded-md border border-ink/15 bg-canvas px-2.5 py-1.5 font-mono text-[11px] leading-relaxed text-ink outline-none focus:border-accent/40 focus:ring-2 focus:ring-accent/20"
             />
           </div>
 

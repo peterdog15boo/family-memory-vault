@@ -35,6 +35,7 @@ export type {
 } from "@/lib/feedback/submit";
 export {
   notifyFeedbackSubmission,
+  acknowledgeFeedbackSubmission,
   getFeedbackNotifyEmails,
 } from "@/lib/feedback/notify";
 export { generateFeedbackTicketId } from "@/lib/feedback/ticket";

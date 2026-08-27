@@ -1,19 +1,27 @@
 /**
  * Notify the team when a new FeedbackSubmission arrives.
  * Email (Resend) and/or Slack/Discord-compatible webhook.
+ * Also sends a one-time acknowledgment to the reporter when configured.
  */
 
+import { getFeedbackTesterFirstName } from "@/lib/admin/feedback";
+import { buildFeedbackReplyDraft } from "@/lib/admin/feedback-reply";
 import { getEnvAdminUserIds } from "@/lib/auth/admin";
 import { getDb } from "@/lib/db";
 import { users, type FeedbackSubmission } from "@/lib/db/schema";
-import { sendEmail } from "@/lib/email";
-import { feedbackSubmissionAdminEmail } from "@/lib/email/templates";
+import { isEmailConfigured, sendEmail } from "@/lib/email";
+import {
+  feedbackSubmissionAdminEmail,
+  feedbackTesterReplyEmail,
+} from "@/lib/email/templates";
 import { getAppUrl } from "@/lib/env";
 import { eq, inArray, or } from "drizzle-orm";
 
 export type FeedbackNotifyResult = {
   emailed: boolean;
   webhook: boolean;
+  /** True when the submitter acknowledgment was sent (or logged). */
+  acknowledged: boolean;
   errors: string[];
 };
 
@@ -154,7 +162,65 @@ async function sendFeedbackWebhook(
 }
 
 /**
+ * One-time thank-you to the submitter. Only when Resend is configured and the
+ * ticket has an email. Never throws — failures are returned for logging.
+ */
+export async function acknowledgeFeedbackSubmission(
+  row: FeedbackSubmission,
+  testerName?: string | null,
+): Promise<{ ok: boolean; skipped?: boolean; error?: string; logged?: boolean }> {
+  if (!isEmailConfigured()) {
+    return { ok: false, skipped: true, error: "Email not configured" };
+  }
+  const to = row.email?.trim();
+  if (!to) {
+    return { ok: false, skipped: true, error: "No reporter email" };
+  }
+
+  const mode = row.mode === "feature" ? "feature" : "bug";
+  const draft = buildFeedbackReplyDraft({
+    mode,
+    testerName,
+    report: {
+      ticketId: row.ticketId,
+      mode,
+      title: row.title,
+      description: row.description,
+      expectedBehavior: row.expectedBehavior,
+      problemStatement: row.problemStatement,
+      suggestedSolution: row.suggestedSolution,
+      pageUrl: row.pageUrl,
+      pathname: row.pathname,
+      submittedAt: row.createdAt,
+    },
+  });
+
+  const content = feedbackTesterReplyEmail({
+    subject: draft.subject,
+    body: draft.body,
+    ticketId: row.ticketId,
+  });
+
+  const result = await sendEmail({
+    to,
+    subject: content.subject,
+    html: content.html,
+    text: content.text,
+    tags: [
+      { name: "category", value: "feedback_ack" },
+      { name: "ticket", value: row.ticketId.slice(0, 64) },
+    ],
+  });
+
+  if (!result.ok) {
+    return { ok: false, error: result.error ?? "Ack email failed" };
+  }
+  return { ok: true, logged: Boolean(result.logged) };
+}
+
+/**
  * Fire-and-forget friendly: never throws. Logs failures.
+ * Called once after a new submission is saved — not on status changes.
  */
 export async function notifyFeedbackSubmission(
   row: FeedbackSubmission,
@@ -162,6 +228,7 @@ export async function notifyFeedbackSubmission(
   const errors: string[] = [];
   let emailed = false;
   let webhook = false;
+  let acknowledged = false;
 
   try {
     const recipients = await getFeedbackNotifyEmails();
@@ -223,6 +290,32 @@ export async function notifyFeedbackSubmission(
     });
   }
 
+  // Automatic first reply to the tester (once per new submission).
+  try {
+    const testerName = await getFeedbackTesterFirstName(row.userId);
+    const ack = await acknowledgeFeedbackSubmission(row, testerName);
+    if (ack.ok) {
+      acknowledged = true;
+      console.info("[feedback] reporter acknowledgment sent", {
+        ticketId: row.ticketId,
+        logged: ack.logged ?? false,
+      });
+    } else if (!ack.skipped) {
+      errors.push(ack.error ?? "Acknowledgment failed");
+      console.error("[feedback] reporter acknowledgment failed", {
+        ticketId: row.ticketId,
+        error: ack.error,
+      });
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    errors.push(message);
+    console.error("[feedback] reporter acknowledgment threw", {
+      ticketId: row.ticketId,
+      error: message,
+    });
+  }
+
   if (getFeedbackWebhookUrl()) {
     const result = await sendFeedbackWebhook(row);
     if (result.ok) {
@@ -236,5 +329,5 @@ export async function notifyFeedbackSubmission(
     }
   }
 
-  return { emailed, webhook, errors };
+  return { emailed, webhook, acknowledged, errors };
 }

@@ -1,14 +1,34 @@
 /**
- * Admin thank-you drafts for feedback reporters (bug vs feature).
+ * Full thank-you / acknowledgment drafts for feedback reporters.
+ * Used by Admin compose/copy and by the automatic first reply on submit.
  */
 
 import type { FeedbackMode } from "@/lib/feedback/categories";
 
+export const FEEDBACK_REPLY_SIGNATURE = [
+  "Family Memory Vault Development Team",
+  "support@mail.familymemoryvault.ai",
+  "https://familymemoryvault.ai",
+].join("\n");
+
+export type FeedbackReplyReport = {
+  ticketId: string;
+  mode: FeedbackMode | string;
+  title?: string | null;
+  description?: string | null;
+  expectedBehavior?: string | null;
+  problemStatement?: string | null;
+  suggestedSolution?: string | null;
+  pageUrl?: string | null;
+  pathname?: string | null;
+  submittedAt?: Date | string | null;
+};
+
 export type FeedbackReplyDraft = {
   subject: string;
-  /** Full plain-text body ready to send/copy (includes greeting). */
+  /** Full plain-text body ready to send/copy. */
   body: string;
-  /** Template paragraphs without greeting — for compose UI. */
+  /** Thank-you paragraph only (bug vs feature). */
   templateBody: string;
 };
 
@@ -32,26 +52,104 @@ export function feedbackReplySubject(mode: FeedbackMode): string {
   return "Thanks for reporting this in Family Memory Vault";
 }
 
+function normalizeMode(mode: FeedbackMode | string): FeedbackMode {
+  return mode === "feature" ? "feature" : "bug";
+}
+
+function typeLabel(mode: FeedbackMode): string {
+  return mode === "feature" ? "Feature request" : "Bug";
+}
+
+function formatSubmittedAt(value: Date | string | null | undefined): string {
+  if (!value) return "—";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function quoteBlock(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return '""';
+  return `"${trimmed}"`;
+}
+
 /**
- * Build a type-aware thank-you draft for a feedback ticket.
- * Optional personalNote is inserted after the greeting.
+ * Standard email-style quoted original report for the bottom of the reply.
+ */
+export function formatFeedbackOriginalReport(
+  report: FeedbackReplyReport,
+): string {
+  const mode = normalizeMode(report.mode);
+  const page =
+    report.pageUrl?.trim() ||
+    report.pathname?.trim() ||
+    "—";
+
+  const detailParts: string[] = [];
+  if (report.title?.trim()) {
+    detailParts.push(quoteBlock(report.title));
+  }
+  if (report.description?.trim()) {
+    detailParts.push(quoteBlock(report.description));
+  }
+  if (report.expectedBehavior?.trim()) {
+    detailParts.push(`Expected: ${quoteBlock(report.expectedBehavior)}`);
+  }
+  if (report.problemStatement?.trim()) {
+    detailParts.push(`Problem: ${quoteBlock(report.problemStatement)}`);
+  }
+  if (report.suggestedSolution?.trim()) {
+    detailParts.push(`Suggested: ${quoteBlock(report.suggestedSolution)}`);
+  }
+
+  const lines = [
+    "---",
+    "Original report",
+    `Type: ${typeLabel(mode)}`,
+    `Ticket: ${report.ticketId.trim() || "—"}`,
+    `Submitted: ${formatSubmittedAt(report.submittedAt)}`,
+    `Page: ${page}`,
+    "",
+    ...(detailParts.length > 0 ? detailParts : [quoteBlock("")]),
+    "---",
+  ];
+
+  return lines.join("\n");
+}
+
+/**
+ * Build a complete type-aware thank-you email draft:
+ * greeting → thank-you → optional personal note → quoted report → signature.
  */
 export function buildFeedbackReplyDraft(input: {
   mode: FeedbackMode | string;
   testerName?: string | null;
   personalNote?: string | null;
+  report?: FeedbackReplyReport | null;
 }): FeedbackReplyDraft {
-  const mode: FeedbackMode = input.mode === "feature" ? "feature" : "bug";
+  const mode = normalizeMode(input.mode);
   const subject = feedbackReplySubject(mode);
   const templateBody = feedbackReplyTemplateBody(mode);
   const greeting = greetingLine(input.testerName);
   const note = input.personalNote?.trim();
 
-  const parts = [greeting, ""];
+  const parts: string[] = [greeting, "", templateBody];
+
   if (note) {
-    parts.push(note, "");
+    parts.push("", note);
   }
-  parts.push(templateBody);
+
+  if (input.report) {
+    parts.push("", formatFeedbackOriginalReport(input.report));
+  }
+
+  parts.push("", FEEDBACK_REPLY_SIGNATURE);
 
   return {
     subject,

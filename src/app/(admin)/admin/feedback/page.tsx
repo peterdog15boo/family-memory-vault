@@ -288,6 +288,19 @@ export default async function AdminFeedbackPage({ searchParams }: PageProps) {
                   email={selectedRow.email}
                   testerName={testerName}
                   emailConfigured={isEmailConfigured()}
+                  report={{
+                    ticketId: selectedRow.ticketId,
+                    mode:
+                      selectedRow.mode === "feature" ? "feature" : "bug",
+                    title: selectedRow.title,
+                    description: selectedRow.description,
+                    expectedBehavior: selectedRow.expectedBehavior,
+                    problemStatement: selectedRow.problemStatement,
+                    suggestedSolution: selectedRow.suggestedSolution,
+                    pageUrl: selectedRow.pageUrl,
+                    pathname: selectedRow.pathname,
+                    submittedAt: selectedRow.createdAt.toISOString(),
+                  }}
                 />
 
                 <DetailBlock label="Page">
