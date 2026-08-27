@@ -7393,6 +7393,12 @@ html {
   background: transparent !important;
 }
 
+/* Prefer our feature-detected biometric button; hide Clerk’s duplicate action. */
+.auth-sign-in-panel .cl-cardAction__usePasskey,
+.auth-clerk-mount .cl-cardAction__usePasskey {
+  display: none !important;
+}
+
 .auth-card-skeleton {
   display: flex;
   flex-direction: column;

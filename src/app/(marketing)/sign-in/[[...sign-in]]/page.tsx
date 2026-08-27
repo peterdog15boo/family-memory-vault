@@ -7,6 +7,7 @@ import { AuthClerkMount } from "@/components/auth/AuthClerkMount";
 import { AuthPageShell } from "@/components/auth/AuthPageShell";
 import { InactivitySignInNotice } from "@/components/auth/InactivitySignInNotice";
 import { RedirectIfSignedIn } from "@/components/auth/RedirectIfSignedIn";
+import { SignInPanel } from "@/components/auth/SignInPanel";
 import { authClerkAppearance } from "@/lib/auth/clerk-appearance";
 import { resolvePostAuthPath } from "@/lib/routes";
 
@@ -44,11 +45,7 @@ export default async function SignInPage({ searchParams }: PageProps) {
     />
   ) : (
     <AuthClerkMount>
-      <SignIn
-        forceRedirectUrl={landing}
-        fallbackRedirectUrl={landing}
-        appearance={authClerkAppearance}
-      />
+      <SignInPanel landing={landing} />
     </AuthClerkMount>
   );
 

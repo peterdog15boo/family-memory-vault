@@ -16,6 +16,7 @@ import {
 import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { BrowserPushSettings } from "@/components/settings/BrowserPushSettings";
 import { LocationSharingSettings } from "@/components/settings/LocationSharingSettings";
+import { PasskeySettings } from "@/components/settings/PasskeySettings";
 import type {
   AccountPreferenceToggleKey,
   PublicAccountPreferences,
@@ -560,6 +561,8 @@ export function AccountPrivacySettings({
             </button>
           </li>
         </ul>
+
+        <PasskeySettings />
 
         {canDisableIdleTimeout ? (
           <div className="mt-5 border-t border-[color:var(--border-subtle)] pt-5">

@@ -36,5 +36,7 @@ export const authClerkAppearance = {
     formFieldLabel: "text-[#4a443e] text-sm font-medium",
     dividerLine: "bg-[rgba(42,38,35,0.1)]",
     dividerText: "text-[#8a7f76] text-xs",
+    /** Custom PasskeySignInButton owns the biometric entry — hide Clerk’s duplicate. */
+    cardAction__usePasskey: "hidden",
   },
 } as const;

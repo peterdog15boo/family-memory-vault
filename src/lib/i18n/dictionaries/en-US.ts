@@ -223,7 +223,23 @@ export const enUS = {
       "Family Memory Vault is not a social network. There is no public presence or feed for other families to discover you.",
     accountSecurityTitle: "Account security.",
     accountSecurityBody:
-      "Password, email, and multi-factor authentication are managed in your Clerk account.",
+      "Password, email, passkeys, and multi-factor authentication are managed in your Clerk account.",
+    passkeysTitle: "Passkeys",
+    passkeysLead:
+      "Sign in with Face ID, Touch ID, or Windows Hello on this device. Add a passkey only after you already have an account.",
+    passkeysUnsupported:
+      "This device doesn’t support Face ID, Touch ID, or Windows Hello, so biometric passkeys aren’t available here. You can still sign in with Google or email.",
+    passkeysEmpty: "No passkeys on this account yet.",
+    passkeyAdd: "Add passkey",
+    passkeyAdding: "Waiting for device…",
+    passkeyAdded: "Passkey added.",
+    passkeyAddError:
+      "Couldn’t add a passkey. Make sure Face ID / Touch ID / Windows Hello is set up, then try again.",
+    passkeyRemove: "Remove passkey",
+    passkeyRemoved: "Passkey removed.",
+    passkeyRemoveError: "Couldn’t remove that passkey. Try again.",
+    passkeyUnnamed: "This device",
+    passkeyCreated: "Added {date}",
     idleTimeout: "Log me out after inactivity",
     idleTimeoutHelp:
       "For security, we’ll ask if you’re still there after 15 minutes of inactivity.",
