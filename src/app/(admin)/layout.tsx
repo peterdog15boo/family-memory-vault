@@ -1,6 +1,7 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin/AdminShell";
+import { IdleSessionResumeGate } from "@/components/session/IdleSessionResumeGate";
 import { isUserSuspended } from "@/lib/admin/users";
 import { requireAdmin } from "@/lib/auth/admin";
 import {
@@ -41,5 +42,9 @@ export default async function AdminLayout({
     if (sid) displayName = sid.slice(0, 12);
   }
 
-  return <AdminShell displayName={displayName}>{children}</AdminShell>;
+  return (
+    <IdleSessionResumeGate>
+      <AdminShell displayName={displayName}>{children}</AdminShell>
+    </IdleSessionResumeGate>
+  );
 }

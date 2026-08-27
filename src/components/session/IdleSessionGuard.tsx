@@ -19,15 +19,18 @@ import {
   type CriticalWorkSnapshot,
 } from "@/lib/session/critical-activity";
 import {
-  bootstrapIdleActivityForAuthSession,
+  bootstrapSessionClocks,
   broadcastIdleSync,
   inactivitySignInPath,
   subscribeIdleSync,
+  writeIdleTimeoutEnabledPreference,
   writeLastActivityAt,
 } from "@/lib/session/idle-session-sync";
 import {
   evaluateIdleState,
+  evaluateSessionExpiry,
   IDLE_ACTIVITY_EVENTS,
+  IDLE_ACTIVITY_HEARTBEAT_MS,
   IDLE_CRITICAL_FORCE_MS,
   IDLE_LOGOUT_GRACE_MS,
   IDLE_MEDIA_INTERACTION_EVENTS,
@@ -36,6 +39,7 @@ import {
 import type { IdleTimeoutPolicy } from "@/lib/session/idle-timeout-policy";
 import { announce } from "@/lib/a11y/announce";
 import { cn } from "@/lib/utils";
+import { usePathname } from "next/navigation";
 
 type Phase = "idle" | "warning" | "waiting_critical" | "signing_out";
 
@@ -214,16 +218,18 @@ export type IdleSessionGuardProps = {
 };
 
 /**
- * Bank-style idle timeout for authenticated shells.
- * Free: always on. Paid: respects server-stored preference (default on).
+ * Session idle (~2h) + hard max lifetime (12h) for authenticated shells.
+ * Free: idle always on. Paid: respects server-stored preference (default on).
+ * Max lifetime always applies.
  *
- * Uses lastActivityAt timestamps + resume checks so backgrounded / locked
- * tabs still enforce 15m warning and 17m logout when they wake up.
+ * Uses lastActivityAt / sessionStartedAt + resume checks so backgrounded /
+ * locked tabs still enforce timeouts when they wake up.
  */
 export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
   const t = useTranslations();
   const { signOut } = useClerk();
   const { sessionId } = useAuth();
+  const pathname = usePathname();
   const titleId = useId();
   const descId = useId();
   const countdownId = useId();
@@ -253,10 +259,12 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
   const forceTimerRef = useRef<number | null>(null);
   const criticalDeadlineRef = useRef<number>(0);
   const lastActivityAtRef = useRef<number>(Date.now());
+  const sessionStartedAtRef = useRef<number>(Date.now());
   const phaseRef = useRef<Phase>("idle");
   const signingOutRef = useRef(false);
   const policyEnabledRef = useRef(policy.enabled);
   const announcedPhaseRef = useRef<Phase>("idle");
+  const lastPathnameRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (phase === announcedPhaseRef.current) return;
@@ -294,6 +302,10 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
   useEffect(() => {
     if (initialPolicy) setPolicy(initialPolicy);
   }, [initialPolicy]);
+
+  useEffect(() => {
+    writeIdleTimeoutEnabledPreference(policy.enabled);
+  }, [policy.enabled]);
 
   useEffect(() => {
     if (!isOwner) return;
@@ -342,11 +354,14 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
   }, []);
 
   const performSignOut = useCallback(
-    async (opts?: { fromPeer?: boolean }) => {
+    async (opts?: { fromPeer?: boolean; silent?: boolean }) => {
       if (signingOutRef.current) return;
       signingOutRef.current = true;
       clearScheduleTimers();
-      setPhase("signing_out");
+      // Silent: cold/expired resume — no vault dialog; prefer already-logged-out.
+      if (!opts?.silent) {
+        setPhase("signing_out");
+      }
       setSignOutError(null);
       if (!opts?.fromPeer) {
         broadcastIdleSync({
@@ -359,10 +374,12 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
         await signOut({ redirectUrl: inactivitySignInPath() });
       } catch (err) {
         signingOutRef.current = false;
-        setPhase("warning");
-        setSignOutError(
-          err instanceof Error ? err.message : t("session.signOutError"),
-        );
+        if (!opts?.silent) {
+          setPhase("warning");
+          setSignOutError(
+            err instanceof Error ? err.message : t("session.signOutError"),
+          );
+        }
       }
     },
     [signOut, t, clearScheduleTimers],
@@ -395,13 +412,21 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
     }, IDLE_CRITICAL_FORCE_MS);
   }, [clearScheduleTimers, performSignOut]);
 
-  const finishGraceOrWaitForCritical = useCallback(() => {
-    if (getActiveCriticalWorkCount() > 0) {
-      startCriticalWait();
-      return;
-    }
-    void performSignOut();
-  }, [performSignOut, startCriticalWait]);
+  const finishGraceOrWaitForCritical = useCallback(
+    (opts?: { silent?: boolean }) => {
+      // Past logout on a still-"idle" phase = tab resume / cold load: no dialog.
+      if (opts?.silent || phaseRef.current === "idle") {
+        void performSignOut({ silent: true });
+        return;
+      }
+      if (getActiveCriticalWorkCount() > 0) {
+        startCriticalWait();
+        return;
+      }
+      void performSignOut();
+    },
+    [performSignOut, startCriticalWait],
+  );
 
   const applyWarningUi = useCallback((graceRemainingMs: number) => {
     setCriticalSnapshot(getCriticalWorkSnapshot());
@@ -412,7 +437,6 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
   const scheduleNextCheckRef = useRef<() => void>(() => {});
 
   const checkIdleState = useCallback(() => {
-    if (!policyEnabledRef.current) return;
     if (signingOutRef.current) return;
 
     const now = Date.now();
@@ -426,7 +450,12 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
       return;
     }
 
-    const decision = evaluateIdleState(lastActivityAtRef.current, now);
+    const decision = evaluateSessionExpiry({
+      lastActivityAt: lastActivityAtRef.current,
+      sessionStartedAt: sessionStartedAtRef.current,
+      now,
+      checkIdle: policyEnabledRef.current,
+    });
 
     if (decision.action === "none") {
       if (phaseRef.current === "warning") {
@@ -443,8 +472,12 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
       return;
     }
 
-    // idle >= 17 minutes — enforce logout (timers may never have fired).
-    finishGraceOrWaitForCritical();
+    // Idle ≥ 2h or session ≥ 12h — enforce logout (timers may never have fired).
+    // Silent when we never showed a warning (cold return / background resume /
+    // hard max lifetime).
+    const silent =
+      phaseRef.current === "idle" || decision.reason === "max_lifetime";
+    finishGraceOrWaitForCritical({ silent });
   }, [applyWarningUi, finishGraceOrWaitForCritical, performSignOut]);
 
   const scheduleNextCheck = useCallback(() => {
@@ -452,11 +485,14 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
       window.clearTimeout(scheduleTimerRef.current);
       scheduleTimerRef.current = null;
     }
-    if (!policyEnabledRef.current) return;
     if (signingOutRef.current) return;
     if (phaseRef.current === "waiting_critical") return;
 
-    const delay = msUntilNextIdleCheck(lastActivityAtRef.current);
+    const delay = msUntilNextIdleCheck(
+      lastActivityAtRef.current,
+      Date.now(),
+      sessionStartedAtRef.current,
+    );
     scheduleTimerRef.current = window.setTimeout(() => {
       checkIdleState();
     }, Math.max(delay, 50));
@@ -639,21 +675,33 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
     };
   }, [isOwner]);
 
-  // Init lastActivityAt + arm / disarm when preference or auth session changes.
+  // Init clocks + arm when preference or auth session changes.
+  // Idle preference may be off for paid users; 12h max lifetime still applies.
   useEffect(() => {
     if (!isOwner) return;
+
+    const now = Date.now();
+    const clocks = bootstrapSessionClocks(sessionId, now);
+    lastActivityAtRef.current = clocks.lastActivityAt;
+    sessionStartedAtRef.current = clocks.sessionStartedAt;
+
     if (!policy.enabled) {
       clearScheduleTimers();
       setPhase("idle");
-      return;
+      checkIdleStateRef.current();
+      scheduleNextCheckRef.current();
+      return () => {
+        clearScheduleTimers();
+      };
     }
 
-    const now = Date.now();
-    const bootstrapped = bootstrapIdleActivityForAuthSession(sessionId, now);
-    lastActivityAtRef.current = bootstrapped;
-    // Fresh clock after new auth / discarded residual — never keep a stale warn UI.
     if (
-      evaluateIdleState(bootstrapped, now).action === "none" &&
+      evaluateSessionExpiry({
+        lastActivityAt: clocks.lastActivityAt,
+        sessionStartedAt: clocks.sessionStartedAt,
+        now,
+        checkIdle: true,
+      }).action === "none" &&
       phaseRef.current !== "idle" &&
       phaseRef.current !== "signing_out"
     ) {
@@ -668,6 +716,19 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
     };
   }, [isOwner, policy.enabled, sessionId, clearScheduleTimers]);
 
+  // Route changes count as activity (throttled via noteActivity heartbeat).
+  useEffect(() => {
+    if (!isOwner || !policy.enabled) return;
+    if (pathname == null) return;
+    if (lastPathnameRef.current == null) {
+      lastPathnameRef.current = pathname;
+      return;
+    }
+    if (lastPathnameRef.current === pathname) return;
+    lastPathnameRef.current = pathname;
+    noteActivityRef.current();
+  }, [isOwner, policy.enabled, pathname]);
+
   // Activity + resume checks (visibility/focus/pageshow/online).
   useEffect(() => {
     if (!isOwner || !policy.enabled) return;
@@ -678,7 +739,7 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
       if (phaseRef.current !== "idle") return;
       const now = Date.now();
       if (now < throttleUntil) return;
-      throttleUntil = now + 1_000;
+      throttleUntil = now + IDLE_ACTIVITY_HEARTBEAT_MS;
       noteActivityRef.current();
     }
 
@@ -690,7 +751,6 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
 
     /** Resume: recompute idle from timestamps — do NOT treat as activity. */
     function onResumeCheck() {
-      if (!policyEnabledRef.current) return;
       checkIdleStateRef.current();
     }
 
@@ -728,6 +788,27 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
       window.removeEventListener("focus", onResumeCheck);
       window.removeEventListener("pageshow", onPageShow);
       window.removeEventListener("online", onResumeCheck);
+    };
+  }, [isOwner, policy.enabled]);
+
+  // Max-lifetime resume checks even when idle timeout is disabled.
+  useEffect(() => {
+    if (!isOwner || policy.enabled) return;
+
+    function onResumeCheck() {
+      checkIdleStateRef.current();
+    }
+    function onVisibility() {
+      if (document.visibilityState !== "visible") return;
+      onResumeCheck();
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", onResumeCheck);
+    window.addEventListener("pageshow", onResumeCheck);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", onResumeCheck);
+      window.removeEventListener("pageshow", onResumeCheck);
     };
   }, [isOwner, policy.enabled]);
 

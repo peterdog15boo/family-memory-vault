@@ -2,7 +2,11 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { LogEvents } from "@/lib/observability/events";
 import { logger } from "@/lib/observability/logger";
-import { resolvePostAuthPath } from "@/lib/routes";
+import { IDLE_EXPIRED_PATH, resolvePostAuthPath } from "@/lib/routes";
+import {
+  isIdleActivityExpiredForSession,
+  readIdleActivityCookieFromHeader,
+} from "@/lib/session/idle-session-cookie";
 
 /**
  * Protect the authenticated app surfaces.
@@ -65,6 +69,8 @@ const isProtectedRoute = createRouteMatcher([
  */
 const isAuthEntryRoute = createRouteMatcher(["/sign-in", "/sign-up"]);
 
+const isIdleExpiredRoute = createRouteMatcher([IDLE_EXPIRED_PATH]);
+
 function makeRequestId(): string {
   return `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -80,11 +86,41 @@ function signInUrlFor(request: Request): string {
   return signIn.toString();
 }
 
+function idleExpiredRedirect(request: Request): NextResponse {
+  return NextResponse.redirect(new URL(IDLE_EXPIRED_PATH, request.url));
+}
+
+function shouldSilentIdleRedirect(
+  request: Request,
+  sessionId: string | null | undefined,
+): boolean {
+  if (!sessionId) return false;
+  if (isIdleExpiredRoute(request)) return false;
+  const cookie = readIdleActivityCookieFromHeader(
+    request.headers.get("cookie"),
+  );
+  return isIdleActivityExpiredForSession(cookie, sessionId);
+}
+
 export default clerkMiddleware(async (auth, request) => {
   const path = request.nextUrl.pathname;
   const isApi = path.startsWith("/api/");
   const requestId =
     request.headers.get("x-request-id")?.trim() || makeRequestId();
+
+  // Continuous session past idle logout → silent handoff before any app UI.
+  // Skip APIs (clients handle 401 / own auth); cookie absent → no-op (fresh
+  // login or paid-disabled).
+  if (!isApi) {
+    const { userId, sessionId, sessionStatus } = await auth();
+    if (
+      userId &&
+      sessionStatus !== "pending" &&
+      shouldSilentIdleRedirect(request, sessionId)
+    ) {
+      return idleExpiredRedirect(request);
+    }
+  }
 
   // Already signed in on /sign-in or /sign-up → vault (or deep link) before
   // any marketing login UI can paint (OAuth return + refresh cases).

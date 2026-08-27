@@ -2,6 +2,7 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
+import { IdleSessionResumeGate } from "@/components/session/IdleSessionResumeGate";
 import { isUserSuspended } from "@/lib/admin/users";
 import { getAvaProgress } from "@/lib/ava";
 import { isAdmin } from "@/lib/auth/admin";
@@ -152,18 +153,20 @@ export default async function AppLayout({
   ]);
 
   return (
-    <DashboardShell
-      displayName={displayName}
-      email={email}
-      isAdmin={admin}
-      initialUnreadCount={unreadCount}
-      initialAvaProgress={avaProgress}
-      idleTimeoutPolicy={idleTimeoutPolicy}
-      showLegacyPlusNav={showLegacyPlusNav}
-      showFamilyTreeNav={showFamilyTreeNav}
-    >
-      {children}
-    </DashboardShell>
+    <IdleSessionResumeGate enabled={idleTimeoutPolicy.enabled}>
+      <DashboardShell
+        displayName={displayName}
+        email={email}
+        isAdmin={admin}
+        initialUnreadCount={unreadCount}
+        initialAvaProgress={avaProgress}
+        idleTimeoutPolicy={idleTimeoutPolicy}
+        showLegacyPlusNav={showLegacyPlusNav}
+        showFamilyTreeNav={showFamilyTreeNav}
+      >
+        {children}
+      </DashboardShell>
+    </IdleSessionResumeGate>
   );
 }
 

@@ -11,6 +11,12 @@ export const FIRST_FAMILY_MOVIE_PATH = "/first-family-movie" as const;
 export const FAMILY_TREE_PATH = "/family-tree" as const;
 
 /**
+ * Silent idle-expiry handoff: signs out without painting the vault or the
+ * in-session idle warning dialog.
+ */
+export const IDLE_EXPIRED_PATH = "/session/idle-expired" as const;
+
+/**
  * Where Clerk should send users after sign-in / sign-up when no deep link
  * is present.
  *

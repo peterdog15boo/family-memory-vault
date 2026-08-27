@@ -19,6 +19,7 @@ import {
 import {
   IDLE_AUTH_SESSION_KEY,
   IDLE_LAST_ACTIVITY_KEY,
+  IDLE_SESSION_STARTED_KEY,
 } from "@/lib/session/idle-session-sync";
 
 const signOut = vi.fn(async () => undefined);
@@ -27,6 +28,10 @@ const SESSION_ID = "sess_test_continuous";
 vi.mock("@clerk/nextjs", () => ({
   useClerk: () => ({ signOut }),
   useAuth: () => ({ sessionId: SESSION_ID }),
+}));
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/dashboard",
 }));
 
 vi.mock("@/components/i18n/LocaleProvider", () => ({
@@ -78,7 +83,7 @@ async function advance(ms: number) {
 }
 
 describe("evaluateIdleState", () => {
-  it("splits none / warn / logout on 15m and 17m boundaries", () => {
+  it("splits none / warn / logout on 2h idle boundaries", () => {
     const t0 = 1_000_000;
     expect(evaluateIdleState(t0, t0 + IDLE_WARNING_MS - 1).action).toBe("none");
     expect(evaluateIdleState(t0, t0 + IDLE_WARNING_MS).action).toBe("warn");
@@ -114,7 +119,7 @@ describe("IdleSessionGuard checklist", () => {
     localStorage.clear();
   });
 
-  it("1–2: free user sees warning after 15m and signs out after 2m grace", async () => {
+  it("1–2: free user sees warning near 2h idle and signs out after grace", async () => {
     renderGuard(freePolicy);
     await flushMicrotasks();
 
@@ -209,9 +214,10 @@ describe("IdleSessionGuard checklist", () => {
     expect(screen.getByRole("alertdialog")).toBeTruthy();
   });
 
-  it("resume after 20+ minutes enforces logout without waiting for throttled timers", async () => {
+  it("resume after idle expiry silently signs out (no idle dialog)", async () => {
     const now = Date.now();
     localStorage.setItem(IDLE_AUTH_SESSION_KEY, SESSION_ID);
+    localStorage.setItem(IDLE_SESSION_STARTED_KEY, String(now - 60_000));
     localStorage.setItem(
       IDLE_LAST_ACTIVITY_KEY,
       String(now - IDLE_TOTAL_MS - 3 * 60 * 1000),
@@ -223,11 +229,13 @@ describe("IdleSessionGuard checklist", () => {
     expect(signOut).toHaveBeenCalledWith({
       redirectUrl: "/sign-in?reason=inactivity",
     });
+    expect(screen.queryByRole("alertdialog")).toBeNull();
   });
 
   it("fresh Clerk session discards expired prior idle clock (no instant logout)", async () => {
     const now = Date.now();
     localStorage.setItem(IDLE_AUTH_SESSION_KEY, "sess_previous");
+    localStorage.setItem(IDLE_SESSION_STARTED_KEY, String(now - IDLE_TOTAL_MS));
     localStorage.setItem(
       IDLE_LAST_ACTIVITY_KEY,
       String(now - IDLE_TOTAL_MS - 3 * 60 * 1000),
@@ -243,9 +251,10 @@ describe("IdleSessionGuard checklist", () => {
     expect(stored).toBeGreaterThan(now - 5_000);
   });
 
-  it("resume after 16 minutes shows warning with residual grace", async () => {
+  it("resume in warning window shows warning with residual grace", async () => {
     const now = Date.now();
     localStorage.setItem(IDLE_AUTH_SESSION_KEY, SESSION_ID);
+    localStorage.setItem(IDLE_SESSION_STARTED_KEY, String(now - 60_000));
     localStorage.setItem(
       IDLE_LAST_ACTIVITY_KEY,
       String(now - IDLE_WARNING_MS - 60_000),
@@ -257,7 +266,7 @@ describe("IdleSessionGuard checklist", () => {
     expect(screen.getByRole("alertdialog")).toBeTruthy();
     expect(signOut).not.toHaveBeenCalled();
 
-    // Residual grace ≈ 1 minute; advancing past it logs out.
+    // Residual grace ≈ 9 minutes; advancing past it logs out.
     await advance(IDLE_LOGOUT_GRACE_MS);
     expect(signOut).toHaveBeenCalled();
   });
