@@ -48,22 +48,28 @@ export type KenBurnsSourceCrop = {
 
 const MIN_FACE_AREA = 0.0008; // ignore tiny false positives
 const SMALL_FACE_AREA = 0.012; // below this → conservative zoom
-const GROUP_SPAN_WIDE = 0.62; // subject width/height fraction ⇒ soften zoom
+/** Subject span (w or h) at/above this ⇒ treat as large group / gentle zoom. */
+const GROUP_SPAN_WIDE = 0.55;
 
 /**
  * Soft max zoom from stored/computed subject bounds.
  * Shared by live `computeFramingFromFaces` and media-row cache reads so
  * quality/filter upgrades never reintroduce aggressive center zoom.
+ *
+ * Final zoom is still hard-capped by {@link capZoomToFitSubject} so faces
+ * are never clipped — these values only limit how ambitious the request is.
  */
 export function resolveMaxZoomFromSubjectBounds(
   bounds: Pick<MediaSubjectBounds, "faceCount" | "meanFaceArea" | "width" | "height"> | null | undefined,
 ): number | null {
   if (!bounds || bounds.faceCount < 1) return null;
   const span = Math.max(bounds.width, bounds.height);
-  // Soft caps still allow visible motion; single portraits stay uncapped (null).
-  if (bounds.meanFaceArea < SMALL_FACE_AREA) return 0.1;
-  if (span >= GROUP_SPAN_WIDE || bounds.faceCount >= 4) return 0.12;
-  if (bounds.faceCount >= 2) return 0.16;
+  // Tiny faces / large groups: slow gentle zoom only.
+  if (bounds.meanFaceArea < SMALL_FACE_AREA) return 0.06;
+  if (span >= GROUP_SPAN_WIDE || bounds.faceCount >= 5) return 0.06;
+  // 2–4 people: moderate motion that still leaves room for head margin.
+  if (bounds.faceCount >= 2) return 0.1;
+  // Single portrait: theme intensity applies; fit-cap keeps the full face in.
   return null;
 }
 
@@ -89,18 +95,18 @@ export function faceBoxSignature(boxes: FaceBoundingBox[]): string {
 }
 
 /**
- * Expand a normalized face box with headroom (up) and side/body padding.
+ * Expand a normalized face box with headroom (up) and chin/side padding.
  * Never expands outside [0,1].
  */
 export function expandFaceBox(
   box: FaceBoundingBox,
   opts?: { top?: number; side?: number; bottom?: number },
 ): NormalizedRect {
-  // Moderate headroom — heavy pads inflated subjectBounds so capZoomToFitSubject
-  // returned 0 and Ken Burns became a static hold (looked like “no face focus”).
-  const topPad = opts?.top ?? 0.28;
-  const sidePad = opts?.side ?? 0.16;
-  const bottomPad = opts?.bottom ?? 0.3;
+  // Enough hairline / chin margin that Ken Burns never shaves faces, without
+  // inflating the subject so far that all motion is killed on typical stills.
+  const topPad = opts?.top ?? 0.32;
+  const sidePad = opts?.side ?? 0.18;
+  const bottomPad = opts?.bottom ?? 0.34;
 
   const padX = box.width * sidePad;
   const padTop = box.height * topPad;
@@ -161,16 +167,16 @@ export function computeFramingFromFaces(
 
   const expanded = major.map((b) => expandFaceBox(b));
   const subject = unionRects(expanded);
-  // Light group pad — keep faces dominant in frame for Ken Burns.
-  const groupPad = major.length > 1 ? 0.03 : 0.012;
+  // Group pad: keep every face’s margin inside the shared subject box.
+  const groupPad = major.length >= 5 ? 0.04 : major.length > 1 ? 0.035 : 0.015;
   const padded: NormalizedRect = {
     x: clamp01(subject.x - groupPad),
-    y: clamp01(subject.y - groupPad * 0.5),
+    y: clamp01(subject.y - groupPad * 0.55),
     width: 0,
     height: 0,
   };
   const right = clamp01(subject.x + subject.width + groupPad);
-  const bottom = clamp01(subject.y + subject.height + groupPad * 1.1);
+  const bottom = clamp01(subject.y + subject.height + groupPad * 1.15);
   padded.width = Math.max(0.001, right - padded.x);
   padded.height = Math.max(0.001, bottom - padded.y);
 
@@ -236,10 +242,8 @@ export function baseCoverSize(
  * Axis clamp range for face-aware placement.
  *
  * When the subject fits in the crop, the range keeps the full subject inside.
- * When it does not, the range keeps maximum overlap (crop stays inside the
- * subject span). At the equality boundary both collapse to the same point, so
- * left/top stay continuous as Ken Burns scale crosses “fits ↔ overflow” —
- * avoiding the mid-zoom headshot jump from flipping strategies.
+ * When it does not (should be rare after {@link capZoomToFitSubject}), the
+ * range keeps maximum overlap so motion stays continuous at the fit boundary.
  */
 function subjectAxisClampRange(
   subjectStart: number,
@@ -252,15 +256,56 @@ function subjectAxisClampRange(
 
   let min: number;
   let max: number;
-  if (subjectSpan <= cropSize) {
+  if (subjectSpan <= cropSize + 1e-6) {
     min = Math.max(0, subjectEnd - cropSize);
     max = Math.min(Math.max(0, sourceSize - cropSize), subjectStart);
   } else {
+    // Overflow: maximize overlap — caller should have prevented this via zoom cap.
     min = Math.max(0, subjectStart);
     max = Math.min(Math.max(0, sourceSize - cropSize), subjectEnd - cropSize);
   }
   if (min > max) return null;
   return { min, max };
+}
+
+/**
+ * Clamp a preferred crop origin so the full subject stays inside when it fits.
+ */
+export function clampCropOriginToSubject(input: {
+  left: number;
+  top: number;
+  cropW: number;
+  cropH: number;
+  sourceWidth: number;
+  sourceHeight: number;
+  subject?: NormalizedRect | null;
+}): { left: number; top: number } {
+  const sw = Math.max(1, input.sourceWidth);
+  const sh = Math.max(1, input.sourceHeight);
+  const cropW = Math.min(sw, Math.max(1, input.cropW));
+  const cropH = Math.min(sh, Math.max(1, input.cropH));
+  let left = input.left;
+  let top = input.top;
+
+  if (input.subject && input.subject.width > 0 && input.subject.height > 0) {
+    const sx = input.subject.x * sw;
+    const sy = input.subject.y * sh;
+    const sr = (input.subject.x + input.subject.width) * sw;
+    const sb = (input.subject.y + input.subject.height) * sh;
+
+    const xRange = subjectAxisClampRange(sx, sr, cropW, sw);
+    if (xRange) {
+      left = Math.min(Math.max(left, xRange.min), xRange.max);
+    }
+    const yRange = subjectAxisClampRange(sy, sb, cropH, sh);
+    if (yRange) {
+      top = Math.min(Math.max(top, yRange.min), yRange.max);
+    }
+  }
+
+  left = Math.min(Math.max(0, left), Math.max(0, sw - cropW));
+  top = Math.min(Math.max(0, top), Math.max(0, sh - cropH));
+  return { left, top };
 }
 
 /**
@@ -285,31 +330,15 @@ export function placeCropAroundFocal(input: {
   const cropW = Math.min(sw, Math.max(1, input.cropW));
   const cropH = Math.min(sh, Math.max(1, input.cropH));
 
-  const preferredLeft = input.focalX * sw - cropW / 2;
-  const preferredTop = input.focalY * sh - cropH / 2;
-
-  let left = preferredLeft;
-  let top = preferredTop;
-
-  if (input.subject && input.subject.width > 0 && input.subject.height > 0) {
-    const sx = input.subject.x * sw;
-    const sy = input.subject.y * sh;
-    const sr = (input.subject.x + input.subject.width) * sw;
-    const sb = (input.subject.y + input.subject.height) * sh;
-
-    const xRange = subjectAxisClampRange(sx, sr, cropW, sw);
-    if (xRange) {
-      left = Math.min(Math.max(preferredLeft, xRange.min), xRange.max);
-    }
-    const yRange = subjectAxisClampRange(sy, sb, cropH, sh);
-    if (yRange) {
-      top = Math.min(Math.max(preferredTop, yRange.min), yRange.max);
-    }
-  }
-
-  left = Math.min(Math.max(0, left), Math.max(0, sw - cropW));
-  top = Math.min(Math.max(0, top), Math.max(0, sh - cropH));
-  return { left, top };
+  return clampCropOriginToSubject({
+    left: input.focalX * sw - cropW / 2,
+    top: input.focalY * sh - cropH / 2,
+    cropW,
+    cropH,
+    sourceWidth: sw,
+    sourceHeight: sh,
+    subject: input.subject,
+  });
 }
 
 /**
@@ -350,23 +379,23 @@ export function resolveEffectiveZoomAmount(
 }
 
 /**
- * Further cap zoom so heads stay framable at max zoom (scale = 1+z).
- *
- * Uses most of the padded subject (headroom included) so hairlines are not
- * clipped. Prefer keeping faces over forcing a minimum Ken Burns amount —
- * when the subject already fills the cover window, return 0 (hold face crop)
- * rather than zooming in and cutting heads.
+ * Further cap zoom so the full padded face/group box stays framable at max
+ * zoom (scale = 1+z). Prefer keeping every tracked face over forcing motion —
+ * when the subject already fills the cover window, return 0 (hold face crop).
  */
-export const MIN_VISIBLE_KEN_BURNS_ZOOM = 0.08;
+export const MIN_VISIBLE_KEN_BURNS_ZOOM = 0.05;
 
 /**
- * When the caller asked for motion but face-fit capped zoom near zero, keep a
- * small continuous zoom so clips are not static holds.
+ * Optional tiny motion when fit allows — never re-applied past
+ * {@link capZoomToFitSubject} (faces must stay fully visible).
  */
 export const MIN_REQUESTED_CLIP_MOTION_ZOOM = 0.05;
 
-/** Fraction of padded subjectBounds that must remain inside the max-zoom crop. */
-export const SUBJECT_FIT_CORE_FRACTION = 0.72;
+/**
+ * Fraction of padded subjectBounds that must remain inside the max-zoom crop.
+ * 1 = full headroom/chin/group box — never clip tracked faces.
+ */
+export const SUBJECT_FIT_CORE_FRACTION = 1;
 
 export function capZoomToFitSubject(input: {
   zoomAmount: number;
@@ -388,17 +417,16 @@ export function capZoomToFitSubject(input: {
   const coreFraction = SUBJECT_FIT_CORE_FRACTION;
   const subjectW = input.subject.width * coreFraction * input.sourceWidth;
   const subjectH = input.subject.height * coreFraction * input.sourceHeight;
-  // At scale s, crop = base/s. Prefer subject core <= crop ⇒ s <= base/subject.
+  // At scale s, crop = base/s. Prefer full subject <= crop ⇒ s <= base/subject.
   const maxScaleW = subjectW > 1 ? base.width / subjectW : Number.POSITIVE_INFINITY;
   const maxScaleH =
     subjectH > 1 ? base.height / subjectH : Number.POSITIVE_INFINITY;
   const maxScale = Math.min(maxScaleW, maxScaleH);
   if (!Number.isFinite(maxScale) || maxScale <= 1) {
-    // Subject already fills the cover window — hold face-anchored still.
+    // Subject already fills (or exceeds) the cover window — hold face-anchored still.
     return 0;
   }
   const fitted = Math.min(z, Math.max(0, maxScale - 1));
-  // Allow gentle motion when it still fits; never force zoom past headroom.
   if (fitted >= MIN_VISIBLE_KEN_BURNS_ZOOM) return fitted;
   return fitted;
 }
@@ -493,14 +521,14 @@ export function getKenBurnsFraming(input: {
 } {
   const framing = input.framing ?? centerFraming();
   let zoomAmount = resolveEffectiveZoomAmount(input.zoomAmount, framing);
-  zoomAmount = capZoomToFitSubject({
-    zoomAmount,
+  const fitArgs = {
     sourceWidth: input.sourceWidth,
     sourceHeight: input.sourceHeight,
     targetWidth: input.targetWidth,
     targetHeight: input.targetHeight,
     subject: framing.subjectBounds,
-  });
+  };
+  zoomAmount = capZoomToFitSubject({ zoomAmount, ...fitArgs });
 
   const coverScale = sourceCoverScale(
     input.sourceWidth,
@@ -509,15 +537,18 @@ export function getKenBurnsFraming(input: {
     input.targetHeight,
   );
 
-  // Prefer continuous face-centered motion over a static hold when zoom was
-  // requested — but never force motion that would upscale a small photo.
+  // Mild motion only when faces still fully fit — never force a clip.
   if (
     coverScale >= 1 &&
     input.direction !== "none" &&
     input.zoomAmount > 0 &&
+    zoomAmount > 0 &&
     zoomAmount < MIN_REQUESTED_CLIP_MOTION_ZOOM
   ) {
-    zoomAmount = Math.min(input.zoomAmount, MIN_REQUESTED_CLIP_MOTION_ZOOM);
+    zoomAmount = capZoomToFitSubject({
+      zoomAmount: Math.min(input.zoomAmount, MIN_REQUESTED_CLIP_MOTION_ZOOM),
+      ...fitArgs,
+    });
   }
 
   // Prefer sharpness: don't zoom past 1:1 source→output (or at all when soft).
@@ -528,6 +559,8 @@ export function getKenBurnsFraming(input: {
     targetWidth: input.targetWidth,
     targetHeight: input.targetHeight,
   });
+  // Re-fit after upscale cap in case rounding nudged us.
+  zoomAmount = capZoomToFitSubject({ zoomAmount, ...fitArgs });
 
   const { startScale, endScale } = resolveKenBurnsScaleRange(
     input.direction,
@@ -676,8 +709,8 @@ export function sourceCropAtScale(input: {
 
 /**
  * Interpolate between start and end source crops with eased progress 0→1.
- * Keeps float geometry; callers that need integer extract should use
- * {@link snapSourceCropRect} or the sub-pixel render path in the generator.
+ * Re-clamps each sample so the face/group subject stays inside when it fits
+ * (lerp of centers alone can briefly clip mid-zoom).
  */
 export function interpolateSourceCrop(
   start: KenBurnsSourceCrop,
@@ -685,6 +718,7 @@ export function interpolateSourceCrop(
   easedProgress: number,
   sourceWidth?: number,
   sourceHeight?: number,
+  subject?: NormalizedRect | null,
 ): KenBurnsSourceCrop {
   const t = Math.min(1, Math.max(0, easedProgress));
   const lerp = (a: number, b: number) => a + (b - a) * t;
@@ -703,9 +737,19 @@ export function interpolateSourceCrop(
   const sh =
     sourceHeight ?? Math.max(start.top + start.height, end.top + end.height);
 
-  return clampSourceCropFloat({
+  const origin = clampCropOriginToSubject({
     left: cx - widthF / 2,
     top: cy - heightF / 2,
+    cropW: widthF,
+    cropH: heightF,
+    sourceWidth: Math.max(1, sw),
+    sourceHeight: Math.max(1, sh),
+    subject,
+  });
+
+  return clampSourceCropFloat({
+    left: origin.left,
+    top: origin.top,
     width: widthF,
     height: heightF,
     sourceWidth: Math.max(1, sw),

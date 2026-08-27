@@ -43,7 +43,7 @@ describe("face-aware framing", () => {
       0.65,
     );
     expect(framing.maxZoomAmount).not.toBeNull();
-    expect(framing.maxZoomAmount!).toBeLessThanOrEqual(0.16);
+    expect(framing.maxZoomAmount!).toBeLessThanOrEqual(0.1);
   });
 
   it("falls back to center when no usable faces", () => {
@@ -227,9 +227,8 @@ describe("face-aware framing", () => {
     });
     expect(capped).toBeGreaterThan(0);
     expect(capped).toBeLessThanOrEqual(0.2);
-    // Fitted amount must stay at or below the geometric max for the core.
-    const core = 0.98 * 0.72;
-    const maxFitted = 1 / core - 1;
+    // Fitted amount must stay at or below the geometric max for the full subject.
+    const maxFitted = 1 / 0.98 - 1;
     expect(capped).toBeLessThanOrEqual(maxFitted + 1e-6);
   });
 
@@ -242,8 +241,8 @@ describe("face-aware framing", () => {
     expect(resolveMaxZoomFromSubjectBounds(framing.subjectBounds)).toBe(
       framing.maxZoomAmount,
     );
-    // Wide span should soften like live compute (0.08), not the old cache 0.12.
-    expect(framing.maxZoomAmount).toBe(0.12);
+    // Wide span → gentle group zoom.
+    expect(framing.maxZoomAmount).toBe(0.06);
   });
 
   it("getKenBurnsFraming zooms toward the face focal point", () => {
@@ -379,10 +378,11 @@ describe("Ken Burns timeline with framing", () => {
   });
 
   it("alternate timeline animates every clip (in and out)", () => {
+    // Compact trio — room for gentle zoom while keeping every face in frame.
     const framing = computeFramingFromFaces([
-      { x: 0.05, y: 0.2, width: 0.2, height: 0.25 },
-      { x: 0.4, y: 0.22, width: 0.2, height: 0.25 },
-      { x: 0.75, y: 0.2, width: 0.2, height: 0.25 },
+      { x: 0.32, y: 0.22, width: 0.12, height: 0.18 },
+      { x: 0.44, y: 0.2, width: 0.12, height: 0.2 },
+      { x: 0.56, y: 0.23, width: 0.12, height: 0.18 },
     ]);
     const directions: Array<"in" | "out"> = [];
     for (let photoIndex = 0; photoIndex < 4; photoIndex++) {
@@ -402,8 +402,18 @@ describe("Ken Burns timeline with framing", () => {
       directions.push(plan.direction as "in" | "out");
       expect(plan.zoomAmount).toBeGreaterThan(0);
       expect(plan.samples.length).toBeGreaterThan(1);
-      expect(Math.abs(plan.endScale - plan.startScale)).toBeGreaterThan(0.05);
+      expect(Math.abs(plan.endScale - plan.startScale)).toBeGreaterThan(0.02);
       expect(plan.samples[0]!.scale).not.toBe(plan.samples.at(-1)!.scale);
+      for (const sample of plan.samples) {
+        expect(
+          cropContainsSubject(
+            sample.sourceCrop!,
+            framing.subjectBounds!,
+            4000,
+            3000,
+          ),
+        ).toBe(true);
+      }
     }
     expect(directions).toEqual(["in", "out", "in", "out"]);
   });
@@ -450,9 +460,8 @@ describe("Ken Burns timeline with framing", () => {
     expect(Math.abs(next.width - crop.width)).toBeLessThan(2);
   });
 
-  it("keeps mild face-centered motion when subject fills cover", () => {
-    // Subject fills the cover window → fit-cap would be 0; we still keep a
-    // small zoom so the clip is not a static hold (focal stays face-aware).
+  it("holds still when the subject fills cover rather than clipping faces", () => {
+    // Subject fills the cover window → fit-cap is 0; do not force motion.
     const framing = computeFramingFromFaces([
       { x: 0.05, y: 0.05, width: 0.9, height: 0.9 },
     ]);
@@ -465,10 +474,63 @@ describe("Ken Burns timeline with framing", () => {
       zoomAmount: 0.12,
       framing,
     });
-    expect(plan.zoomAmount).toBeGreaterThan(0);
-    expect(plan.startScale).not.toBe(plan.endScale);
+    expect(plan.zoomAmount).toBe(0);
+    expect(plan.startScale).toBe(plan.endScale);
     const cx = (plan.start.left + plan.start.width / 2) / 2000;
     expect(Math.abs(cx - framing.focalPointX)).toBeLessThan(0.2);
+  });
+
+  it("keeps the full padded face box inside every zoom sample (single)", () => {
+    const framing = computeFramingFromFaces([
+      { x: 0.42, y: 0.2, width: 0.18, height: 0.26 },
+    ]);
+    expect(framing.subjectBounds).not.toBeNull();
+    const plan = buildKenBurnsTimeline({
+      durationMs: 4000,
+      photoIndex: 0,
+      directionMode: "always-in",
+      themeZoom: 0.2,
+      intensityFactor: 1.25,
+      width: 1920,
+      height: 1080,
+      sourceWidth: 3600,
+      sourceHeight: 2400,
+      framing,
+      targetFps: 30,
+    });
+    for (const sample of plan.samples) {
+      expect(
+        cropContainsSubject(sample.sourceCrop!, framing.subjectBounds!, 3600, 2400),
+      ).toBe(true);
+    }
+  });
+
+  it("keeps every face’s padded box inside every zoom sample (2–4 people)", () => {
+    const framing = computeFramingFromFaces([
+      { x: 0.18, y: 0.22, width: 0.16, height: 0.22 },
+      { x: 0.42, y: 0.2, width: 0.16, height: 0.24 },
+      { x: 0.66, y: 0.23, width: 0.15, height: 0.21 },
+    ]);
+    expect(framing.subjectBounds?.faceCount).toBe(3);
+    expect(framing.maxZoomAmount!).toBeLessThanOrEqual(0.1);
+    const plan = buildKenBurnsTimeline({
+      durationMs: 4000,
+      photoIndex: 0,
+      directionMode: "always-in",
+      themeZoom: 0.18,
+      intensityFactor: 1,
+      width: 1920,
+      height: 1080,
+      sourceWidth: 4000,
+      sourceHeight: 3000,
+      framing,
+      targetFps: 30,
+    });
+    for (const sample of plan.samples) {
+      expect(
+        cropContainsSubject(sample.sourceCrop!, framing.subjectBounds!, 4000, 3000),
+      ).toBe(true);
+    }
   });
 
   it("caps zoom on large sources so extracts stay ≥ output pixels", () => {

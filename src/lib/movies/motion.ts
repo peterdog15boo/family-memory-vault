@@ -229,6 +229,7 @@ export function kenBurnsCrop(input: {
       eased,
       input.sourceWidth,
       input.sourceHeight,
+      input.framing?.subjectBounds,
     );
 
     return {

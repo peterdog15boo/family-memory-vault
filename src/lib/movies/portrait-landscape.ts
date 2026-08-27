@@ -19,7 +19,7 @@ import {
 } from "@/lib/movies/framing";
 
 /** How aggressive the damage check is (0–1 subject height vs cover crop). */
-export const PORTRAIT_EXTREME_SUBJECT_FIT = 0.9;
+export const PORTRAIT_EXTREME_SUBJECT_FIT = 0.98;
 
 /** Source must be clearly taller than the target aspect to count as portrait. */
 export const PORTRAIT_ASPECT_SLACK = 0.98;
@@ -131,8 +131,12 @@ export function decidePortraitLandscapeAdaptation(input: {
   const subject = input.framing?.subjectBounds;
   if (subject && subject.height > 0) {
     const subjectH = subject.height * sh;
-    // Face/subject group taller than the 16:9 cover window → heads get clipped.
-    if (subjectH > base.height * PORTRAIT_EXTREME_SUBJECT_FIT) {
+    const subjectW = subject.width * sw;
+    // Face/group taller or wider than the cover window → extend instead of chop.
+    if (
+      subjectH > base.height * PORTRAIT_EXTREME_SUBJECT_FIT ||
+      subjectW > base.width * PORTRAIT_EXTREME_SUBJECT_FIT
+    ) {
       return {
         shouldExtend: true,
         reason: "extreme_subject_crop",
@@ -141,8 +145,8 @@ export function decidePortraitLandscapeAdaptation(input: {
         croppedHeightFraction,
       };
     }
-    // Large subject + heavy vertical crop even if it "fits" the window.
-    if (subject.height >= 0.55 && croppedHeightFraction >= 0.22) {
+    // Large subject + meaningful vertical crop even if it "barely fits".
+    if (subject.height >= 0.48 && croppedHeightFraction >= 0.18) {
       return {
         shouldExtend: true,
         reason: "extreme_subject_crop",
