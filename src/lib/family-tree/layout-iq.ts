@@ -9,6 +9,9 @@
  * Critical: never split a spouse pair by treating one partner as an
  * "outer sibling" of someone else (that creates one long top bar and
  * crossing spouse connectors).
+ *
+ * Cousins: explicit cousin_of is the source of truth for which spouse's
+ * flank they occupy — never the spouse's parents' empty side.
  */
 
 export type LayoutIqContext = {
@@ -54,6 +57,54 @@ export function applyInLawSoftSiblings(
       link(a, spouseB);
     } else {
       link(a, b);
+    }
+  }
+}
+
+/**
+ * Drop parent-generation sibling bridges that contradict an explicit cousin_of.
+ *
+ * Example: Scott is cousin_of Kathy, but Scott’s mom was wrongly linked as
+ * sibling of Jeff’s dad. That bridge would cluster Scott’s parents on Jeff’s
+ * side — suppress it for layout so relational cousin_of wins.
+ */
+export function suppressSpouseSideCousinBridges(
+  siblingAdj: Map<string, Set<string>>,
+  partnerOf: ReadonlyMap<string, string>,
+  parentsByChild: ReadonlyMap<string, readonly string[]>,
+  cousinAdj: ReadonlyMap<string, ReadonlySet<string>>,
+): void {
+  const unlink = (a: string, b: string) => {
+    siblingAdj.get(a)?.delete(b);
+    siblingAdj.get(b)?.delete(a);
+  };
+
+  const seen = new Set<string>();
+  for (const [personId, cousins] of cousinAdj) {
+    for (const cousinId of cousins) {
+      const key =
+        personId < cousinId
+          ? `${personId}|${cousinId}`
+          : `${cousinId}|${personId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const endpoints: Array<[string, string]> = [
+        [personId, cousinId],
+        [cousinId, personId],
+      ];
+      for (const [subjectId, otherId] of endpoints) {
+        const spouseId = partnerOf.get(subjectId);
+        if (!spouseId) continue;
+        const cousinParents = parentsByChild.get(otherId) ?? [];
+        const spouseParents = new Set(parentsByChild.get(spouseId) ?? []);
+        if (cousinParents.length === 0 || spouseParents.size === 0) continue;
+        for (const cp of cousinParents) {
+          for (const sp of spouseParents) {
+            if (siblingAdj.get(cp)?.has(sp)) unlink(cp, sp);
+          }
+        }
+      }
     }
   }
 }

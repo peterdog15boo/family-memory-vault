@@ -3,6 +3,7 @@ import {
   orderGenerationForLayout,
   orientCouple,
   outerSiblingsOf,
+  suppressSpouseSideCousinBridges,
 } from "@/lib/family-tree/layout-iq";
 import { computeFamilyTreeLayout, TREE_LAYOUT } from "@/lib/family-tree/layout";
 
@@ -114,6 +115,39 @@ describe("orderGenerationForLayout", () => {
     const kBlock = Math.min(ordered.indexOf("k-mom"), ordered.indexOf("k-dad"));
     const sBlock = Math.min(ordered.indexOf("s-mom"), ordered.indexOf("s-dad"));
     expect(Math.abs(kBlock - sBlock)).toBe(2);
+  });
+});
+
+describe("suppressSpouseSideCousinBridges", () => {
+  it("unlinks a cousin aunt bridge that sits on the spouse’s parents", () => {
+    const siblingAdj = new Map<string, Set<string>>([
+      ["paul", new Set(["scott-mom"])],
+      ["scott-mom", new Set(["paul"])],
+      ["diane", new Set()],
+    ]);
+    const partnerOf = new Map([
+      ["jeff", "kathy"],
+      ["kathy", "jeff"],
+    ]);
+    const parentsByChild = new Map<string, string[]>([
+      ["jeff", ["paul", "helene"]],
+      ["kathy", ["diane", "frank"]],
+      ["scott", ["scott-mom", "scott-dad"]],
+    ]);
+    const cousinAdj = new Map<string, Set<string>>([
+      ["kathy", new Set(["scott"])],
+      ["scott", new Set(["kathy"])],
+    ]);
+
+    suppressSpouseSideCousinBridges(
+      siblingAdj,
+      partnerOf,
+      parentsByChild,
+      cousinAdj,
+    );
+
+    expect(siblingAdj.get("paul")?.has("scott-mom")).toBe(false);
+    expect(siblingAdj.get("scott-mom")?.has("paul")).toBe(false);
   });
 });
 
