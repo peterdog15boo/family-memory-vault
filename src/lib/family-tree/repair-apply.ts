@@ -170,6 +170,37 @@ async function applyOp(
       return;
     }
 
+    case "add_parent": {
+      const endpoints = canonicalizeRelationshipEndpoints(
+        "parent_of",
+        op.parentId,
+        op.childId,
+      );
+      const exists = state.relationships.some(
+        (r) =>
+          r.type === "parent_of" &&
+          r.fromNodeId === endpoints.fromNodeId &&
+          r.toNodeId === endpoints.toNodeId,
+      );
+      if (exists) return;
+      const id = nanoid();
+      const [created] = await db
+        .insert(familyTreeRelationships)
+        .values({
+          id,
+          userId,
+          fromNodeId: endpoints.fromNodeId,
+          toNodeId: endpoints.toNodeId,
+          type: "parent_of",
+        })
+        .onConflictDoNothing()
+        .returning();
+      if (created) {
+        state.relationships = [...state.relationships, created];
+      }
+      return;
+    }
+
     case "retarget_edge": {
       const endpoints = canonicalizeRelationshipEndpoints(
         "sibling_of",

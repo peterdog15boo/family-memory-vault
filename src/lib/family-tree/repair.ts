@@ -17,6 +17,7 @@ import {
   type GenealogyEdge,
 } from "@/lib/family-tree/genealogy-iq";
 import { findMislinkedCoParentSiblingEdges } from "@/lib/family-tree/scaffold";
+import { missingSharedSiblingParentLinks } from "@/lib/family-tree/sibling-parents";
 import {
   areOnSameAncestryLine,
   wouldCreateParentCycle,
@@ -85,6 +86,13 @@ export type RepairOp =
       subjectId: string;
       cousinId: string;
       side?: "maternal" | "paternal" | "unknown";
+      reason: string;
+    }
+  | {
+      /** Attach a sibling to the other sibling’s existing parent union. */
+      op: "add_parent";
+      parentId: string;
+      childId: string;
       reason: string;
     }
   | {
@@ -577,6 +585,54 @@ export function planFamilyTreeRepair(graph: RepairGraph): RepairPlan {
         reason:
           "Cousin was missing a parent bridge on this relative’s family side.",
       });
+    }
+  }
+
+  // 7d) Sibling without parents while peer has a parent union → share parents
+  {
+    const seen = new Set<string>();
+    for (const e of workingEdges) {
+      if (e.type !== "sibling_of") continue;
+      const key =
+        e.fromNodeId < e.toNodeId
+          ? `${e.fromNodeId}|${e.toNodeId}`
+          : `${e.toNodeId}|${e.fromNodeId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const missing = missingSharedSiblingParentLinks(
+        workingEdges,
+        e.fromNodeId,
+        e.toNodeId,
+      );
+      for (const link of missing) {
+        const alreadyPlanned = ops.some(
+          (o) =>
+            o.op === "add_parent" &&
+            o.parentId === link.parentId &&
+            o.childId === link.childId,
+        );
+        if (alreadyPlanned) continue;
+        if (wouldCreateParentCycle(ancestry, link.parentId, link.childId)) {
+          continue;
+        }
+        ops.push({
+          op: "add_parent",
+          parentId: link.parentId,
+          childId: link.childId,
+          reason:
+            "Sibling was missing the shared parent link that their brother or sister already has.",
+        });
+        ancestry.push({
+          fromNodeId: link.parentId,
+          toNodeId: link.childId,
+          type: "parent_of",
+        });
+        workingEdges.push({
+          fromNodeId: link.parentId,
+          toNodeId: link.childId,
+          type: "parent_of",
+        });
+      }
     }
   }
 

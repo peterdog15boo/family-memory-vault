@@ -270,6 +270,78 @@ function belongsToSpouseBloodline(
     }
   }
 
+  // In-law: married to someone already on this bloodline (Todd ↔ Donna ↔ Kat)
+  for (const partnerId of spouses) {
+    if (partnerId === spouseId) continue;
+    if (
+      belongsToSpouseBloodlineSkippingPartners(rels, partnerId, spouseId)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/** Bloodline check that does not walk partner_of (avoids in-law recursion loops). */
+function belongsToSpouseBloodlineSkippingPartners(
+  rels: Rel[],
+  personId: string,
+  spouseId: string,
+): boolean {
+  if (personId === spouseId) return true;
+  const siblings = undirectedNeighbors(rels, "sibling_of", personId);
+  if (siblings.includes(spouseId)) return true;
+  const cousins = undirectedNeighbors(rels, "cousin_of", personId);
+  if (cousins.includes(spouseId)) return true;
+
+  const spouseParents = parentsOf(rels, spouseId);
+  const spouseParentSet = new Set(spouseParents);
+  const personParents = parentsOf(rels, personId);
+  if (personParents.some((p) => spouseParentSet.has(p))) return true;
+
+  for (const sp of spouseParents) {
+    if (undirectedNeighbors(rels, "sibling_of", sp).includes(personId)) {
+      return true;
+    }
+  }
+  for (const pp of personParents) {
+    for (const sp of spouseParents) {
+      if (undirectedNeighbors(rels, "sibling_of", pp).includes(sp)) return true;
+    }
+  }
+
+  {
+    const stack = [...spouseParents];
+    const visited = new Set<string>();
+    while (stack.length) {
+      const id = stack.pop()!;
+      if (visited.has(id)) continue;
+      visited.add(id);
+      if (id === personId) return true;
+      stack.push(...parentsOf(rels, id));
+    }
+  }
+  {
+    const stack = [...childrenOf(rels, spouseId)];
+    const visited = new Set<string>();
+    while (stack.length) {
+      const id = stack.pop()!;
+      if (visited.has(id)) continue;
+      visited.add(id);
+      if (id === personId) return true;
+      stack.push(...childrenOf(rels, id));
+    }
+  }
+  for (const childId of childrenOf(rels, personId)) {
+    if (childId === spouseId) return true;
+    if (undirectedNeighbors(rels, "cousin_of", spouseId).includes(childId)) {
+      return true;
+    }
+    if (undirectedNeighbors(rels, "sibling_of", spouseId).includes(childId)) {
+      return true;
+    }
+  }
   return false;
 }
 

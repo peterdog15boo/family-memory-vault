@@ -171,7 +171,7 @@ export function inferredCoParentPairs(
 }
 
 export type GenealogyIqNotice = {
-  kind: "spouse_link" | "co_parent_link";
+  kind: "spouse_link" | "co_parent_link" | "sibling_parent_link";
   message: string;
 };
 

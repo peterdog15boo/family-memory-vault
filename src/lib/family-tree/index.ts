@@ -43,6 +43,7 @@ import {
 } from "@/lib/family-tree/genealogy-iq";
 import type { CousinSide } from "@/lib/family-tree/cousin-side";
 import { preferCousinSubjectId } from "@/lib/family-tree/cousin-lineage";
+import { missingSharedSiblingParentLinks } from "@/lib/family-tree/sibling-parents";
 import {
   FAMILY_TREE_CIRCULAR_RELATIONSHIP_MESSAGE,
   validateFamilyTreeRelationship,
@@ -606,6 +607,17 @@ export async function createFamilyTreeRelationshipWithScaffold(
     }
   }
 
+  if (input.type === "sibling_of") {
+    const linked = await linkSharedSiblingParents({
+      userId: input.userId,
+      siblingA: endpoints.fromNodeId,
+      siblingB: endpoints.toNodeId,
+      labelById,
+    });
+    autoLinkedIds.push(...linked.relationshipIds);
+    notices.push(...linked.notices);
+  }
+
   await assertPreservedFamilyTreeNodes(input.userId, preservedNodeIds);
 
   // Extended types: undo only auto-placeholders. Keeping the primary edge
@@ -665,6 +677,66 @@ async function assertPreservedFamilyTreeNodes(
       { code: "validation" },
     );
   }
+}
+
+/**
+ * When siblings are linked and one already has parents, attach the other to
+ * that same parent union (Donna joins Diane+Frank when sibling_of Kat).
+ */
+async function linkSharedSiblingParents(input: {
+  userId: string;
+  siblingA: string;
+  siblingB: string;
+  labelById: Map<string, string>;
+}): Promise<{ relationshipIds: string[]; notices: GenealogyIqNotice[] }> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      fromNodeId: familyTreeRelationships.fromNodeId,
+      toNodeId: familyTreeRelationships.toNodeId,
+      type: familyTreeRelationships.type,
+    })
+    .from(familyTreeRelationships)
+    .where(eq(familyTreeRelationships.userId, input.userId));
+
+  const missing = missingSharedSiblingParentLinks(
+    rows,
+    input.siblingA,
+    input.siblingB,
+  );
+  if (missing.length === 0) {
+    return { relationshipIds: [], notices: [] };
+  }
+
+  const relationshipIds: string[] = [];
+  const notices: GenealogyIqNotice[] = [];
+  for (const { parentId, childId } of missing) {
+    try {
+      const bridge = await createFamilyTreeRelationshipWithScaffold({
+        userId: input.userId,
+        fromNodeId: parentId,
+        toNodeId: childId,
+        type: "parent_of",
+        scaffold: false,
+        linkSpousesAsCoParents: false,
+        linkCoParentsAsSpouses: false,
+      });
+      relationshipIds.push(bridge.relationship.id);
+      notices.push({
+        kind: "sibling_parent_link",
+        message: `Linked ${input.labelById.get(childId) ?? "sibling"} to the same parents as their brother or sister.`,
+      });
+    } catch (error) {
+      if (
+        error instanceof FamilyTreeError &&
+        (error.code === "conflict" || error.code === "validation")
+      ) {
+        continue;
+      }
+      throw error;
+    }
+  }
+  return { relationshipIds, notices };
 }
 
 /**

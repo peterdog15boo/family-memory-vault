@@ -708,6 +708,80 @@ export function computeFamilyTreeLayout(
   snapSiblingsToOuterSides();
 
   /**
+   * Married blood siblings (Donna+Todd) stay on the subject’s outer flank:
+   * blood person adjacent to their sibling peer, in-law docks further out.
+   * Never re-homes them to the opposite spouse just because the in-law has
+   * no parents of their own.
+   */
+  function pinMarriedSiblingCouples() {
+    for (let g = 0; g <= maxGen; g++) {
+      const ids = gens[g]!;
+      const idSet = new Set(ids);
+      const handled = new Set<string>();
+
+      for (const unit of unitsByGen[g]!) {
+        if (!unit.isCouple || unit.ids.length !== 2) continue;
+        const [a, b] = unit.ids as [string, string];
+        if (handled.has(a) || handled.has(b)) continue;
+
+        // Find a coupled peer on this row who is a blood sibling of a or b.
+        let bloodId: string | null = null;
+        let inLawId: string | null = null;
+        let peerId: string | null = null;
+        for (const candidate of [a, b]) {
+          const sibs = siblingAdj.get(candidate);
+          if (!sibs) continue;
+          for (const peer of sibs) {
+            if (!idSet.has(peer)) continue;
+            if (!isCoupledOnRow(peer, idSet, partnerOf)) continue;
+            // Prefer the peer who is already in a couple with someone who is
+            // NOT this unit (Kat/Jeff), i.e. not mutual spouse confusion.
+            if (peer === a || peer === b) continue;
+            bloodId = candidate;
+            inLawId = candidate === a ? b : a;
+            peerId = peer;
+            break;
+          }
+          if (bloodId) break;
+        }
+        if (!bloodId || !inLawId || !peerId) continue;
+
+        // Parent-generation collateral (Diane ↔ Scott’s mom) must not dock
+        // whole ancestor couples onto each other — only pin in-laws on the
+        // same generation as a focus couple (Donna+Todd beside Kat).
+        const bloodHasKids = (childrenByParent.get(bloodId)?.length ?? 0) > 0;
+        const peerHasKids = (childrenByParent.get(peerId)?.length ?? 0) > 0;
+        if (bloodHasKids && peerHasKids) continue;
+
+        const peerPos = positions.get(peerId);
+        const peerPartner = partnerOf.get(peerId);
+        const partnerPos = peerPartner ? positions.get(peerPartner) : null;
+        if (!peerPos || !peerPartner || !partnerPos) continue;
+        // Don't dock onto the in-law's own partner link.
+        if (peerPartner === bloodId || peerPartner === inLawId) continue;
+
+        const peerIsLeft = peerPos.x <= partnerPos.x;
+        const gap = TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap;
+        if (peerIsLeft) {
+          const bloodX = peerPos.x - gap;
+          const inLawX = bloodX - gap;
+          positions.set(bloodId, { x: bloodX, y: peerPos.y });
+          positions.set(inLawId, { x: inLawX, y: peerPos.y });
+        } else {
+          const bloodX = peerPos.x + gap;
+          const inLawX = bloodX + gap;
+          positions.set(bloodId, { x: bloodX, y: peerPos.y });
+          positions.set(inLawId, { x: inLawX, y: peerPos.y });
+        }
+        handled.add(a);
+        handled.add(b);
+      }
+
+      resolveUnitOverlaps(unitsByGen[g]!);
+    }
+  }
+
+  /**
    * Final relational pin: unmarried cousins of a spouse sit on that spouse’s
    * outer flank — outside blood siblings, never between a sibling pair.
    * Cousin parents park beside the subject’s parents (not stacked on them).
@@ -723,12 +797,18 @@ export function computeFamilyTreeLayout(
       peerIsLeft: boolean,
       sibIds: string[],
       cousinIds: string[],
+      /** Already-docked flank people (e.g. Donna+Todd) — cousins go outside them. */
+      reservedIds: string[] = [],
     ) {
       if (peerIsLeft) {
         let cursor = peerPos.x;
         for (let i = sibIds.length - 1; i >= 0; i--) {
           cursor -= TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap;
           positions.set(sibIds[i]!, { x: cursor, y: peerPos.y });
+        }
+        for (const id of [...sibIds, ...reservedIds]) {
+          const pos = positions.get(id);
+          if (pos) cursor = Math.min(cursor, pos.x);
         }
         for (let i = cousinIds.length - 1; i >= 0; i--) {
           cursor -= TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap;
@@ -739,6 +819,15 @@ export function computeFamilyTreeLayout(
         for (const id of sibIds) {
           positions.set(id, { x: cursor, y: peerPos.y });
           cursor += TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap;
+        }
+        for (const id of [...sibIds, ...reservedIds]) {
+          const pos = positions.get(id);
+          if (pos) {
+            cursor = Math.max(
+              cursor,
+              pos.x + TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap,
+            );
+          }
         }
         for (const id of cousinIds) {
           positions.set(id, { x: cursor, y: peerPos.y });
@@ -804,7 +893,15 @@ export function computeFamilyTreeLayout(
         const cousinIds = [...new Set(cousins)].sort((a, b) =>
           a.localeCompare(b),
         );
-        placeFlankStack(peerPos, peerIsLeft, sibIds, cousinIds);
+        const reserved: string[] = [];
+        for (const sib of siblingAdj.get(peer) ?? []) {
+          if (!idSet.has(sib) || cousins.includes(sib)) continue;
+          if (!isCoupledOnRow(sib, idSet, partnerOf)) continue;
+          reserved.push(sib);
+          const inLaw = partnerOf.get(sib);
+          if (inLaw && idSet.has(inLaw)) reserved.push(inLaw);
+        }
+        placeFlankStack(peerPos, peerIsLeft, sibIds, cousinIds, reserved);
       }
 
       // Park aunt/uncle couples beside the subject’s parents (not on top).
@@ -859,7 +956,15 @@ export function computeFamilyTreeLayout(
         const cousinIds = [...new Set(cousins)].sort((a, b) =>
           a.localeCompare(b),
         );
-        placeFlankStack(peerPos, peerIsLeft, sibIds, cousinIds);
+        const reserved: string[] = [];
+        for (const sib of siblingAdj.get(peer) ?? []) {
+          if (!idSet.has(sib) || cousins.includes(sib)) continue;
+          if (!isCoupledOnRow(sib, idSet, partnerOf)) continue;
+          reserved.push(sib);
+          const inLaw = partnerOf.get(sib);
+          if (inLaw && idSet.has(inLaw)) reserved.push(inLaw);
+        }
+        placeFlankStack(peerPos, peerIsLeft, sibIds, cousinIds, reserved);
 
         for (const cousinId of cousinIds) {
           const parentIds = parentsByChild.get(cousinId) ?? [];
@@ -901,6 +1006,7 @@ export function computeFamilyTreeLayout(
     resolveUnitOverlaps(orderedUnits);
   }
 
+  pinMarriedSiblingCouples();
   pinCousinsByRelation();
 
   let minX = Infinity;
