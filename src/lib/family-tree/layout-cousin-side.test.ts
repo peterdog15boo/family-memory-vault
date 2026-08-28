@@ -45,6 +45,18 @@ describe("cousin relational side placement", () => {
       expect(by.donna!.x).toBeGreaterThan(by.kathy!.x);
     }
 
+    // Donna–Kathy sibling block stays intact — Scott is outside, not between.
+    if (kathyLeft) {
+      expect(by.donna!.x).toBeLessThan(by.kathy!.x);
+      expect(by.scott!.x).toBeLessThan(by.donna!.x);
+    } else {
+      expect(by.donna!.x).toBeGreaterThan(by.kathy!.x);
+      expect(by.scott!.x).toBeGreaterThan(by.donna!.x);
+    }
+    const betweenDonnaKat =
+      (by.scott!.x - by.donna!.x) * (by.kathy!.x - by.scott!.x) > 0;
+    expect(betweenDonnaKat).toBe(false);
+
     // Not parked under Jeff’s parents cluster.
     const jeffParentsMid = (mid("paul") + mid("helene")) / 2;
     const kathyParentsMid = (mid("diane") + mid("frank")) / 2;
@@ -52,11 +64,18 @@ describe("cousin relational side placement", () => {
       Math.abs(mid("scott") - jeffParentsMid),
     );
 
-    // Aunt/uncle couple should also lean toward Kathy’s parents, not Jeff’s.
+    // Aunt/uncle couple on Kathy’s side, not stacked on Diane+Frank.
     const scottParentsMid = (mid("scott-mom") + mid("scott-dad")) / 2;
     expect(Math.abs(scottParentsMid - kathyParentsMid)).toBeLessThan(
       Math.abs(scottParentsMid - jeffParentsMid),
     );
+    const coupleWidth =
+      TREE_LAYOUT.nodeWidth * 2 + TREE_LAYOUT.partnerGap;
+    expect(Math.abs(scottParentsMid - kathyParentsMid)).toBeGreaterThan(
+      coupleWidth * 0.4,
+    );
+    expect(by["scott-mom"]!.y).toBe(by.diane!.y);
+    expect(by["scott-dad"]!.y).toBe(by.diane!.y);
   }
 
   const baseEdges = [

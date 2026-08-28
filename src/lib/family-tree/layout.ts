@@ -11,7 +11,9 @@ import {
   familyUnitsForGeneration,
   isCoupledOnRow,
   orderGenerationForLayout,
+  outerCousinsOf,
   outerRelativesOf,
+  outerSiblingsOf,
   suppressSpouseSideCousinBridges,
   type LayoutUnit,
 } from "@/lib/family-tree/layout-iq";
@@ -603,31 +605,75 @@ export function computeFamilyTreeLayout(
         const rightPos = positions.get(rightId)!;
         const exclude = new Set([leftId, rightId]);
 
-        const leftSibs = outerRelativesOf(
+        const leftSibs = outerSiblingsOf(
           leftId,
           idSet,
           layoutIqCtx,
           exclude,
         ).filter((s) => !handled.has(s));
-        const rightSibs = outerRelativesOf(
+        const leftCousins = outerCousinsOf(
+          leftId,
+          idSet,
+          layoutIqCtx,
+          exclude,
+        ).filter(
+          (s) =>
+            !handled.has(s) &&
+            !leftSibs.includes(s),
+        );
+        const rightSibs = outerSiblingsOf(
           rightId,
           idSet,
           layoutIqCtx,
           exclude,
-        ).filter((s) => !handled.has(s) && !leftSibs.includes(s));
+        ).filter(
+          (s) =>
+            !handled.has(s) &&
+            !leftSibs.includes(s) &&
+            !leftCousins.includes(s),
+        );
+        const rightCousins = outerCousinsOf(
+          rightId,
+          idSet,
+          layoutIqCtx,
+          exclude,
+        ).filter(
+          (s) =>
+            !handled.has(s) &&
+            !leftSibs.includes(s) &&
+            !leftCousins.includes(s) &&
+            !rightSibs.includes(s),
+        );
 
-        for (const s of leftSibs) handled.add(s);
-        for (const s of rightSibs) handled.add(s);
+        for (const s of [
+          ...leftSibs,
+          ...leftCousins,
+          ...rightSibs,
+          ...rightCousins,
+        ]) {
+          handled.add(s);
+        }
 
+        // Left flank: siblings adjacent to spouse, cousins further out.
+        // → … cousins | siblings | leftSpouse | rightSpouse …
         let cursor = leftPos.x;
         for (let i = leftSibs.length - 1; i >= 0; i--) {
           cursor -= TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap;
           positions.set(leftSibs[i]!, { x: cursor, y: leftPos.y });
         }
+        for (let i = leftCousins.length - 1; i >= 0; i--) {
+          cursor -= TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap;
+          positions.set(leftCousins[i]!, { x: cursor, y: leftPos.y });
+        }
 
+        // Right flank: siblings then cousins outward.
         cursor = rightPos.x + TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap;
         for (const sib of rightSibs) {
           positions.set(sib, { x: cursor, y: rightPos.y });
+          cursor += TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap;
+        }
+        for (const cousin of rightCousins) {
+          positions.set(cousin, { x: cursor, y: rightPos.y });
           cursor += TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap;
         }
       }
@@ -662,17 +708,74 @@ export function computeFamilyTreeLayout(
   snapSiblingsToOuterSides();
 
   /**
-   * Final relational pin: unmarried people with cousin_of to a spouse sit on
-   * that spouse’s outer flank — last write so overlap passes cannot undo it.
+   * Final relational pin: unmarried cousins of a spouse sit on that spouse’s
+   * outer flank — outside blood siblings, never between a sibling pair.
+   * Cousin parents park beside the subject’s parents (not stacked on them).
    */
   function pinCousinsByRelation() {
-    const pinned = new Set<string>();
+    /**
+     * Place blood siblings adjacent to the peer, cousins further outward.
+     * Left peer:  … cousins | siblings | peer | partner …
+     * Right peer: … partner | peer | siblings | cousins …
+     */
+    function placeFlankStack(
+      peerPos: { x: number; y: number },
+      peerIsLeft: boolean,
+      sibIds: string[],
+      cousinIds: string[],
+    ) {
+      if (peerIsLeft) {
+        let cursor = peerPos.x;
+        for (let i = sibIds.length - 1; i >= 0; i--) {
+          cursor -= TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap;
+          positions.set(sibIds[i]!, { x: cursor, y: peerPos.y });
+        }
+        for (let i = cousinIds.length - 1; i >= 0; i--) {
+          cursor -= TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap;
+          positions.set(cousinIds[i]!, { x: cursor, y: peerPos.y });
+        }
+      } else {
+        let cursor = peerPos.x + TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap;
+        for (const id of sibIds) {
+          positions.set(id, { x: cursor, y: peerPos.y });
+          cursor += TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap;
+        }
+        for (const id of cousinIds) {
+          positions.set(id, { x: cursor, y: peerPos.y });
+          cursor += TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap;
+        }
+      }
+    }
+
+    function unitContainingIds(ids: string[]): LayoutUnit | null {
+      const idSet = new Set(ids);
+      for (const units of unitsByGen) {
+        for (const unit of units) {
+          if (unit.ids.some((id) => idSet.has(id))) return unit;
+        }
+      }
+      return null;
+    }
+
+    function boundsOfIds(
+      ids: string[],
+    ): { left: number; right: number; mid: number } | null {
+      let left = Infinity;
+      let right = -Infinity;
+      for (const id of ids) {
+        const pos = positions.get(id);
+        if (!pos) continue;
+        left = Math.min(left, pos.x);
+        right = Math.max(right, pos.x + TREE_LAYOUT.nodeWidth);
+      }
+      if (!Number.isFinite(left)) return null;
+      return { left, right, mid: (left + right) / 2 };
+    }
+
     for (let g = 0; g <= maxGen; g++) {
       const ids = gens[g]!;
       const idSet = new Set(ids);
-      const y = g * (TREE_LAYOUT.nodeHeight + TREE_LAYOUT.vGap);
 
-      // Collect (peer, cousins[]) for each coupled person on this row.
       const byPeer = new Map<string, string[]>();
       for (const id of ids) {
         if (isCoupledOnRow(id, idSet, partnerOf)) continue;
@@ -692,53 +795,59 @@ export function computeFamilyTreeLayout(
 
         const peerIsLeft = peerPos.x <= partnerPos.x;
         const exclude = new Set([peer, partner]);
-        const sibs = outerRelativesOf(peer, idSet, layoutIqCtx, exclude).filter(
-          (id) => !cousins.includes(id),
-        );
-        const stack = [...new Set([...sibs, ...cousins])].sort((a, b) =>
+        const sibIds = outerSiblingsOf(
+          peer,
+          idSet,
+          layoutIqCtx,
+          exclude,
+        ).filter((id) => !cousins.includes(id));
+        const cousinIds = [...new Set(cousins)].sort((a, b) =>
           a.localeCompare(b),
         );
-
-        for (const id of stack) pinned.add(id);
-
-        if (peerIsLeft) {
-          let cursor = peerPos.x;
-          for (let i = stack.length - 1; i >= 0; i--) {
-            cursor -= TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap;
-            positions.set(stack[i]!, { x: cursor, y: peerPos.y });
-          }
-        } else {
-          let cursor = peerPos.x + TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap;
-          for (const id of stack) {
-            positions.set(id, { x: cursor, y: peerPos.y });
-            cursor += TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap;
-          }
-        }
+        placeFlankStack(peerPos, peerIsLeft, sibIds, cousinIds);
       }
 
-      // Pull cousin parent units toward the subject’s parents (same branch).
+      // Park aunt/uncle couples beside the subject’s parents (not on top).
+      const parentGensTouched = new Set<number>();
       for (const [peer, cousins] of byPeer) {
-        const peerParentMid = midXOfNodes(parentsByChild.get(peer) ?? []);
-        if (peerParentMid == null) continue;
+        const partner = partnerOf.get(peer);
+        const peerPos = positions.get(peer);
+        const partnerPos = partner ? positions.get(partner) : null;
+        if (!peerPos || !partner || !partnerPos) continue;
+        const peerIsLeft = peerPos.x <= partnerPos.x;
+        const peerParentIds = parentsByChild.get(peer) ?? [];
+        const peerParentBounds = boundsOfIds(peerParentIds);
+        if (!peerParentBounds) continue;
+
         for (const cousinId of cousins) {
           const parentIds = parentsByChild.get(cousinId) ?? [];
           if (parentIds.length === 0) continue;
-          const parentMid = midXOfNodes(parentIds);
-          if (parentMid == null) continue;
-          const dx = peerParentMid - parentMid;
-          if (Math.abs(dx) < 1) continue;
-          for (const pid of parentIds) {
-            const pos = positions.get(pid);
-            if (!pos) continue;
-            positions.set(pid, { x: pos.x + dx, y: pos.y });
-          }
-          // Keep the cousin under the moved parents / peer flank — flank wins.
-          void y;
+          const parentUnit = unitContainingIds(parentIds);
+          if (!parentUnit) continue;
+          const parentGen = Math.max(
+            0,
+            Math.min(
+              maxGen,
+              ...parentIds.map((id) => generations[id] ?? 0),
+            ),
+          );
+          parentGensTouched.add(parentGen);
+          const width = unitWidth(parentUnit);
+          const gap = TREE_LAYOUT.hGap + TREE_LAYOUT.clusterGap;
+          const yParent =
+            parentGen * (TREE_LAYOUT.nodeHeight + TREE_LAYOUT.vGap);
+          const leftX = peerIsLeft
+            ? peerParentBounds.left - gap - width
+            : peerParentBounds.right + gap;
+          placeUnitAt(parentUnit, leftX, yParent);
         }
       }
 
-      resolveUnitOverlaps(unitsByGen[g]!);
-      // Re-pin cousins after parent attraction overlap shifts.
+      for (const pg of parentGensTouched) {
+        resolveUnitOverlaps(unitsByGen[pg]!);
+      }
+
+      // Re-assert flank after parent moves, then center parents over cousins.
       for (const [peer, cousins] of byPeer) {
         const partner = partnerOf.get(peer);
         const peerPos = positions.get(peer);
@@ -746,25 +855,39 @@ export function computeFamilyTreeLayout(
         if (!peerPos || !partner || !partnerPos) continue;
         const peerIsLeft = peerPos.x <= partnerPos.x;
         const exclude = new Set([peer, partner, ...cousins]);
-        const sibs = outerRelativesOf(peer, idSet, layoutIqCtx, exclude);
-        const stack = [...new Set([...sibs, ...cousins])].sort((a, b) =>
+        const sibIds = outerSiblingsOf(peer, idSet, layoutIqCtx, exclude);
+        const cousinIds = [...new Set(cousins)].sort((a, b) =>
           a.localeCompare(b),
         );
-        if (peerIsLeft) {
-          let cursor = peerPos.x;
-          for (let i = stack.length - 1; i >= 0; i--) {
-            cursor -= TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap;
-            positions.set(stack[i]!, { x: cursor, y: peerPos.y });
-          }
-        } else {
-          let cursor = peerPos.x + TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap;
-          for (const id of stack) {
-            positions.set(id, { x: cursor, y: peerPos.y });
-            cursor += TREE_LAYOUT.nodeWidth + TREE_LAYOUT.hGap;
-          }
+        placeFlankStack(peerPos, peerIsLeft, sibIds, cousinIds);
+
+        for (const cousinId of cousinIds) {
+          const parentIds = parentsByChild.get(cousinId) ?? [];
+          if (parentIds.length === 0) continue;
+          const parentUnit = unitContainingIds(parentIds);
+          const cousinPos = positions.get(cousinId);
+          if (!parentUnit || !cousinPos) continue;
+          const parentGen = Math.max(
+            0,
+            Math.min(
+              maxGen,
+              ...parentIds.map((id) => generations[id] ?? 0),
+            ),
+          );
+          parentGensTouched.add(parentGen);
+          const width = unitWidth(parentUnit);
+          const yParent =
+            parentGen * (TREE_LAYOUT.nodeHeight + TREE_LAYOUT.vGap);
+          const cousinMid = cousinPos.x + TREE_LAYOUT.nodeWidth / 2;
+          placeUnitAt(parentUnit, cousinMid - width / 2, yParent);
         }
       }
-      void pinned;
+
+      for (const pg of parentGensTouched) {
+        resolveUnitOverlaps(unitsByGen[pg]!);
+      }
+
+      resolveUnitOverlaps(unitsByGen[g]!);
     }
   }
 
