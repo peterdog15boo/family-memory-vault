@@ -84,7 +84,7 @@ export type FamilyTreeDebugExport = {
     type: string;
     fromId: string;
     toId: string;
-    via?: string[];
+    inferred?: boolean;
   }>;
   parentUnions: FamilyTreeDebugUnion[];
   personSummaries: FamilyTreeDebugPersonSummary[];
@@ -456,7 +456,7 @@ export async function buildFamilyTreeDebugExport(
       type: d.type,
       fromId: d.fromNodeId,
       toId: d.toNodeId,
-      via: d.via,
+      inferred: d.inferred,
     })),
     parentUnions,
     personSummaries,
