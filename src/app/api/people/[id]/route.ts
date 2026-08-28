@@ -56,7 +56,7 @@ const patchBodySchema = z
   });
 
 /**
- * GET /api/people/[id] — owner-scoped person detail with clean photo gallery.
+ * GET /api/people/[id] — person detail when viewer may see the person (owner or family).
  */
 export async function GET(_request: Request, context: RouteContext) {
   const authResult = await requirePeopleApiUser();

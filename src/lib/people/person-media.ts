@@ -68,15 +68,21 @@ export async function listVisibleMediaLinkedToPerson(
   const [person] = await db
     .select({ id: people.id, name: people.name, userId: people.userId })
     .from(people)
-    .where(and(eq(people.id, personId), eq(people.userId, userId)))
+    .where(eq(people.id, personId))
     .limit(1);
 
   if (!person) return null;
 
+  const { canViewPerson } = await import("@/lib/permissions");
+  if (!(await canViewPerson(userId, personId))) return null;
+
+  // Face labels for this identity live under the person owner's vault.
+  const faceOwnerId = person.userId;
+
   const personFaces = await db
     .select()
     .from(faces)
-    .where(and(eq(faces.personId, personId), eq(faces.userId, userId)))
+    .where(and(eq(faces.personId, personId), eq(faces.userId, faceOwnerId)))
     .orderBy(asc(faces.createdAt));
 
   const linkedMediaIds = [...new Set(personFaces.map((f) => f.mediaId))];

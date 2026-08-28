@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
+import { requirePeopleApiUser, peopleApiErrorResponse } from "@/lib/people/http";
 import {
-  peopleApiErrorResponse,
-  requirePeopleApiUser,
-} from "@/lib/people/http";
-import { regeneratePersonStory } from "@/lib/people/stories";
+  createPersonStoryPost,
+  getPersonStoryFeed,
+  PersonStoryPostError,
+  PERSON_STORY_POST_MAX_LENGTH,
+  refreshPersonStoryNotes,
+} from "@/lib/people/story-posts";
 import {
   enforceRateLimit,
   RATE_LIMITS,
@@ -15,16 +17,43 @@ type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
-const bodySchema = z
-  .object({
-    /** Explicit refresh from the Person page. */
-    refresh: z.boolean().optional(),
-  })
-  .optional();
+function postErrorResponse(error: unknown, fallback: string) {
+  if (error instanceof PersonStoryPostError) {
+    return NextResponse.json(
+      { error: error.message, code: error.code },
+      { status: error.status },
+    );
+  }
+  return peopleApiErrorResponse(error, fallback);
+}
 
 /**
- * POST /api/people/[id]/story — regenerate Story from visible photo captions.
- * Owner-scoped. Empty captions clear the stored story (no invented biography).
+ * GET /api/people/[id]/story — family Story feed (posts + photo notes).
+ */
+export async function GET(_request: Request, context: RouteContext) {
+  const authResult = await requirePeopleApiUser();
+  if (!authResult.ok) return authResult.response;
+
+  const { id } = await context.params;
+  if (!id?.trim()) {
+    return NextResponse.json(
+      { error: "Missing person id", code: "validation" },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const feed = await getPersonStoryFeed(authResult.userId, id);
+    return NextResponse.json(feed);
+  } catch (error) {
+    return postErrorResponse(error, "Failed to load story");
+  }
+}
+
+/**
+ * POST /api/people/[id]/story
+ * - { "body": "..." } → create a human post
+ * - { "refreshNotes": true } or legacy { "refresh": true } → AI notes only
  */
 export async function POST(request: Request, context: RouteContext) {
   const originBlocked = rejectUntrustedOrigin(request);
@@ -49,33 +78,68 @@ export async function POST(request: Request, context: RouteContext) {
     );
   }
 
+  let body: {
+    body?: unknown;
+    refreshNotes?: unknown;
+    refresh?: unknown;
+  };
   try {
-    if (request.headers.get("content-type")?.includes("application/json")) {
-      const raw = await request.json().catch(() => ({}));
-      bodySchema.parse(raw);
-    }
+    body = (await request.json()) as typeof body;
   } catch {
     return NextResponse.json(
-      { error: "Invalid request body", code: "validation" },
+      { error: "Invalid JSON body", code: "validation" },
+      { status: 400 },
+    );
+  }
+
+  if (body.refreshNotes === true || body.refresh === true) {
+    try {
+      const notes = await refreshPersonStoryNotes({
+        userId,
+        personId: id,
+      });
+      return NextResponse.json({
+        ok: true,
+        notes,
+        story: {
+          body: notes.body,
+          sourceCaptionCount: notes.sourceCount,
+          generatedAt: notes.generatedAt,
+          generatedBy: notes.generatedBy,
+        },
+      });
+    } catch (error) {
+      return postErrorResponse(error, "Failed to refresh notes");
+    }
+  }
+
+  if (typeof body.body !== "string") {
+    return NextResponse.json(
+      {
+        error: 'Provide "body" to post, or refreshNotes: true.',
+        code: "validation",
+      },
+      { status: 400 },
+    );
+  }
+  if (body.body.length > PERSON_STORY_POST_MAX_LENGTH * 2) {
+    return NextResponse.json(
+      {
+        error: `Story must be at most ${PERSON_STORY_POST_MAX_LENGTH} characters.`,
+        code: "validation",
+      },
       { status: 400 },
     );
   }
 
   try {
-    const story = await regeneratePersonStory({
+    const post = await createPersonStoryPost({
       userId,
       personId: id,
-      generatedBy: "user",
+      body: body.body,
     });
-    return NextResponse.json({ ok: true, story });
+    return NextResponse.json({ ok: true, post }, { status: 201 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "";
-    if (/not found/i.test(message)) {
-      return NextResponse.json(
-        { error: "Person not found", code: "not_found" },
-        { status: 404 },
-      );
-    }
-    return peopleApiErrorResponse(error, "Failed to update story");
+    return postErrorResponse(error, "Failed to post story");
   }
 }

@@ -115,23 +115,23 @@ describe("person stories from captions", () => {
   });
 
   it("documents family vs outsider story visibility", () => {
-    // Person pages are owner-scoped; story uses the same visible media set
-    // as Person photos (clean/ready + accessible owners). Outsiders get no person.
+    // Story feed uses canViewPerson (owner or family with vault view).
+    // Outsiders never see posts or photo notes.
     const cases = [
       { kind: "owner", canViewPerson: true, seesStory: true },
-      { kind: "family_shared_photos_on_own_person", canViewPerson: true, seesStory: true },
+      { kind: "family", canViewPerson: true, seesStory: true },
       { kind: "outsider", canViewPerson: false, seesStory: false },
     ] as const;
     expect(cases.filter((c) => c.seesStory).map((c) => c.kind)).toEqual([
       "owner",
-      "family_shared_photos_on_own_person",
+      "family",
     ]);
     expect(cases.filter((c) => !c.canViewPerson).map((c) => c.kind)).toEqual([
       "outsider",
     ]);
   });
 
-  it("refresh snapshot replaces body and bumps generatedAt", () => {
+  it("refresh notes snapshot replaces body and bumps generatedAt", () => {
     const before = personStorySnapshotFromRow({
       storyBody: "Old story",
       storySourceCaptionCount: 1,

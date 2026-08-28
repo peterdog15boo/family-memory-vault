@@ -98,6 +98,7 @@ export function PersonDetailView({
   const t = useTranslations();
   const [person, setPerson] = useState(initialPerson);
   const [candidates, setCandidates] = useState(mergeCandidates);
+  const isPersonOwner = person.isPersonOwner !== false;
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(
     person.displayName === "Unnamed Person" ? "" : person.name,
@@ -401,18 +402,20 @@ export function PersonDetailView({
                 <h1 className="page-title font-display text-3xl tracking-tight text-ink sm:text-4xl">
                   {person.displayName}
                 </h1>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditing(true);
-                    setNotice(null);
-                    setError(null);
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-ink/10 bg-canvas px-2.5 py-1.5 text-xs font-medium text-ink transition hover:border-accent/35 hover:bg-canvas-deep"
-                >
-                  <Pencil className="size-3" aria-hidden />
-                  {t("people.rename")}
-                </button>
+                {isPersonOwner ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditing(true);
+                      setNotice(null);
+                      setError(null);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-ink/10 bg-canvas px-2.5 py-1.5 text-xs font-medium text-ink transition hover:border-accent/35 hover:bg-canvas-deep"
+                  >
+                    <Pencil className="size-3" aria-hidden />
+                    {t("people.rename")}
+                  </button>
+                ) : null}
               </div>
               <p className="text-sm text-ink-muted">
                 {mediaLabel(t, person.photoCount)}
@@ -441,40 +444,44 @@ export function PersonDetailView({
               <BookImage className="size-3.5" aria-hidden />
               {t("memories.createMemory")}
             </Link>
-            <button
-              type="button"
-              onClick={() => {
-                setMergeOpen((open) => !open);
-                setDeleteOpen(false);
-                setError(null);
-                setNotice(null);
-              }}
-              disabled={candidates.length === 0}
-              aria-expanded={mergeOpen}
-              aria-controls="person-merge-panel"
-              className={cn(
-                "inline-flex items-center gap-2 rounded-md border border-ink/10 bg-canvas px-3 py-2 text-sm font-medium text-ink transition hover:border-accent/35 hover:bg-canvas-deep",
-                candidates.length === 0 && "cursor-not-allowed opacity-50",
-              )}
-            >
-              <GitMerge className="size-3.5" aria-hidden />
-              {t("people.mergePeople")}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setDeleteOpen((open) => !open);
-                setMergeOpen(false);
-                setError(null);
-                setNotice(null);
-              }}
-              aria-expanded={deleteOpen}
-              aria-controls="person-delete-panel"
-              className="inline-flex items-center gap-2 rounded-md border border-red-200 bg-red-50/80 px-3 py-2 text-sm font-medium text-red-800 transition hover:bg-red-100"
-            >
-              <Trash2 className="size-3.5" aria-hidden />
-              {t("common.delete")}
-            </button>
+            {isPersonOwner ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMergeOpen((open) => !open);
+                    setDeleteOpen(false);
+                    setError(null);
+                    setNotice(null);
+                  }}
+                  disabled={candidates.length === 0}
+                  aria-expanded={mergeOpen}
+                  aria-controls="person-merge-panel"
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-md border border-ink/10 bg-canvas px-3 py-2 text-sm font-medium text-ink transition hover:border-accent/35 hover:bg-canvas-deep",
+                    candidates.length === 0 && "cursor-not-allowed opacity-50",
+                  )}
+                >
+                  <GitMerge className="size-3.5" aria-hidden />
+                  {t("people.mergePeople")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeleteOpen((open) => !open);
+                    setMergeOpen(false);
+                    setError(null);
+                    setNotice(null);
+                  }}
+                  aria-expanded={deleteOpen}
+                  aria-controls="person-delete-panel"
+                  className="inline-flex items-center gap-2 rounded-md border border-red-200 bg-red-50/80 px-3 py-2 text-sm font-medium text-red-800 transition hover:bg-red-100"
+                >
+                  <Trash2 className="size-3.5" aria-hidden />
+                  {t("common.delete")}
+                </button>
+              </>
+            ) : null}
           </div>
         </div>
       </header>
@@ -483,20 +490,19 @@ export function PersonDetailView({
         className="mt-6"
         personId={person.id}
         displayName={person.displayName}
-        story={
-          person.story ?? {
-            body: null,
-            sourceCaptionCount: 0,
-            generatedAt: null,
-            generatedBy: null,
+        initialPosts={person.storyPosts ?? []}
+        initialNotes={
+          person.storyNotes ?? {
+            body: person.story?.body ?? null,
+            sourceCount: person.story?.sourceCaptionCount ?? 0,
+            generatedAt: person.story?.generatedAt ?? null,
+            generatedBy: person.story?.generatedBy ?? null,
           }
         }
-        onStoryChange={(story) => {
-          setPerson((prev) => ({ ...prev, story }));
-        }}
+        canPost={person.canPostStory !== false}
       />
 
-      {person.cover?.media.previewUrl ? (
+      {isPersonOwner && person.cover?.media.previewUrl ? (
         <AvatarFramingEditor
           className="mt-6"
           personId={person.id}
@@ -520,7 +526,7 @@ export function PersonDetailView({
         />
       ) : null}
 
-      {mergeOpen ? (
+      {isPersonOwner && mergeOpen ? (
         <div
           id="person-merge-panel"
           className="mt-6 rounded-xl border border-ink/10 bg-canvas-deep/40 px-4 py-4 sm:px-5"
@@ -568,7 +574,7 @@ export function PersonDetailView({
         </div>
       ) : null}
 
-      {deleteOpen ? (
+      {isPersonOwner && deleteOpen ? (
         <div
           id="person-delete-panel"
           className="mt-6 rounded-xl border border-red-200 bg-red-50/60 px-4 py-4 sm:px-5"
@@ -638,14 +644,16 @@ export function PersonDetailView({
                 {dateRange ? ` · ${dateRange}` : ""}
               </p>
             ) : null}
-            <button
-              type="button"
-              onClick={() => setAddPhotosOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-ink/10 bg-canvas px-3 py-1.5 text-sm font-medium text-ink transition hover:border-accent/40 hover:bg-canvas-deep"
-            >
-              <ImagePlus className="size-3.5" aria-hidden />
-              {t("people.addPhotosVideos")}
-            </button>
+            {isPersonOwner ? (
+              <button
+                type="button"
+                onClick={() => setAddPhotosOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-ink/10 bg-canvas px-3 py-1.5 text-sm font-medium text-ink transition hover:border-accent/40 hover:bg-canvas-deep"
+              >
+                <ImagePlus className="size-3.5" aria-hidden />
+                {t("people.addPhotosVideos")}
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -657,14 +665,16 @@ export function PersonDetailView({
             <p className="mx-auto mt-2 max-w-sm text-sm text-ink-muted">
               {t("people.emptyMediaBody")}
             </p>
-            <button
-              type="button"
-              onClick={() => setAddPhotosOpen(true)}
-              className="ui-btn ui-btn-primary mt-5"
-            >
-              <ImagePlus className="size-4" aria-hidden />
-              {t("people.addPhotosVideos")}
-            </button>
+            {isPersonOwner ? (
+              <button
+                type="button"
+                onClick={() => setAddPhotosOpen(true)}
+                className="ui-btn ui-btn-primary mt-5"
+              >
+                <ImagePlus className="size-4" aria-hidden />
+                {t("people.addPhotosVideos")}
+              </button>
+            ) : null}
           </div>
         ) : (
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
@@ -691,61 +701,69 @@ export function PersonDetailView({
                       />
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setCover(photo.faceId);
-                      }}
-                      disabled={pending || isCover}
-                      className={cn(
-                        "absolute bottom-2 right-2 z-10 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium shadow-sm backdrop-blur-sm transition",
-                        isCover
-                          ? "bg-accent text-accent-foreground"
-                          : "bg-canvas/90 text-ink-muted opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-canvas hover:text-ink",
-                      )}
-                      aria-label={
-                        isCover
-                          ? t("people.currentCoverFace")
-                          : t("people.setAsCoverFace")
-                      }
-                    >
-                      {coverBusy ? (
-                        <Loader2 className="size-3 animate-spin" aria-hidden />
-                      ) : (
-                        <Star
-                          className={cn("size-3", isCover && "fill-current")}
-                          aria-hidden
-                        />
-                      )}
-                      {isCover ? t("memories.cover") : t("people.setCover")}
-                    </button>
+                    {isPersonOwner ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setCover(photo.faceId);
+                          }}
+                          disabled={pending || isCover}
+                          className={cn(
+                            "absolute bottom-2 right-2 z-10 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium shadow-sm backdrop-blur-sm transition",
+                            isCover
+                              ? "bg-accent text-accent-foreground"
+                              : "bg-canvas/90 text-ink-muted opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-canvas hover:text-ink",
+                          )}
+                          aria-label={
+                            isCover
+                              ? t("people.currentCoverFace")
+                              : t("people.setAsCoverFace")
+                          }
+                        >
+                          {coverBusy ? (
+                            <Loader2 className="size-3 animate-spin" aria-hidden />
+                          ) : (
+                            <Star
+                              className={cn("size-3", isCover && "fill-current")}
+                              aria-hidden
+                            />
+                          )}
+                          {isCover ? t("memories.cover") : t("people.setCover")}
+                        </button>
 
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        removeMediaFromPerson(photo.faceId, photo.id, photo.type);
-                      }}
-                      disabled={pending && busyFaceId === photo.faceId}
-                      className="absolute bottom-2 left-2 z-10 inline-flex items-center gap-1 rounded-md bg-canvas/90 px-2 py-1 text-[11px] font-medium text-ink-muted shadow-sm backdrop-blur-sm transition opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-red-50 hover:text-red-800"
-                      aria-label={
-                        photo.type === "video"
-                          ? t("people.removeVideoFrom", {
-                              name: person.displayName,
-                            })
-                          : t("people.removePhotoFrom", {
-                              name: person.displayName,
-                            })
-                      }
-                    >
-                      {pending && busyFaceId === photo.faceId ? (
-                        <Loader2 className="size-3 animate-spin" aria-hidden />
-                      ) : (
-                        <UserMinus className="size-3" aria-hidden />
-                      )}
-                      {t("common.remove")}
-                    </button>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            removeMediaFromPerson(
+                              photo.faceId,
+                              photo.id,
+                              photo.type,
+                            );
+                          }}
+                          disabled={pending && busyFaceId === photo.faceId}
+                          className="absolute bottom-2 left-2 z-10 inline-flex items-center gap-1 rounded-md bg-canvas/90 px-2 py-1 text-[11px] font-medium text-ink-muted shadow-sm backdrop-blur-sm transition opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-red-50 hover:text-red-800"
+                          aria-label={
+                            photo.type === "video"
+                              ? t("people.removeVideoFrom", {
+                                  name: person.displayName,
+                                })
+                              : t("people.removePhotoFrom", {
+                                  name: person.displayName,
+                                })
+                          }
+                        >
+                          {pending && busyFaceId === photo.faceId ? (
+                            <Loader2 className="size-3 animate-spin" aria-hidden />
+                          ) : (
+                            <UserMinus className="size-3" aria-hidden />
+                          )}
+                          {t("common.remove")}
+                        </button>
+                      </>
+                    ) : null}
                   </div>
                 </li>
               );
@@ -768,33 +786,40 @@ export function PersonDetailView({
 
       <FacePrivacyNote compact className="mt-10" />
 
-      <AddPhotosToPersonSheet
-        personId={person.id}
-        personName={person.displayName}
-        excludeMediaIds={person.photos.map((p) => p.id)}
-        open={addPhotosOpen}
-        onClose={() => setAddPhotosOpen(false)}
-        onAssigned={({ person: next, assignedCount, alreadyCount, skippedCount }) => {
-          applyPerson(next as SerializedPersonDetail);
-          const parts: string[] = [];
-          if (assignedCount > 0) {
-            parts.push(
-              assignedCount === 1
-                ? t("people.addedItems", { count: assignedCount })
-                : t("people.addedItemsPlural", { count: assignedCount }),
-            );
-          }
-          if (alreadyCount > 0) {
-            parts.push(t("people.alreadyOnPerson", { count: alreadyCount }));
-          }
-          if (skippedCount > 0) {
-            parts.push(t("people.couldntAdd", { count: skippedCount }));
-          }
-          setNotice(parts.join(" ") || t("people.libraryUpdated"));
-          setError(null);
-          router.refresh();
-        }}
-      />
+      {isPersonOwner ? (
+        <AddPhotosToPersonSheet
+          personId={person.id}
+          personName={person.displayName}
+          excludeMediaIds={person.photos.map((p) => p.id)}
+          open={addPhotosOpen}
+          onClose={() => setAddPhotosOpen(false)}
+          onAssigned={({
+            person: next,
+            assignedCount,
+            alreadyCount,
+            skippedCount,
+          }) => {
+            applyPerson(next as SerializedPersonDetail);
+            const parts: string[] = [];
+            if (assignedCount > 0) {
+              parts.push(
+                assignedCount === 1
+                  ? t("people.addedItems", { count: assignedCount })
+                  : t("people.addedItemsPlural", { count: assignedCount }),
+              );
+            }
+            if (alreadyCount > 0) {
+              parts.push(t("people.alreadyOnPerson", { count: alreadyCount }));
+            }
+            if (skippedCount > 0) {
+              parts.push(t("people.couldntAdd", { count: skippedCount }));
+            }
+            setNotice(parts.join(" ") || t("people.libraryUpdated"));
+            setError(null);
+            router.refresh();
+          }}
+        />
+      ) : null}
 
       {lightbox && viewerMounted
         ? createPortal(
@@ -885,11 +910,15 @@ export function PersonDetailView({
                   </div>
                 ) : null}
                 <div className="flex shrink-0 flex-col gap-3 border-t border-ink/8 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-sm text-ink-muted">
-                    {person.cover?.faceId === lightbox.faceId
-                      ? t("memories.currentCover")
-                      : t("people.useFaceAsCover")}
-                  </p>
+                  {isPersonOwner ? (
+                    <p className="text-sm text-ink-muted">
+                      {person.cover?.faceId === lightbox.faceId
+                        ? t("memories.currentCover")
+                        : t("people.useFaceAsCover")}
+                    </p>
+                  ) : (
+                    <span />
+                  )}
                   <div className="flex flex-wrap items-center gap-2">
                     <MediaTagsControl
                       mediaId={lightbox.id}
@@ -899,44 +928,50 @@ export function PersonDetailView({
                       onNext={lightboxNext}
                       onOpenChange={setTagsOpen}
                     />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        removeMediaFromPerson(
-                          lightbox.faceId,
-                          lightbox.id,
-                          lightbox.type,
-                        )
-                      }
-                      disabled={pending}
-                      className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-800 hover:bg-red-100 disabled:opacity-60"
-                    >
-                      <UserMinus className="size-3" aria-hidden />
-                      {t("people.removeFromPerson", {
-                        name: person.displayName,
-                      })}
-                    </button>
-                    {person.cover?.faceId !== lightbox.faceId ? (
-                      <button
-                        type="button"
-                        onClick={() => setCover(lightbox.faceId)}
-                        disabled={pending}
-                        className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground hover:bg-accent-deep disabled:opacity-60"
-                      >
-                        <Star className="size-3" aria-hidden />
-                        {t("people.setCover")}
-                      </button>
+                    {isPersonOwner ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            removeMediaFromPerson(
+                              lightbox.faceId,
+                              lightbox.id,
+                              lightbox.type,
+                            )
+                          }
+                          disabled={pending}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-800 hover:bg-red-100 disabled:opacity-60"
+                        >
+                          <UserMinus className="size-3" aria-hidden />
+                          {t("people.removeFromPerson", {
+                            name: person.displayName,
+                          })}
+                        </button>
+                        {person.cover?.faceId !== lightbox.faceId ? (
+                          <button
+                            type="button"
+                            onClick={() => setCover(lightbox.faceId)}
+                            disabled={pending}
+                            className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground hover:bg-accent-deep disabled:opacity-60"
+                          >
+                            <Star className="size-3" aria-hidden />
+                            {t("people.setCover")}
+                          </button>
+                        ) : null}
+                      </>
                     ) : null}
                   </div>
                 </div>
-                <FaceLabelEditor
-                  mediaId={lightbox.id}
-                  people={allPeople}
-                  onChanged={() => {
-                    setNotice(t("people.faceLabelsUpdated"));
-                    router.refresh();
-                  }}
-                />
+                {isPersonOwner ? (
+                  <FaceLabelEditor
+                    mediaId={lightbox.id}
+                    people={allPeople}
+                    onChanged={() => {
+                      setNotice(t("people.faceLabelsUpdated"));
+                      router.refresh();
+                    }}
+                  />
+                ) : null}
               </div>
             </div>,
             document.body,

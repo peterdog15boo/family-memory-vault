@@ -820,15 +820,15 @@ export const people = pgTable(
     avatarFocusY: doublePrecision("avatar_focus_y"),
     avatarZoom: doublePrecision("avatar_zoom"),
     /**
-     * Short family story built from captions on photos where this person appears.
-     * Never invents biography when there are no captions.
+     * AI “Notes from photos” — helper summary from captions/comments.
+     * Human Story posts live in `person_story_posts` (never overwritten by notes).
      */
     storyBody: text("story_body"),
     storySourceCaptionCount: integer("story_source_caption_count")
       .default(0)
       .notNull(),
     storyGeneratedAt: timestamp("story_generated_at", { withTimezone: true }),
-    /** system (auto) | user (refresh) */
+    /** system (auto) | user (refresh notes) */
     storyGeneratedBy: text("story_generated_by").$type<"system" | "user">(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -843,6 +843,35 @@ export const people = pgTable(
     index("people_cover_face_id_idx").on(table.coverFaceId),
     /** listPeopleForUser orders by updated_at */
     index("people_user_id_updated_at_idx").on(table.userId, table.updatedAt),
+  ],
+);
+
+/**
+ * Human Story posts about a person — the real family feed.
+ * AI photo notes stay on `people.story_*` and never overwrite these.
+ */
+export const personStoryPosts = pgTable(
+  "person_story_posts",
+  {
+    id: text("id").primaryKey(),
+    personId: text("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    authorUserId: text("author_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    editedAt: timestamp("edited_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("person_story_posts_person_id_created_at_idx").on(
+      table.personId,
+      table.createdAt,
+    ),
+    index("person_story_posts_author_user_id_idx").on(table.authorUserId),
   ],
 );
 
@@ -3079,7 +3108,22 @@ export const peopleRelations = relations(people, ({ one, many }) => ({
   }),
   faces: many(faces),
   treeNodes: many(familyTreeNodes),
+  storyPosts: many(personStoryPosts),
 }));
+
+export const personStoryPostsRelations = relations(
+  personStoryPosts,
+  ({ one }) => ({
+    person: one(people, {
+      fields: [personStoryPosts.personId],
+      references: [people.id],
+    }),
+    author: one(users, {
+      fields: [personStoryPosts.authorUserId],
+      references: [users.id],
+    }),
+  }),
+);
 
 export const familyTreeNodesRelations = relations(
   familyTreeNodes,
@@ -3519,6 +3563,8 @@ export type PhotoRequest = typeof photoRequests.$inferSelect;
 export type NewPhotoRequest = typeof photoRequests.$inferInsert;
 export type Person = typeof people.$inferSelect;
 export type NewPerson = typeof people.$inferInsert;
+export type PersonStoryPost = typeof personStoryPosts.$inferSelect;
+export type NewPersonStoryPost = typeof personStoryPosts.$inferInsert;
 export type FamilyTreeNode = typeof familyTreeNodes.$inferSelect;
 export type NewFamilyTreeNode = typeof familyTreeNodes.$inferInsert;
 export type FamilyTreeRelationship = typeof familyTreeRelationships.$inferSelect;

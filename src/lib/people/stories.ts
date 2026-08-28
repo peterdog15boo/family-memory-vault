@@ -5,15 +5,15 @@
  * Never invents a biography when there are no captions.
  */
 
-import { and, eq } from "drizzle-orm";
-import { z } from "zod";
-import { completeChatJson, isLlmConfigured } from "@/lib/ai/llm";
-import { getDb } from "@/lib/db";
-import { people, type Media } from "@/lib/db/schema";
 import { listVisibleMediaLinkedToPerson } from "@/lib/people/person-media";
-import { getPersonForUser } from "@/lib/people";
 import { listCommentBodiesForMediaIds } from "@/lib/media/comments";
 import { isLowSignalMediaComment } from "@/lib/media/comments-shared";
+import { getDb } from "@/lib/db";
+import { people, type Media } from "@/lib/db/schema";
+import { canViewPerson } from "@/lib/permissions";
+import { eq } from "drizzle-orm";
+import { z } from "zod";
+import { completeChatJson, isLlmConfigured } from "@/lib/ai/llm";
 
 export const PERSON_STORY_GENERATED_BY = ["system", "user"] as const;
 export type PersonStoryGeneratedBy = (typeof PERSON_STORY_GENERATED_BY)[number];
@@ -151,11 +151,11 @@ async function composeLlmPersonStory(
       messages: [
         {
           role: "system",
-          content: `You write a short family Story about one person from photo captions only.
+          content: `You write short “Notes from photos” about one person from photo captions only.
 Return JSON: {"body":"..."}.
 Rules:
-- Warm, readable family tone. No legal or medical claims.
-- Use ONLY facts and feelings present in the captions. Never invent biography, jobs, ages, or relationships.
+- Warm, readable family tone. These are helper notes for someone writing a tribute — not a full biography.
+- Use ONLY facts and feelings present in the captions. Never invent jobs, ages, dates, or personality claims beyond those texts.
 - You may quote a few distinctive caption phrases.
 - ${lengthHint}
 - If captions are sparse, keep it brief. Do not pad with generic filler.
@@ -210,13 +210,20 @@ export function personStorySnapshotFromRow(row: {
 
 /**
  * Load caption beats for a person visible to this user.
- * Returns null if the person is not accessible (outsider / wrong owner).
+ * Returns null if the person is not accessible (outsider).
  */
 export async function listPersonStoryCaptionBeats(
   userId: string,
   personId: string,
 ): Promise<{ displayName: string; beats: PersonStoryCaptionBeat[] } | null> {
-  const person = await getPersonForUser(personId, userId);
+  if (!(await canViewPerson(userId, personId))) return null;
+
+  const db = getDb();
+  const [person] = await db
+    .select({ id: people.id, name: people.name })
+    .from(people)
+    .where(eq(people.id, personId))
+    .limit(1);
   if (!person) return null;
 
   const visible = await listVisibleMediaLinkedToPerson(userId, personId);
@@ -233,10 +240,9 @@ export async function listPersonStoryCaptionBeats(
 }
 
 /**
- * Regenerate and persist the story from currently visible captions.
- * Owner-scoped (same as Person detail). Empty captions clear the story.
+ * Regenerate AI “Notes from photos” only. Never touches human Story posts.
  */
-export async function regeneratePersonStory(input: {
+export async function regeneratePersonStoryNotes(input: {
   userId: string;
   personId: string;
   generatedBy?: PersonStoryGeneratedBy;
@@ -271,9 +277,7 @@ export async function regeneratePersonStory(input: {
       storyGeneratedBy: body ? generatedBy : null,
       updatedAt: now,
     })
-    .where(
-      and(eq(people.id, input.personId), eq(people.userId, input.userId)),
-    )
+    .where(eq(people.id, input.personId))
     .returning({
       storyBody: people.storyBody,
       storySourceCaptionCount: people.storySourceCaptionCount,
@@ -283,4 +287,14 @@ export async function regeneratePersonStory(input: {
 
   if (!updated) throw new Error("Person not found.");
   return personStorySnapshotFromRow(updated);
+}
+
+/** @deprecated Prefer regeneratePersonStoryNotes — posts are separate. */
+export async function regeneratePersonStory(input: {
+  userId: string;
+  personId: string;
+  generatedBy?: PersonStoryGeneratedBy;
+  signal?: AbortSignal;
+}): Promise<PersonStorySnapshot> {
+  return regeneratePersonStoryNotes(input);
 }

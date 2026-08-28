@@ -5,7 +5,7 @@
 
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { faces, type Face, type Media } from "@/lib/db/schema";
+import { faces, people, type Face, type Media } from "@/lib/db/schema";
 import {
   loadCleanAccessibleMediaByIds,
   toSafeMediaItem,
@@ -18,6 +18,12 @@ import {
   type PersonWithFaceCount,
 } from "@/lib/people";
 import type { FaceBoundingBox } from "@/lib/people/types";
+import { canViewPerson } from "@/lib/permissions";
+import { getPersonStoryFeed } from "@/lib/people/story-posts";
+import type {
+  PersonStoryNotesView,
+  PersonStoryPostView,
+} from "@/lib/people/story-posts-shared";
 
 export type PersonCoverPreview = {
   faceId: string;
@@ -59,7 +65,15 @@ export type PersonDetail = PersonListItem & {
   photoDateFrom: Date | null;
   /** Latest clean photo createdAt. */
   photoDateTo: Date | null;
-  /** Story from captions on visible photos (null body = empty state). */
+  /** AI notes from captions (helper — not the human feed). */
+  storyNotes: PersonStoryNotesView;
+  /** Human Story posts (oldest → newest). */
+  storyPosts: PersonStoryPostView[];
+  canPostStory: boolean;
+  isPersonOwner: boolean;
+  /**
+   * @deprecated Prefer storyNotes — kept for older clients during transition.
+   */
   story: {
     body: string | null;
     sourceCaptionCount: number;
@@ -98,6 +112,8 @@ export type SerializedPersonDetail = Omit<
   | "photoDateFrom"
   | "photoDateTo"
   | "story"
+  | "storyNotes"
+  | "storyPosts"
 > & {
   createdAt: string;
   updatedAt: string;
@@ -105,6 +121,10 @@ export type SerializedPersonDetail = Omit<
   photos: SerializedPersonPhoto[];
   photoDateFrom: string | null;
   photoDateTo: string | null;
+  storyNotes: PersonStoryNotesView;
+  storyPosts: PersonStoryPostView[];
+  canPostStory: boolean;
+  isPersonOwner: boolean;
   story: {
     body: string | null;
     sourceCaptionCount: number;
@@ -153,6 +173,10 @@ export function serializePersonDetail(
       ? item.photoDateFrom.toISOString()
       : null,
     photoDateTo: item.photoDateTo ? item.photoDateTo.toISOString() : null,
+    storyNotes: item.storyNotes,
+    storyPosts: item.storyPosts,
+    canPostStory: item.canPostStory,
+    isPersonOwner: item.isPersonOwner,
     story: {
       body: item.story.body,
       sourceCaptionCount: item.story.sourceCaptionCount,
@@ -345,7 +369,14 @@ export async function getPersonWithPhotos(
   personId: string,
   userId: string,
 ): Promise<PersonDetail | null> {
-  const person = await getPersonForUser(personId, userId);
+  if (!(await canViewPerson(userId, personId))) return null;
+
+  const db = getDb();
+  const [person] = await db
+    .select()
+    .from(people)
+    .where(eq(people.id, personId))
+    .limit(1);
   if (!person) return null;
 
   const { listVisibleMediaLinkedToPerson } = await import(
@@ -406,13 +437,14 @@ export async function getPersonWithPhotos(
   };
   const covers = await resolveCoversForPeople(userId, [listShape]);
 
-  const by = person.storyGeneratedBy;
+  const feed = await getPersonStoryFeed(userId, personId);
   const story = {
-    body: person.storyBody?.trim() || null,
-    sourceCaptionCount: person.storySourceCaptionCount ?? 0,
-    generatedAt: person.storyGeneratedAt ?? null,
-    generatedBy:
-      by === "system" || by === "user" ? (by as "system" | "user") : null,
+    body: feed.notes.body,
+    sourceCaptionCount: feed.notes.sourceCount,
+    generatedAt: feed.notes.generatedAt
+      ? new Date(feed.notes.generatedAt)
+      : null,
+    generatedBy: feed.notes.generatedBy,
   };
 
   return {
@@ -422,6 +454,10 @@ export async function getPersonWithPhotos(
     photos,
     photoDateFrom,
     photoDateTo,
+    storyNotes: feed.notes,
+    storyPosts: feed.posts,
+    canPostStory: feed.canPost,
+    isPersonOwner: feed.isPersonOwner,
     story,
   };
 }

@@ -407,6 +407,13 @@
       "when": 1787950000000,
       "tag": "0068_media_comments",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1787960000000,
+      "tag": "0069_person_story_posts",
+      "breakpoints": true
     }
   ]
 }

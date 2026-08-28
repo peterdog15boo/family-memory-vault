@@ -361,11 +361,31 @@ export async function canEditMemory(
 }
 
 /**
- * View a person identity — owner-only for now.
- * People/faces are not shared via family membership; do not use family
- * co-membership here until an explicit people-sharing model exists.
+ * View a person identity.
+ * Owner always; family members with view access to the owner's vault
+ * (same gate as that owner's clean media) may open Person detail for Story
+ * and photos they can already see.
  */
 export async function canViewPerson(
+  userId: string,
+  personId: string,
+): Promise<boolean> {
+  const db = getDb();
+  const [row] = await db
+    .select({ userId: people.userId })
+    .from(people)
+    .where(eq(people.id, personId))
+    .limit(1);
+
+  if (!row) return false;
+  return canViewOwnedBy(userId, row.userId);
+}
+
+/**
+ * Edit person identity metadata (name, merge, delete, cover).
+ * Owner only — family may post on Story but not rewrite the identity.
+ */
+export async function canEditPerson(
   userId: string,
   personId: string,
 ): Promise<boolean> {
