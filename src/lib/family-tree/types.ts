@@ -121,6 +121,8 @@ export function assignGenerationRanks(
   options?: {
     partnerPairs?: Array<readonly [string, string]>;
     siblingPairs?: Array<readonly [string, string]>;
+    /** Cousins share a generation with their peer (never float on the parent row). */
+    cousinPairs?: Array<readonly [string, string]>;
   },
 ): Record<string, number> {
   const idSet = new Set(nodeIds);
@@ -151,7 +153,7 @@ export function assignGenerationRanks(
 
   for (const id of nodeIds) rankOf(id);
 
-  // Union-find for same-generation constraints (partners + siblings).
+  // Union-find for same-generation constraints (partners + siblings + cousins).
   const parent = new Map<string, string>();
   function find(id: string): string {
     const p = parent.get(id) ?? id;
@@ -171,6 +173,7 @@ export function assignGenerationRanks(
   for (const id of nodeIds) parent.set(id, id);
   for (const [a, b] of options?.partnerPairs ?? []) union(a, b);
   for (const [a, b] of options?.siblingPairs ?? []) union(a, b);
+  for (const [a, b] of options?.cousinPairs ?? []) union(a, b);
 
   const componentMembers = new Map<string, string[]>();
   for (const id of nodeIds) {

@@ -1034,10 +1034,14 @@ export async function getFamilyTreeGraph(
     .filter((r) => r.type === "sibling_of")
     .map((r) => [r.fromNodeId, r.toNodeId] as const);
 
+  const cousinPairs: Array<readonly [string, string]> = relationships
+    .filter((r) => r.type === "cousin_of")
+    .map((r) => [r.fromNodeId, r.toNodeId] as const);
+
   const generations = assignGenerationRanks(
     nodes.map((n) => n.id),
     parentEdges,
-    { partnerPairs, siblingPairs },
+    { partnerPairs, siblingPairs, cousinPairs },
   );
 
   const derivedAll = deriveFamilyTreeEdges(parentEdges);

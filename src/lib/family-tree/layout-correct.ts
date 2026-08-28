@@ -215,6 +215,9 @@ export function computeNaiveFamilyTreeLayout(
       siblingPairs: edges
         .filter((e) => e.type === "sibling_of")
         .map((e) => [e.fromNodeId, e.toNodeId] as const),
+      cousinPairs: edges
+        .filter((e) => e.type === "cousin_of")
+        .map((e) => [e.fromNodeId, e.toNodeId] as const),
     },
   );
 

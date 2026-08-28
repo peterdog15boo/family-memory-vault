@@ -82,6 +82,19 @@ describe("assignGenerationRanks", () => {
     expect(ranks.jeff).toBe(ranks.kathy);
     expect(ranks.dad).toBeLessThan(ranks.jeff);
   });
+
+  it("keeps cousins on the same generation as their peer", () => {
+    const ranks = assignGenerationRanks(
+      ["jeff", "kathy", "scott", "dad"],
+      [{ fromNodeId: "dad", toNodeId: "kathy" }],
+      {
+        partnerPairs: [["jeff", "kathy"]],
+        cousinPairs: [["kathy", "scott"]],
+      },
+    );
+    expect(ranks.scott).toBe(ranks.kathy);
+    expect(ranks.dad).toBeLessThan(ranks.scott);
+  });
 });
 
 describe("isFamilyTreeRelationType", () => {
