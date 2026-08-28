@@ -13,6 +13,7 @@ import {
 import {
   canAutoSpouseCoParents,
   hasPartnerLink,
+  missingChildrenForNewSpouse,
   spouseIdsOf,
   type GenealogyEdge,
 } from "@/lib/family-tree/genealogy-iq";
@@ -621,6 +622,60 @@ export function planFamilyTreeRepair(graph: RepairGraph): RepairPlan {
           childId: link.childId,
           reason:
             "Sibling was missing the shared parent link that their brother or sister already has.",
+        });
+        ancestry.push({
+          fromNodeId: link.parentId,
+          toNodeId: link.childId,
+          type: "parent_of",
+        });
+        workingEdges.push({
+          fromNodeId: link.parentId,
+          toNodeId: link.childId,
+          type: "parent_of",
+        });
+      }
+    }
+  }
+
+  // 7e) Couple default: spouse of a parent also parents that person's children
+  //     unless the spouse already has a separate set of kids (blended).
+  //     Fixes James+Nettie → Helene/Betty when Nettie was only linked as partner.
+  {
+    const seenPartners = new Set<string>();
+    for (const e of workingEdges) {
+      if (e.type !== "partner_of") continue;
+      const a = e.fromNodeId;
+      const b = e.toNodeId;
+      const key = a < b ? `${a}|${b}` : `${b}|${a}`;
+      if (seenPartners.has(key)) continue;
+      seenPartners.add(key);
+
+      const pairs: Array<{ parentId: string; childId: string }> = [];
+      for (const childId of missingChildrenForNewSpouse(workingEdges, a, b)) {
+        pairs.push({ parentId: b, childId });
+      }
+      for (const childId of missingChildrenForNewSpouse(workingEdges, b, a)) {
+        pairs.push({ parentId: a, childId });
+      }
+
+      for (const link of pairs) {
+        const alreadyPlanned = ops.some(
+          (o) =>
+            o.op === "add_parent" &&
+            o.parentId === link.parentId &&
+            o.childId === link.childId,
+        );
+        if (alreadyPlanned) continue;
+        if (wouldCreateParentCycle(ancestry, link.parentId, link.childId)) {
+          continue;
+        }
+        const childLabel = nodeById.get(link.childId)?.label ?? "child";
+        const parentLabel = nodeById.get(link.parentId)?.label ?? "spouse";
+        ops.push({
+          op: "add_parent",
+          parentId: link.parentId,
+          childId: link.childId,
+          reason: `${parentLabel} is married to a parent of ${childLabel} and should share that parent link by default.`,
         });
         ancestry.push({
           fromNodeId: link.parentId,
