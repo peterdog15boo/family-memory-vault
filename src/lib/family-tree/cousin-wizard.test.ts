@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { computeFamilyTreeLayout, TREE_LAYOUT } from "@/lib/family-tree/layout";
-import { listCousinAttachCandidates } from "@/lib/family-tree/cousin-wizard";
+import { listCousinAttachCandidates } from "@/lib/family-tree/cousin-attach";
 import type { FamilyTreeRelationType } from "@/lib/db/schema";
 
 /**

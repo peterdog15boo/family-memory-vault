@@ -6,7 +6,7 @@ import type { SerializedFamilyTreeGraph } from "@/lib/family-tree/serialize";
 import {
   listCousinAttachCandidates,
   type CousinAttachWhich,
-} from "@/lib/family-tree/cousin-wizard";
+} from "@/lib/family-tree/cousin-attach";
 import { cn } from "@/lib/utils";
 
 export type CousinWizardSubmit = {

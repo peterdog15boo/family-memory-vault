@@ -19,10 +19,8 @@ import {
   type FamilyTreeGraph,
   type FamilyTreeRelationshipScaffoldResult,
 } from "@/lib/family-tree/index";
-import {
-  createNamedCousinBranch,
-  listCousinAttachCandidates,
-} from "@/lib/family-tree/cousin-wizard";
+import { createNamedCousinBranch } from "@/lib/family-tree/cousin-wizard";
+import { listCousinAttachCandidates } from "@/lib/family-tree/cousin-attach";
 import {
   cousinSidePromptMessage,
   shouldAskCousinSide,
