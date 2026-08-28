@@ -179,14 +179,13 @@ describe("relation label anchors", () => {
     );
   }
 
-  it("does not draw cousin polylines; keeps local sibling badges", () => {
+  it("skips sibling lines under a shared parent union; keeps Helene–Betty style bridges", () => {
     const layout = computeFamilyTreeLayout(nodes, edges);
     const by = Object.fromEntries(layout.nodes.map((n) => [n.id, n]));
     const mid = (id: string) => by[id]!.x + 50;
 
-    const cousin = layout.edges.find((e) => e.type === "cousin_of");
-    expect(cousin).toBeUndefined();
-    // cousin_of stays in the graph for search / structure — just not drawn.
+    // cousin_of stays in data but is never drawn
+    expect(layout.edges.some((e) => e.type === "cousin_of")).toBe(false);
     expect(
       edges.some(
         (e) =>
@@ -196,21 +195,13 @@ describe("relation label anchors", () => {
       ),
     ).toBe(true);
 
-    // Sibling badges still sit on real sibling connectors.
+    // Kat↔Donna share Diane+Frank — no sibling spaghetti
     const sibDonnaKat = layout.edges.find(
       (e) => e.type === "sibling_of" && endpoints(e, "donna", "kathy"),
     );
-    expect(sibDonnaKat?.label).toBe("Sibling");
-    expect(sibDonnaKat!.labelY!).toBeLessThan(
-      Math.min(by.donna!.y, by.kathy!.y),
-    );
-    expect(sibDonnaKat!.labelX!).toBeGreaterThan(
-      Math.min(mid("donna"), mid("kathy")),
-    );
-    expect(sibDonnaKat!.labelX!).toBeLessThan(
-      Math.max(mid("donna"), mid("kathy")),
-    );
+    expect(sibDonnaKat).toBeUndefined();
 
+    // Mary↔Diane have no shared visible parents — sibling connector remains
     const sibMaryDiane = layout.edges.find(
       (e) => e.type === "sibling_of" && endpoints(e, "mary", "diane"),
     );
@@ -218,12 +209,16 @@ describe("relation label anchors", () => {
     expect(sibMaryDiane!.labelY!).toBeLessThan(
       Math.min(by.mary!.y, by.diane!.y),
     );
+    expect(sibMaryDiane!.labelX!).toBeGreaterThan(
+      Math.min(mid("mary"), mid("diane")),
+    );
+    expect(sibMaryDiane!.labelX!).toBeLessThan(
+      Math.max(mid("mary"), mid("diane")),
+    );
 
-    // Spouse connectors never inherit cousin/sibling badges.
     for (const e of layout.edges.filter((x) => x.type === "partner_of")) {
       expect(e.label).toBeUndefined();
     }
-    // Parent drops stay unlabeled (avoid clutter).
     for (const e of layout.edges.filter((x) => x.type === "parent_of")) {
       expect(e.label).toBeUndefined();
     }

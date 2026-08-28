@@ -163,6 +163,46 @@ function extendedConnectorPath(
 }
 
 /**
+ * Both people have parent_of links into at least one shared parent that is
+ * actually placed on the canvas (a visible parent union / drop).
+ */
+export function sharedVisibleParents(
+  aId: string,
+  bId: string,
+  parentsOfChild: ReadonlyMap<string, readonly string[]>,
+  placedIds: ReadonlySet<string>,
+): boolean {
+  const parentsA = (parentsOfChild.get(aId) ?? []).filter((id) =>
+    placedIds.has(id),
+  );
+  const parentsB = (parentsOfChild.get(bId) ?? []).filter((id) =>
+    placedIds.has(id),
+  );
+  if (parentsA.length === 0 || parentsB.length === 0) return false;
+  const setB = new Set(parentsB);
+  return parentsA.some((p) => setB.has(p));
+}
+
+/**
+ * Render-only: sibling_of is drawn only when same generation row and the
+ * pair does NOT already hang from a shared visible parent union.
+ * Helene↔Betty keeps a line; Kat↔Donna under Diane+Frank does not.
+ */
+export function shouldDrawSiblingConnector(
+  from: NodePosition,
+  to: NodePosition,
+  parentsOfChild: ReadonlyMap<string, readonly string[]>,
+  placedIds: ReadonlySet<string>,
+): boolean {
+  const sameGenerationRow = Math.abs(from.y - to.y) < NODE_HEIGHT * 0.55;
+  if (!sameGenerationRow) return false;
+  if (sharedVisibleParents(from.id, to.id, parentsOfChild, placedIds)) {
+    return false;
+  }
+  return true;
+}
+
+/**
  * Project every canonical relationship onto placed nodes.
  * One relationship → at most one connector. Never invents edges.
  */
@@ -174,6 +214,7 @@ export function projectRelationshipsToConnectors(
   verification: EdgeProjectionVerification;
 } {
   const posById = new Map(placedNodes.map((n) => [n.id, n]));
+  const placedIds = new Set(placedNodes.map((n) => n.id));
   const connectors: ProjectedConnector[] = [];
   const relationshipsWithoutConnector: string[] = [];
 
@@ -227,14 +268,11 @@ export function projectRelationshipsToConnectors(
           : parentConnectorPath(from, to);
       emphasis = "structure";
     } else if (rel.type === "sibling_of") {
-      // Only short same-row sibling links (family block). Long arcs across
-      // the chart stay in data but are not drawn.
-      const sameRow = Math.abs(from.y - to.y) < NODE_HEIGHT * 0.55;
-      const span = Math.abs(
-        from.x + NODE_WIDTH / 2 - (to.x + NODE_WIDTH / 2),
-      );
-      const maxLocalSpan = NODE_WIDTH * 5 + 160;
-      if (!sameRow || span > maxLocalSpan) {
+      // Keep sibling_of in data; only draw when it is the structural proof
+      // (same row, no shared visible parent drop already on canvas).
+      if (
+        !shouldDrawSiblingConnector(from, to, parentsOfChild, placedIds)
+      ) {
         continue;
       }
       const geom = extendedConnectorPath(from, to);
@@ -277,7 +315,7 @@ export function projectRelationshipsToConnectors(
     renderedEdgeCount: connectors.length,
     relationshipsWithoutConnector,
     connectorsWithoutRelationship,
-    // Cousin / long / extended ties may be stored without a connector.
+    // Cousin / redundant sibling / extended ties may be stored without a connector.
     ok:
       relationshipsWithoutConnector.length === 0 &&
       connectorsWithoutRelationship.length === 0,
