@@ -3,11 +3,10 @@
  * in one logical transaction (rollback on failure). Never leaves an
  * unattached cousin node.
  *
- * Server-only module (DB / people). Client UI must import attach helpers
- * from `@/lib/family-tree/cousin-attach` instead.
+ * Server write path (DB / people). Client UI must import attach helpers
+ * from `@/lib/family-tree/cousin-attach` instead — never this module.
  */
 
-import "server-only";
 import { nanoid } from "nanoid";
 import { and, eq, inArray } from "drizzle-orm";
 import {
