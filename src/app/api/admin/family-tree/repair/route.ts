@@ -3,22 +3,34 @@ import { z } from "zod";
 import { requireAdminApi } from "@/lib/auth/admin";
 import { logAdminAudit } from "@/lib/admin/audit";
 import { getDb } from "@/lib/db";
-import { familyTreeNodes, familyTreeRelationships } from "@/lib/db/schema";
+import {
+  families,
+  familyTreeNodes,
+  familyTreeRelationships,
+} from "@/lib/db/schema";
 import { runFamilyTreeRepairPass } from "@/lib/family-tree/repair-apply";
 import { planFamilyTreeRepair } from "@/lib/family-tree/repair";
 import { asc, eq } from "drizzle-orm";
 
 export const runtime = "nodejs";
 
-const bodySchema = z.object({
-  /** Vault owner whose tree should be repaired. */
-  userId: z.string().trim().min(1),
-  dryRun: z.boolean().optional(),
-});
+const bodySchema = z
+  .object({
+    /** Family whose tree should be repaired. */
+    familyId: z.string().trim().min(1).optional(),
+    /** People vault / plan owner (family creator). Alias: userId. */
+    peopleOwnerId: z.string().trim().min(1).optional(),
+    /** @deprecated Prefer peopleOwnerId — kept for admin UI compatibility. */
+    userId: z.string().trim().min(1).optional(),
+    dryRun: z.boolean().optional(),
+  })
+  .refine((v) => Boolean(v.familyId || v.peopleOwnerId || v.userId), {
+    message: "familyId or peopleOwnerId/userId is required",
+  });
 
 /**
  * POST /api/admin/family-tree/repair
- * Admin-triggerable Genealogy repair pass for one vault owner's tree.
+ * Admin-triggerable Genealogy repair pass for one family tree.
  */
 export async function POST(request: Request) {
   const authResult = await requireAdminApi();
@@ -45,20 +57,54 @@ export async function POST(request: Request) {
   }
 
   const dryRun = parsed.data.dryRun === true;
-  const targetUserId = parsed.data.userId;
   const db = getDb();
 
   try {
+    let familyId = parsed.data.familyId?.trim() || "";
+    let peopleOwnerId =
+      parsed.data.peopleOwnerId?.trim() ||
+      parsed.data.userId?.trim() ||
+      "";
+
+    if (familyId && !peopleOwnerId) {
+      const [fam] = await db
+        .select({ createdByUserId: families.createdByUserId })
+        .from(families)
+        .where(eq(families.id, familyId))
+        .limit(1);
+      if (!fam) {
+        return NextResponse.json({ error: "Family not found" }, { status: 404 });
+      }
+      peopleOwnerId = fam.createdByUserId;
+    }
+
+    if (!familyId && peopleOwnerId) {
+      const [fam] = await db
+        .select({ id: families.id })
+        .from(families)
+        .where(eq(families.createdByUserId, peopleOwnerId))
+        .limit(1);
+      if (!fam) {
+        return NextResponse.json(
+          { error: "No family found for that people owner" },
+          { status: 404 },
+        );
+      }
+      familyId = fam.id;
+    }
+
+    const scope = { familyId, peopleOwnerId };
+
     const [rawNodes, rawRelationships] = await Promise.all([
       db
         .select()
         .from(familyTreeNodes)
-        .where(eq(familyTreeNodes.userId, targetUserId))
+        .where(eq(familyTreeNodes.familyId, familyId))
         .orderBy(asc(familyTreeNodes.createdAt)),
       db
         .select()
         .from(familyTreeRelationships)
-        .where(eq(familyTreeRelationships.userId, targetUserId))
+        .where(eq(familyTreeRelationships.familyId, familyId))
         .orderBy(asc(familyTreeRelationships.createdAt)),
     ]);
 
@@ -80,9 +126,10 @@ export async function POST(request: Request) {
       await logAdminAudit({
         actorId: authResult.userId,
         action: "family_tree.repair_dry_run",
-        targetType: "user",
-        targetId: targetUserId,
+        targetType: "family",
+        targetId: familyId,
         metadata: {
+          peopleOwnerId,
           opCount: plan.ops.length,
           before: plan.beforeSnapshot,
           ops: plan.ops,
@@ -91,6 +138,8 @@ export async function POST(request: Request) {
       return NextResponse.json({
         ok: true,
         dryRun: true,
+        familyId,
+        peopleOwnerId,
         summary: plan.summary,
         opCount: plan.ops.length,
         ops: plan.ops,
@@ -99,7 +148,7 @@ export async function POST(request: Request) {
     }
 
     const repaired = await runFamilyTreeRepairPass(
-      targetUserId,
+      scope,
       rawNodes,
       rawRelationships,
     );
@@ -107,9 +156,10 @@ export async function POST(request: Request) {
     await logAdminAudit({
       actorId: authResult.userId,
       action: "family_tree.repair",
-      targetType: "user",
-      targetId: targetUserId,
+      targetType: "family",
+      targetId: familyId,
       metadata: {
+        peopleOwnerId,
         applied: repaired.result.applied,
         opsApplied: repaired.result.opsApplied,
         flaggedNodeIds: repaired.result.flaggedNodeIds,
@@ -122,6 +172,8 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       dryRun: false,
+      familyId,
+      peopleOwnerId,
       ...repaired.result,
     });
   } catch (error) {

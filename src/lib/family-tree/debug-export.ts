@@ -9,6 +9,7 @@ import {
   computeFamilyTreeLayout,
   TREE_LAYOUT,
 } from "@/lib/family-tree/layout";
+import type { FamilyTreeScope } from "@/lib/family-tree/scope";
 import type { FamilyTreeRelationType } from "@/lib/db/schema";
 
 export type FamilyTreeDebugExportOptions = {
@@ -57,6 +58,7 @@ export type FamilyTreeDebugUnion = {
 export type FamilyTreeDebugExport = {
   exportedAt: string;
   treeOwnerUserId: string;
+  familyId: string;
   focusCouple: {
     leftId: string;
     rightId: string;
@@ -414,14 +416,14 @@ export function buildParentUnions(
 }
 
 /**
- * Build a downloadable debug dump for one vault owner's family tree.
+ * Build a downloadable debug dump for one family tree.
  */
 export async function buildFamilyTreeDebugExport(
-  treeOwnerUserId: string,
+  scope: FamilyTreeScope,
   options: FamilyTreeDebugExportOptions = {},
 ): Promise<FamilyTreeDebugExport> {
   const skipRepair = options.skipRepair !== false;
-  const graph = await getFamilyTreeGraph(treeOwnerUserId, { skipRepair });
+  const graph = await getFamilyTreeGraph(scope, { skipRepair });
 
   const rels: Rel[] = graph.relationships.map((r) => ({
     id: r.id,
@@ -498,7 +500,8 @@ export async function buildFamilyTreeDebugExport(
 
   return {
     exportedAt: new Date().toISOString(),
-    treeOwnerUserId,
+    treeOwnerUserId: scope.peopleOwnerId,
+    familyId: scope.familyId,
     focusCouple,
     nodes: graph.nodes.map((n) => {
       const pos = layoutById.get(n.id);
@@ -542,8 +545,11 @@ export async function buildFamilyTreeDebugExport(
   };
 }
 
-export function familyTreeDebugFilename(treeOwnerUserId: string): string {
+export function familyTreeDebugFilename(scopeOrId: FamilyTreeScope | string): string {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const short = treeOwnerUserId.slice(0, 12);
+  const short =
+    typeof scopeOrId === "string"
+      ? scopeOrId.slice(0, 12)
+      : scopeOrId.familyId.slice(0, 12);
   return `family-tree-debug-${short}-${stamp}.json`;
 }

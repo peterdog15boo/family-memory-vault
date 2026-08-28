@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { runGenealogyCommand } from "@/lib/family-tree/engine";
 import {
+  familyIdFromRequestUrl,
   familyTreeApiErrorResponse,
   requireFamilyTreeEditAccess,
 } from "@/lib/family-tree/http";
@@ -23,7 +24,9 @@ const patchBodySchema = z.object({
  * Delegates to the Genealogy Relationship Engine.
  */
 export async function PATCH(request: Request, context: RouteContext) {
-  const authResult = await requireFamilyTreeEditAccess();
+  const authResult = await requireFamilyTreeEditAccess(
+    familyIdFromRequestUrl(request),
+  );
   if (!authResult.ok) return authResult.response;
 
   try {
@@ -37,11 +40,11 @@ export async function PATCH(request: Request, context: RouteContext) {
       );
     }
 
-    const treeOwnerId = authResult.treeOwnerId;
+    const scope = authResult.scope;
     let tree = null;
 
     if (parsed.data.label !== undefined || parsed.data.notes !== undefined) {
-      const result = await runGenealogyCommand(treeOwnerId, {
+      const result = await runGenealogyCommand(scope, {
         type: "renameNode",
         nodeId: id,
         label: parsed.data.label,
@@ -57,7 +60,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
 
     if (parsed.data.personId !== undefined) {
-      const result = await runGenealogyCommand(treeOwnerId, {
+      const result = await runGenealogyCommand(scope, {
         type: "linkPlaceholderToPerson",
         nodeId: id,
         peopleId: parsed.data.personId,
@@ -95,13 +98,15 @@ export async function PATCH(request: Request, context: RouteContext) {
 /**
  * DELETE /api/family-tree/nodes/[id]
  */
-export async function DELETE(_request: Request, context: RouteContext) {
-  const authResult = await requireFamilyTreeEditAccess();
+export async function DELETE(request: Request, context: RouteContext) {
+  const authResult = await requireFamilyTreeEditAccess(
+    familyIdFromRequestUrl(request),
+  );
   if (!authResult.ok) return authResult.response;
 
   try {
     const { id } = await context.params;
-    const result = await runGenealogyCommand(authResult.treeOwnerId, {
+    const result = await runGenealogyCommand(authResult.scope, {
       type: "deleteNode",
       nodeId: id,
     });

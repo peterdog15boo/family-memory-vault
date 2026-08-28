@@ -20,6 +20,7 @@ import {
   type RepairGraph,
   type RepairOp,
 } from "@/lib/family-tree/repair";
+import type { FamilyTreeScope } from "@/lib/family-tree/scope";
 
 function toRepairGraph(
   nodes: FamilyTreeNode[],
@@ -42,7 +43,7 @@ function toRepairGraph(
 }
 
 async function applyOp(
-  userId: string,
+  scope: FamilyTreeScope,
   op: RepairOp,
   state: {
     nodes: FamilyTreeNode[];
@@ -50,6 +51,7 @@ async function applyOp(
   },
 ): Promise<void> {
   const db = getDb();
+  const { familyId, peopleOwnerId } = scope;
 
   switch (op.op) {
     case "flag_review": {
@@ -62,7 +64,7 @@ async function applyOp(
         .where(
           and(
             eq(familyTreeNodes.id, op.nodeId),
-            eq(familyTreeNodes.userId, userId),
+            eq(familyTreeNodes.familyId, familyId),
           ),
         )
         .returning();
@@ -80,7 +82,7 @@ async function applyOp(
         .where(
           and(
             eq(familyTreeRelationships.id, op.edgeId),
-            eq(familyTreeRelationships.userId, userId),
+            eq(familyTreeRelationships.familyId, familyId),
           ),
         );
       state.relationships = state.relationships.filter(
@@ -107,7 +109,7 @@ async function applyOp(
           .where(
             and(
               eq(familyTreeRelationships.id, op.edgeId),
-              eq(familyTreeRelationships.userId, userId),
+              eq(familyTreeRelationships.familyId, familyId),
             ),
           );
         state.relationships = state.relationships.filter(
@@ -126,7 +128,7 @@ async function applyOp(
         .where(
           and(
             eq(familyTreeRelationships.id, op.edgeId),
-            eq(familyTreeRelationships.userId, userId),
+            eq(familyTreeRelationships.familyId, familyId),
             eq(familyTreeRelationships.type, "sibling_of"),
           ),
         )
@@ -157,7 +159,8 @@ async function applyOp(
         .insert(familyTreeRelationships)
         .values({
           id,
-          userId,
+          userId: peopleOwnerId,
+          familyId,
           fromNodeId: endpoints.fromNodeId,
           toNodeId: endpoints.toNodeId,
           type: "partner_of",
@@ -188,7 +191,8 @@ async function applyOp(
         .insert(familyTreeRelationships)
         .values({
           id,
-          userId,
+          userId: peopleOwnerId,
+          familyId,
           fromNodeId: endpoints.fromNodeId,
           toNodeId: endpoints.toNodeId,
           type: "parent_of",
@@ -220,7 +224,7 @@ async function applyOp(
           .where(
             and(
               eq(familyTreeRelationships.id, op.edgeId),
-              eq(familyTreeRelationships.userId, userId),
+              eq(familyTreeRelationships.familyId, familyId),
             ),
           );
         state.relationships = state.relationships.filter(
@@ -238,7 +242,7 @@ async function applyOp(
         .where(
           and(
             eq(familyTreeRelationships.id, op.edgeId),
-            eq(familyTreeRelationships.userId, userId),
+            eq(familyTreeRelationships.familyId, familyId),
           ),
         )
         .returning();
@@ -288,7 +292,8 @@ async function applyOp(
           .insert(familyTreeNodes)
           .values({
             id,
-            userId,
+            userId: peopleOwnerId,
+            familyId,
             personId: null,
             label: planned.label,
           })
@@ -322,7 +327,8 @@ async function applyOp(
           .insert(familyTreeRelationships)
           .values({
             id: nanoid(),
-            userId,
+            userId: peopleOwnerId,
+            familyId,
             fromNodeId: endpoints.fromNodeId,
             toNodeId: endpoints.toNodeId,
             type: planned.type,
@@ -367,7 +373,7 @@ async function applyOp(
         .where(
           and(
             eq(familyTreeNodes.id, op.nodeId),
-            eq(familyTreeNodes.userId, userId),
+            eq(familyTreeNodes.familyId, familyId),
           ),
         )
         .returning();
@@ -376,7 +382,8 @@ async function applyOp(
         .insert(familyTreeNodes)
         .values({
           id: newId,
-          userId,
+          userId: peopleOwnerId,
+          familyId,
           personId: null,
           label: op.nameB,
           notes: withReviewFlag(
@@ -411,7 +418,8 @@ async function applyOp(
           .insert(familyTreeRelationships)
           .values({
             id: nanoid(),
-            userId,
+            userId: peopleOwnerId,
+            familyId,
             fromNodeId: endpoints.fromNodeId,
             toNodeId: endpoints.toNodeId,
             type: "partner_of",
@@ -439,7 +447,8 @@ async function applyOp(
             .insert(familyTreeRelationships)
             .values({
               id: nanoid(),
-              userId,
+              userId: peopleOwnerId,
+              familyId,
               fromNodeId: newId,
               toNodeId: childEdge.toNodeId,
               type: "parent_of",
@@ -462,11 +471,11 @@ async function applyOp(
 }
 
 /**
- * Detect corruption and apply safe repairs for one vault owner's tree.
+ * Detect corruption and apply safe repairs for one family tree.
  * Idempotent; logs before/after relationship snapshots.
  */
 export async function runFamilyTreeRepairPass(
-  userId: string,
+  scope: FamilyTreeScope,
   nodes: FamilyTreeNode[],
   relationships: FamilyTreeRelationship[],
   options: { dryRun?: boolean } = {},
@@ -516,7 +525,8 @@ export async function runFamilyTreeRepairPass(
   }
 
   console.info("[family-tree.repair] begin", {
-    userId,
+    familyId: scope.familyId,
+    peopleOwnerId: scope.peopleOwnerId,
     opCount: plan.ops.length,
     before: plan.beforeSnapshot,
   });
@@ -524,10 +534,14 @@ export async function runFamilyTreeRepairPass(
   let opsApplied = 0;
   for (const op of plan.ops) {
     try {
-      await applyOp(userId, op, state);
+      await applyOp(scope, op, state);
       opsApplied += 1;
     } catch (err) {
-      console.error("[family-tree.repair] op failed", { userId, op, err });
+      console.error("[family-tree.repair] op failed", {
+        familyId: scope.familyId,
+        op,
+        err,
+      });
     }
   }
 
@@ -535,7 +549,8 @@ export async function runFamilyTreeRepairPass(
     toRepairGraph(state.nodes, state.relationships),
   );
   console.info("[family-tree.repair] done", {
-    userId,
+    familyId: scope.familyId,
+    peopleOwnerId: scope.peopleOwnerId,
     opsApplied,
     before: plan.beforeSnapshot,
     after,

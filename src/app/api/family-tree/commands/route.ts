@@ -6,6 +6,7 @@ import {
 } from "@/lib/family-tree/engine";
 import { COUSIN_SIDES } from "@/lib/family-tree/cousin-side";
 import {
+  familyIdFromRequestUrl,
   familyTreeApiErrorResponse,
   requireFamilyTreeEditAccess,
 } from "@/lib/family-tree/http";
@@ -113,11 +114,19 @@ const commandSchema = z.discriminatedUnion("type", [
  * All Family Tree graph edits should go through this route.
  */
 export async function POST(request: Request) {
-  const authResult = await requireFamilyTreeEditAccess();
-  if (!authResult.ok) return authResult.response;
-
   try {
     const json = await request.json().catch(() => null);
+    const preferredFamilyId =
+      (json &&
+        typeof json === "object" &&
+        "familyId" in json &&
+        typeof (json as { familyId?: unknown }).familyId === "string" &&
+        (json as { familyId: string }).familyId.trim()) ||
+      familyIdFromRequestUrl(request);
+
+    const authResult = await requireFamilyTreeEditAccess(preferredFamilyId);
+    if (!authResult.ok) return authResult.response;
+
     const parsed = commandSchema.safeParse(json);
     if (!parsed.success) {
       return NextResponse.json(
@@ -130,7 +139,7 @@ export async function POST(request: Request) {
     }
 
     const result = await runGenealogyCommand(
-      authResult.treeOwnerId,
+      authResult.scope,
       parsed.data as GenealogyEngineCommand,
     );
 

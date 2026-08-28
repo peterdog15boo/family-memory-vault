@@ -3,7 +3,10 @@ import { redirect } from "next/navigation";
 import { FamilyTreeLockedPage } from "@/components/billing/FamilyTreeLockedPage";
 import { FamilyTreeWorkspace } from "@/components/family-tree/FamilyTreeWorkspace";
 import type { FamilyTreePersonCover } from "@/components/family-tree/types";
-import { resolveFamilyTreeAccess } from "@/lib/family-tree/access";
+import {
+  resolveFamilyTreeAccess,
+  scopeFromAccess,
+} from "@/lib/family-tree/access";
 import {
   getFamilyTreeGraph,
   listPeopleAvailableForTree,
@@ -21,31 +24,54 @@ export const metadata = {
     "Map the people you love into a living family tree — warm, visual, and made for families.",
 };
 
+type PageProps = {
+  searchParams: Promise<{ familyId?: string }>;
+};
+
 /**
- * Family Tree — plan owners edit their tree; shared members view/contribute per ACL.
+ * Family Tree — one tree per family; picker when the user has multiple families.
  */
-export default async function FamilyTreePage() {
+export default async function FamilyTreePage({ searchParams }: PageProps) {
   const { userId, isAuthenticated } = await auth();
   if (!isAuthenticated || !userId) {
     redirect("/");
   }
 
   await ensureAppUser(userId);
-  const access = await resolveFamilyTreeAccess(userId);
+
+  const params = await searchParams;
+  const preferredFamilyId =
+    typeof params.familyId === "string" ? params.familyId.trim() : null;
+
+  const access = await resolveFamilyTreeAccess(userId, preferredFamilyId);
   if (!access?.canView) {
+    // Explicit family they cannot open — send them to a tree they can.
+    if (preferredFamilyId) {
+      const fallback = await resolveFamilyTreeAccess(userId);
+      if (fallback?.canView) {
+        redirect(
+          `/family-tree?familyId=${encodeURIComponent(fallback.familyId)}`,
+        );
+      }
+    }
     const gate = await canUseFamilyTree(userId);
     return <FamilyTreeLockedPage gate={gate} />;
   }
 
-  const treeOwnerId = access.treeOwnerId;
+  const scope = scopeFromAccess(access);
+  const peopleOwnerId = access.peopleOwnerId;
+
+  // Load graph only when the family already has a tree registry row.
   const [peopleCount, graph, availablePeople, peopleWithCovers] =
     await Promise.all([
-      countUserPeople(treeOwnerId),
-      getFamilyTreeGraph(treeOwnerId),
-      access.canEdit
-        ? listPeopleAvailableForTree(treeOwnerId)
+      countUserPeople(peopleOwnerId),
+      access.hasTree
+        ? getFamilyTreeGraph(scope)
+        : Promise.resolve(null),
+      access.hasTree && access.canEdit
+        ? listPeopleAvailableForTree(scope)
         : Promise.resolve([]),
-      listPeopleWithCovers(treeOwnerId),
+      listPeopleWithCovers(peopleOwnerId),
     ]);
 
   const peopleCovers: FamilyTreePersonCover[] = peopleWithCovers.map((p) => ({
@@ -62,13 +88,16 @@ export default async function FamilyTreePage() {
   return (
     <FamilyTreeWorkspace
       peopleCount={peopleCount}
-      tree={serializeFamilyTreeGraph(graph)}
+      tree={graph ? serializeFamilyTreeGraph(graph) : null}
       availablePeople={availablePeople}
       peopleCovers={peopleCovers}
       canEdit={access.canEdit}
       isOwner={access.isOwner}
       treeSharedWithFamily={access.treeSharedWithFamily}
       familyId={access.familyId}
+      familyName={access.familyName}
+      hasTree={access.hasTree}
+      families={access.families}
     />
   );
 }

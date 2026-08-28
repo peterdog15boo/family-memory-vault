@@ -23,13 +23,14 @@ import {
   FamilyTreeError,
   getFamilyTreeGraph,
 } from "@/lib/family-tree/index";
+import type { FamilyTreeScope } from "@/lib/family-tree/scope";
 import { getPersonForUser, displayPersonName } from "@/lib/people";
 
 export type { CousinAttachWhich } from "@/lib/family-tree/cousin-attach";
 export { listCousinAttachCandidates } from "@/lib/family-tree/cousin-attach";
 
 export type CreateNamedCousinBranchInput = {
-  userId: string;
+  scope: FamilyTreeScope;
   /** Person P the cousin is attached through (Kat / Jeff). */
   subjectId: string;
   cousinLabel: string;
@@ -52,7 +53,7 @@ export type CreateNamedCousinBranchResult = {
 };
 
 async function insertNode(
-  userId: string,
+  scope: FamilyTreeScope,
   label: string,
   personId: string | null,
   notes: string | null,
@@ -62,7 +63,8 @@ async function insertNode(
   const id = nanoid();
   await db.insert(familyTreeNodes).values({
     id,
-    userId,
+    userId: scope.peopleOwnerId,
+    familyId: scope.familyId,
     personId,
     label,
     notes,
@@ -73,7 +75,7 @@ async function insertNode(
 }
 
 async function insertEdge(
-  userId: string,
+  scope: FamilyTreeScope,
   fromNodeId: string,
   toNodeId: string,
   type: FamilyTreeRelationType,
@@ -83,7 +85,8 @@ async function insertEdge(
   const id = nanoid();
   await db.insert(familyTreeRelationships).values({
     id,
-    userId,
+    userId: scope.peopleOwnerId,
+    familyId: scope.familyId,
     fromNodeId,
     toNodeId,
     type,
@@ -120,7 +123,7 @@ export async function createNamedCousinBranch(
     );
   }
 
-  const graph = await getFamilyTreeGraph(input.userId, { skipRepair: true });
+  const graph = await getFamilyTreeGraph(input.scope, { skipRepair: true });
   const subject = graph.nodes.find((n) => n.id === input.subjectId);
   if (!subject) {
     throw new FamilyTreeError("That relative is not on your tree.", {
@@ -147,7 +150,10 @@ export async function createNamedCousinBranch(
   const cousinPersonId: string | null = input.cousinPersonId?.trim() || null;
   let resolvedCousinLabel = cousinLabel;
   if (cousinPersonId) {
-    const person = await getPersonForUser(cousinPersonId, input.userId);
+    const person = await getPersonForUser(
+      cousinPersonId,
+      input.scope.peopleOwnerId,
+    );
     if (!person) {
       throw new FamilyTreeError("That person is not in your vault.", {
         code: "not_found",
@@ -166,6 +172,7 @@ export async function createNamedCousinBranch(
   const createdNodeIds: string[] = [];
   const createdRelationshipIds: string[] = [];
   const db = getDb();
+  const { familyId } = input.scope;
 
   async function rollback() {
     if (createdRelationshipIds.length > 0) {
@@ -173,7 +180,7 @@ export async function createNamedCousinBranch(
         .delete(familyTreeRelationships)
         .where(
           and(
-            eq(familyTreeRelationships.userId, input.userId),
+            eq(familyTreeRelationships.familyId, familyId),
             inArray(familyTreeRelationships.id, createdRelationshipIds),
           ),
         )
@@ -184,7 +191,7 @@ export async function createNamedCousinBranch(
         .delete(familyTreeNodes)
         .where(
           and(
-            eq(familyTreeNodes.userId, input.userId),
+            eq(familyTreeNodes.familyId, familyId),
             inArray(familyTreeNodes.id, createdNodeIds),
           ),
         )
@@ -195,7 +202,7 @@ export async function createNamedCousinBranch(
   try {
     const unverified = input.attachWhich === "unsure";
     const cousinId = await insertNode(
-      input.userId,
+      input.scope,
       resolvedCousinLabel,
       cousinPersonId,
       null,
@@ -203,7 +210,7 @@ export async function createNamedCousinBranch(
     createdNodeIds.push(cousinId);
 
     const parent1Id = await insertNode(
-      input.userId,
+      input.scope,
       parent1Label,
       null,
       unverified && input.attachWhich !== "parent2"
@@ -215,7 +222,7 @@ export async function createNamedCousinBranch(
     let parent2Id: string | null = null;
     if (parent2Label) {
       parent2Id = await insertNode(
-        input.userId,
+        input.scope,
         parent2Label,
         null,
         unverified && input.attachWhich === "parent2"
@@ -227,16 +234,16 @@ export async function createNamedCousinBranch(
 
     if (parent2Id) {
       createdRelationshipIds.push(
-        await insertEdge(input.userId, parent1Id, parent2Id, "partner_of"),
+        await insertEdge(input.scope, parent1Id, parent2Id, "partner_of"),
       );
     }
 
     createdRelationshipIds.push(
-      await insertEdge(input.userId, parent1Id, cousinId, "parent_of"),
+      await insertEdge(input.scope, parent1Id, cousinId, "parent_of"),
     );
     if (parent2Id) {
       createdRelationshipIds.push(
-        await insertEdge(input.userId, parent2Id, cousinId, "parent_of"),
+        await insertEdge(input.scope, parent2Id, cousinId, "parent_of"),
       );
     }
 
@@ -247,7 +254,7 @@ export async function createNamedCousinBranch(
 
     createdRelationshipIds.push(
       await insertEdge(
-        input.userId,
+        input.scope,
         attachParentId,
         input.attachToNodeId,
         "sibling_of",
@@ -257,7 +264,7 @@ export async function createNamedCousinBranch(
     // Stored for search / inferredSide — not drawn by the renderer.
     createdRelationshipIds.push(
       await insertEdge(
-        input.userId,
+        input.scope,
         input.subjectId,
         cousinId,
         "cousin_of",

@@ -31,6 +31,7 @@ import { preferredExistingCoParentId } from "@/lib/family-tree/genealogy-iq";
 import type { GenealogyIqNotice } from "@/lib/family-tree/genealogy-iq";
 import { clearReviewFlag } from "@/lib/family-tree/repair";
 import type { FamilyTreeRelationType } from "@/lib/db/schema";
+import type { FamilyTreeScope } from "@/lib/family-tree/scope";
 
 export type GenealogyEngineCommand =
   | {
@@ -165,12 +166,12 @@ function parentIdsOf(
 }
 
 async function snapshot(
-  userId: string,
+  scope: FamilyTreeScope,
   notices: GenealogyIqNotice[] = [],
   scaffold: FamilyTreeRelationshipScaffoldResult["scaffold"] | null = null,
   focusNodeId?: string,
 ): Promise<GenealogyEngineResult> {
-  const tree = await getFamilyTreeGraph(userId);
+  const tree = await getFamilyTreeGraph(scope);
   return {
     ok: true,
     tree,
@@ -191,25 +192,25 @@ async function snapshot(
  * This is the only supported write path for Family Tree graph edits.
  */
 export async function runGenealogyCommand(
-  userId: string,
+  scope: FamilyTreeScope,
   command: GenealogyEngineCommand,
 ): Promise<GenealogyEngineResponse> {
   switch (command.type) {
     case "addPlaceholder": {
       const created = await createFamilyTreeNode({
-        userId,
+        scope,
         label: command.label,
       });
-      return snapshot(userId, created.notices, null, created.node.id);
+      return snapshot(scope, created.notices, null, created.node.id);
     }
 
     case "placePerson": {
       const created = await createFamilyTreeNode({
-        userId,
+        scope,
         label: command.label?.trim() || "Person",
         personId: command.peopleId,
       });
-      return snapshot(userId, created.notices, null, created.node.id);
+      return snapshot(scope, created.notices, null, created.node.id);
     }
 
     case "renameNode": {
@@ -219,25 +220,25 @@ export async function runGenealogyCommand(
         });
       }
       await updateFamilyTreeNode({
-        userId,
+        scope,
         nodeId: command.nodeId,
         ...(command.label !== undefined ? { label: command.label } : {}),
         ...(command.notes !== undefined ? { notes: command.notes } : {}),
       });
-      return snapshot(userId, [], null, command.nodeId);
+      return snapshot(scope, [], null, command.nodeId);
     }
 
     case "linkPlaceholderToPerson": {
       await updateFamilyTreeNode({
-        userId,
+        scope,
         nodeId: command.nodeId,
         personId: command.peopleId,
       });
-      return snapshot(userId, [], null, command.nodeId);
+      return snapshot(scope, [], null, command.nodeId);
     }
 
     case "clearNodeReview": {
-      const tree = await getFamilyTreeGraph(userId, { skipRepair: true });
+      const tree = await getFamilyTreeGraph(scope, { skipRepair: true });
       const node = tree.nodes.find((n) => n.id === command.nodeId);
       if (!node) {
         throw new FamilyTreeError("Tree member not found.", {
@@ -245,51 +246,50 @@ export async function runGenealogyCommand(
         });
       }
       await updateFamilyTreeNode({
-        userId,
+        scope,
         nodeId: command.nodeId,
         notes: clearReviewFlag(node.notes),
       });
-      return snapshot(userId, [], null, command.nodeId);
+      return snapshot(scope, [], null, command.nodeId);
     }
 
     case "removeRelationship": {
-      await deleteFamilyTreeRelationship(userId, command.edgeId);
-      return snapshot(userId);
+      await deleteFamilyTreeRelationship(scope, command.edgeId);
+      return snapshot(scope);
     }
 
     case "deleteNode": {
-      await deleteFamilyTreeNode(userId, command.nodeId);
-      return snapshot(userId);
+      await deleteFamilyTreeNode(scope, command.nodeId);
+      return snapshot(scope);
     }
 
     case "undoScaffold": {
       await undoFamilyTreeScaffold({
-        userId,
+        scope,
         nodeIds: command.nodeIds,
         relationshipIds: command.relationshipIds,
       });
-      return snapshot(userId);
+      return snapshot(scope);
     }
 
     case "addSpouse": {
       if (command.spouseNodeId) {
         const result = await createFamilyTreeRelationshipWithScaffold({
-          userId,
+          scope,
           fromNodeId: command.personId,
           toNodeId: command.spouseNodeId,
           type: "partner_of",
           scaffold: false,
           excludeChildIds: command.excludeChildIds,
         });
-        return snapshot(
-          userId,
+        return snapshot(scope,
           result.notices,
           result.scaffold,
           command.spouseNodeId,
         );
       }
       const created = await createFamilyTreeNode({
-        userId,
+        scope,
         label: command.label?.trim() || "Spouse",
         link: {
           type: "partner_of",
@@ -298,21 +298,20 @@ export async function runGenealogyCommand(
           excludeChildIds: command.excludeChildIds,
         },
       });
-      return snapshot(userId, created.notices, null, created.node.id);
+      return snapshot(scope, created.notices, null, created.node.id);
     }
 
     case "addParent": {
-      const tree = await getFamilyTreeGraph(userId);
+      const tree = await getFamilyTreeGraph(scope);
       if (command.parentNodeId) {
         const result = await createFamilyTreeRelationshipWithScaffold({
-          userId,
+          scope,
           fromNodeId: command.parentNodeId,
           toNodeId: command.personId,
           type: "parent_of",
           scaffold: false,
         });
-        return snapshot(
-          userId,
+        return snapshot(scope,
           result.notices,
           result.scaffold,
           command.parentNodeId,
@@ -325,14 +324,13 @@ export async function runGenealogyCommand(
       );
       if (existingSpouse) {
         const result = await createFamilyTreeRelationshipWithScaffold({
-          userId,
+          scope,
           fromNodeId: existingSpouse,
           toNodeId: command.personId,
           type: "parent_of",
           scaffold: false,
         });
-        return snapshot(
-          userId,
+        return snapshot(scope,
           result.notices,
           result.scaffold,
           existingSpouse,
@@ -348,7 +346,7 @@ export async function runGenealogyCommand(
       }
 
       const created = await createFamilyTreeNode({
-        userId,
+        scope,
         label: command.label?.trim() || "Parent",
         link: {
           type: "parent_of",
@@ -356,7 +354,7 @@ export async function runGenealogyCommand(
           newNodeIs: "from",
         },
       });
-      return snapshot(userId, created.notices, null, created.node.id);
+      return snapshot(scope, created.notices, null, created.node.id);
     }
 
     case "addChild": {
@@ -368,7 +366,7 @@ export async function runGenealogyCommand(
 
       if (command.childNodeId) {
         const result = await createFamilyTreeRelationshipWithScaffold({
-          userId,
+          scope,
           fromNodeId: command.personId,
           toNodeId: command.childNodeId,
           type: "parent_of",
@@ -376,8 +374,7 @@ export async function runGenealogyCommand(
           linkSpousesAsCoParents,
           coParentSpouseIds,
         });
-        return snapshot(
-          userId,
+        return snapshot(scope,
           result.notices,
           result.scaffold,
           command.childNodeId,
@@ -386,11 +383,11 @@ export async function runGenealogyCommand(
 
       if (oneParentOnly || coParentSpouseIds !== undefined) {
         const created = await createFamilyTreeNode({
-          userId,
+          scope,
           label: command.label?.trim() || "Child",
         });
         const result = await createFamilyTreeRelationshipWithScaffold({
-          userId,
+          scope,
           fromNodeId: command.personId,
           toNodeId: created.node.id,
           type: "parent_of",
@@ -399,8 +396,7 @@ export async function runGenealogyCommand(
           linkCoParentsAsSpouses: false,
           coParentSpouseIds,
         });
-        return snapshot(
-          userId,
+        return snapshot(scope,
           [...created.notices, ...result.notices],
           result.scaffold,
           created.node.id,
@@ -408,7 +404,7 @@ export async function runGenealogyCommand(
       }
 
       const created = await createFamilyTreeNode({
-        userId,
+        scope,
         label: command.label?.trim() || "Child",
         link: {
           type: "parent_of",
@@ -416,27 +412,26 @@ export async function runGenealogyCommand(
           newNodeIs: "to",
         },
       });
-      return snapshot(userId, created.notices, null, created.node.id);
+      return snapshot(scope, created.notices, null, created.node.id);
     }
 
     case "addSibling": {
       if (command.siblingNodeId) {
         const result = await createFamilyTreeRelationshipWithScaffold({
-          userId,
+          scope,
           fromNodeId: command.personId,
           toNodeId: command.siblingNodeId,
           type: "sibling_of",
           scaffold: false,
         });
-        return snapshot(
-          userId,
+        return snapshot(scope,
           result.notices,
           result.scaffold,
           command.siblingNodeId,
         );
       }
       const created = await createFamilyTreeNode({
-        userId,
+        scope,
         label: command.label?.trim() || "Sibling",
         link: {
           type: "sibling_of",
@@ -444,11 +439,11 @@ export async function runGenealogyCommand(
           newNodeIs: "from",
         },
       });
-      return snapshot(userId, created.notices, null, created.node.id);
+      return snapshot(scope, created.notices, null, created.node.id);
     }
 
     case "addCousin": {
-      const tree = await getFamilyTreeGraph(userId);
+      const tree = await getFamilyTreeGraph(scope);
       const person = tree.nodes.find((n) => n.id === command.personId);
       const parents = parentIdsOf(tree, command.personId);
 
@@ -480,7 +475,7 @@ export async function runGenealogyCommand(
           });
         }
         const result = await createNamedCousinBranch({
-          userId,
+          scope,
           subjectId: command.personId,
           cousinLabel: command.label,
           cousinPersonId: command.cousinPeopleId ?? null,
@@ -489,8 +484,7 @@ export async function runGenealogyCommand(
           attachWhich,
           attachToNodeId,
         });
-        return snapshot(
-          userId,
+        return snapshot(scope,
           [],
           {
             message: result.message,
@@ -521,15 +515,14 @@ export async function runGenealogyCommand(
 
       if (command.cousinNodeId) {
         const result = await createFamilyTreeRelationshipWithScaffold({
-          userId,
+          scope,
           fromNodeId: command.personId,
           toNodeId: command.cousinNodeId,
           type: "cousin_of",
           cousinSide: command.side ?? "unknown",
           cousinSubjectId: command.personId,
         });
-        return snapshot(
-          userId,
+        return snapshot(scope,
           result.notices,
           result.scaffold,
           command.cousinNodeId,
@@ -545,7 +538,7 @@ export async function runGenealogyCommand(
 
     case "connect": {
       if (command.relationType === "cousin_of") {
-        const tree = await getFamilyTreeGraph(userId);
+        const tree = await getFamilyTreeGraph(scope);
         const lineageGraph = {
           nodes: tree.nodes.map((n) => ({ id: n.id, label: n.label })),
           relationships: tree.relationships.map((r) => ({
@@ -580,7 +573,7 @@ export async function runGenealogyCommand(
       }
 
       const result = await createFamilyTreeRelationshipWithScaffold({
-        userId,
+        scope,
         fromNodeId: command.fromNodeId,
         toNodeId: command.toNodeId,
         type: command.relationType,
@@ -590,7 +583,7 @@ export async function runGenealogyCommand(
             ? !command.oneParentOnly
             : undefined,
       });
-      return snapshot(userId, result.notices, result.scaffold);
+      return snapshot(scope, result.notices, result.scaffold);
     }
 
     case "repairTree": {
@@ -607,21 +600,21 @@ export async function runGenealogyCommand(
         db
           .select()
           .from(familyTreeNodes)
-          .where(eq(familyTreeNodes.userId, userId))
+          .where(eq(familyTreeNodes.familyId, scope.familyId))
           .orderBy(asc(familyTreeNodes.createdAt)),
         db
           .select()
           .from(familyTreeRelationships)
-          .where(eq(familyTreeRelationships.userId, userId))
+          .where(eq(familyTreeRelationships.familyId, scope.familyId))
           .orderBy(asc(familyTreeRelationships.createdAt)),
       ]);
       const repaired = await runFamilyTreeRepairPass(
-        userId,
+        scope,
         rawNodes,
         rawRelationships,
         { dryRun: command.dryRun === true },
       );
-      const tree = await getFamilyTreeGraph(userId, {
+      const tree = await getFamilyTreeGraph(scope, {
         skipRepair: command.dryRun === true,
       });
       const notices = repaired.result.message
@@ -644,7 +637,7 @@ export async function runGenealogyCommand(
       // Layout positions are derived client-side from the graph. Ensure
       // relationship repair has run, then return a fresh snapshot — the UI
       // reflows with Layout IQ and recenters the camera.
-      const tree = await getFamilyTreeGraph(userId);
+      const tree = await getFamilyTreeGraph(scope);
       return {
         ok: true,
         tree,

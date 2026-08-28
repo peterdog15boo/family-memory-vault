@@ -5,6 +5,7 @@ import {
   type GenealogyEngineCommand,
 } from "@/lib/family-tree/engine";
 import {
+  familyIdFromRequestUrl,
   familyTreeApiErrorResponse,
   requireFamilyTreeEditAccess,
 } from "@/lib/family-tree/http";
@@ -69,7 +70,9 @@ function commandForCreate(input: z.infer<typeof createBodySchema>): GenealogyEng
  * Prefer POST /api/family-tree/commands.
  */
 export async function POST(request: Request) {
-  const authResult = await requireFamilyTreeEditAccess();
+  const authResult = await requireFamilyTreeEditAccess(
+    familyIdFromRequestUrl(request),
+  );
   if (!authResult.ok) return authResult.response;
 
   try {
@@ -82,7 +85,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const treeOwnerId = authResult.treeOwnerId;
+    const scope = authResult.scope;
     const link = parsed.data.link;
     const isExtendedLink =
       link &&
@@ -93,8 +96,7 @@ export async function POST(request: Request) {
         link.type === "cousin_of"
       );
 
-    let result = await runGenealogyCommand(
-      treeOwnerId,
+    let result = await runGenealogyCommand(scope,
       commandForCreate(parsed.data),
     );
 
@@ -112,7 +114,7 @@ export async function POST(request: Request) {
 
     if (isExtendedLink && link && result.focusNodeId) {
       const newId = result.focusNodeId;
-      result = await runGenealogyCommand(treeOwnerId, {
+      result = await runGenealogyCommand(scope, {
         type: "connect",
         fromNodeId: link.newNodeIs === "from" ? newId : link.otherNodeId,
         toNodeId: link.newNodeIs === "to" ? newId : link.otherNodeId,

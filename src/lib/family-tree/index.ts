@@ -1,8 +1,8 @@
 /**
  * Family tree domain — nodes link to existing People (or temporary placeholders).
- * Scoped to the vault owner (userId). People identities are never shared across
- * family membership; only the owner’s People may be linked. Shared-family media
- * can still appear on those People via the existing face pipeline.
+ * Scoped by familyId (one tree per family). People links use peopleOwnerId
+ * (family creator vault). Shared-family media can still appear on those People
+ * via the existing face pipeline.
  */
 
 import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
@@ -52,6 +52,7 @@ import {
   type AncestryEdge,
 } from "@/lib/family-tree/validate";
 import { displayPersonName, getPersonForUser } from "@/lib/people";
+import type { FamilyTreeScope } from "@/lib/family-tree/scope";
 
 export class FamilyTreeError extends Error {
   readonly code?: "plan_limit" | "not_found" | "validation" | "conflict";
@@ -93,8 +94,8 @@ async function assertFamilyTreeAllowed(userId: string): Promise<void> {
   }
 }
 
-async function requireNodeForUser(
-  userId: string,
+async function requireNodeInScope(
+  scope: FamilyTreeScope,
   nodeId: string,
 ): Promise<FamilyTreeNode> {
   const db = getDb();
@@ -102,7 +103,10 @@ async function requireNodeForUser(
     .select()
     .from(familyTreeNodes)
     .where(
-      and(eq(familyTreeNodes.id, nodeId), eq(familyTreeNodes.userId, userId)),
+      and(
+        eq(familyTreeNodes.id, nodeId),
+        eq(familyTreeNodes.familyId, scope.familyId),
+      ),
     )
     .limit(1);
   if (!row) {
@@ -112,7 +116,7 @@ async function requireNodeForUser(
 }
 
 export type CreateFamilyTreeNodeInput = {
-  userId: string;
+  scope: FamilyTreeScope;
   /** Placeholder / display label. */
   label: string;
   /** Link to an existing People identity in this vault. */
@@ -141,7 +145,7 @@ export type CreateFamilyTreeNodeResult = {
 export async function createFamilyTreeNode(
   input: CreateFamilyTreeNodeInput,
 ): Promise<CreateFamilyTreeNodeResult> {
-  await assertFamilyTreeAllowed(input.userId);
+  await assertFamilyTreeAllowed(input.scope.peopleOwnerId);
 
   const label = labelSchema.parse(input.label);
   const notes = input.notes?.trim() || null;
@@ -149,7 +153,7 @@ export async function createFamilyTreeNode(
   let resolvedLabel = label;
 
   if (personId) {
-    const person = await getPersonForUser(personId, input.userId);
+    const person = await getPersonForUser(personId, input.scope.peopleOwnerId);
     if (!person) {
       throw new FamilyTreeError("That person is not in your vault.", {
         code: "not_found",
@@ -174,7 +178,7 @@ export async function createFamilyTreeNode(
       .from(familyTreeNodes)
       .where(
         and(
-          eq(familyTreeNodes.userId, input.userId),
+          eq(familyTreeNodes.familyId, input.scope.familyId),
           eq(familyTreeNodes.personId, personId),
         ),
       )
@@ -188,14 +192,15 @@ export async function createFamilyTreeNode(
   }
 
   // Snapshot existing members — Genealogy IQ never deletes them as a side effect.
-  const preservedNodeIds = await listFamilyTreeNodeIds(input.userId);
+  const preservedNodeIds = await listFamilyTreeNodeIds(input.scope);
 
   const now = new Date();
   const [row] = await db
     .insert(familyTreeNodes)
     .values({
       id: nanoid(),
-      userId: input.userId,
+      userId: input.scope.peopleOwnerId,
+      familyId: input.scope.familyId,
       personId,
       label: resolvedLabel,
       notes,
@@ -219,7 +224,7 @@ export async function createFamilyTreeNode(
       input.link.newNodeIs === "to" ? row.id : input.link.otherNodeId;
     try {
       const linked = await createFamilyTreeRelationshipWithScaffold({
-        userId: input.userId,
+        scope: input.scope,
         fromNodeId,
         toNodeId,
         type: input.link.type,
@@ -233,20 +238,20 @@ export async function createFamilyTreeNode(
         .where(
           and(
             eq(familyTreeNodes.id, row.id),
-            eq(familyTreeNodes.userId, input.userId),
+            eq(familyTreeNodes.familyId, input.scope.familyId),
           ),
         );
       throw error;
     }
   }
 
-  await assertPreservedFamilyTreeNodes(input.userId, preservedNodeIds);
+  await assertPreservedFamilyTreeNodes(input.scope, preservedNodeIds);
 
   return { node: row, notices };
 }
 
 export type UpdateFamilyTreeNodeInput = {
-  userId: string;
+  scope: FamilyTreeScope;
   nodeId: string;
   label?: string;
   notes?: string | null;
@@ -257,8 +262,8 @@ export type UpdateFamilyTreeNodeInput = {
 export async function updateFamilyTreeNode(
   input: UpdateFamilyTreeNodeInput,
 ): Promise<FamilyTreeNode> {
-  await assertFamilyTreeAllowed(input.userId);
-  const existing = await requireNodeForUser(input.userId, input.nodeId);
+  await assertFamilyTreeAllowed(input.scope.peopleOwnerId);
+  const existing = await requireNodeInScope(input.scope, input.nodeId);
   const db = getDb();
 
   let nextLabel = existing.label;
@@ -270,7 +275,7 @@ export async function updateFamilyTreeNode(
   if (input.personId !== undefined) {
     const raw = input.personId?.trim() || null;
     if (raw) {
-      const person = await getPersonForUser(raw, input.userId);
+      const person = await getPersonForUser(raw, input.scope.peopleOwnerId);
       if (!person) {
         throw new FamilyTreeError("That person is not in your vault.", {
           code: "not_found",
@@ -281,7 +286,7 @@ export async function updateFamilyTreeNode(
         .from(familyTreeNodes)
         .where(
           and(
-            eq(familyTreeNodes.userId, input.userId),
+            eq(familyTreeNodes.familyId, input.scope.familyId),
             eq(familyTreeNodes.personId, raw),
             ne(familyTreeNodes.id, input.nodeId),
           ),
@@ -316,7 +321,7 @@ export async function updateFamilyTreeNode(
     .where(
       and(
         eq(familyTreeNodes.id, input.nodeId),
-        eq(familyTreeNodes.userId, input.userId),
+        eq(familyTreeNodes.familyId, input.scope.familyId),
       ),
     )
     .returning();
@@ -328,21 +333,24 @@ export async function updateFamilyTreeNode(
 }
 
 export async function deleteFamilyTreeNode(
-  userId: string,
+  scope: FamilyTreeScope,
   nodeId: string,
 ): Promise<void> {
-  await assertFamilyTreeAllowed(userId);
-  await requireNodeForUser(userId, nodeId);
+  await assertFamilyTreeAllowed(scope.peopleOwnerId);
+  await requireNodeInScope(scope, nodeId);
   const db = getDb();
   await db
     .delete(familyTreeNodes)
     .where(
-      and(eq(familyTreeNodes.id, nodeId), eq(familyTreeNodes.userId, userId)),
+      and(
+        eq(familyTreeNodes.id, nodeId),
+        eq(familyTreeNodes.familyId, scope.familyId),
+      ),
     );
 }
 
 export type CreateFamilyTreeRelationshipInput = {
-  userId: string;
+  scope: FamilyTreeScope;
   fromNodeId: string;
   toNodeId: string;
   type: FamilyTreeRelationType | string;
@@ -414,7 +422,7 @@ export async function createFamilyTreeRelationship(
 export async function createFamilyTreeRelationshipWithScaffold(
   input: CreateFamilyTreeRelationshipInput,
 ): Promise<FamilyTreeRelationshipScaffoldResult> {
-  await assertFamilyTreeAllowed(input.userId);
+  await assertFamilyTreeAllowed(input.scope.peopleOwnerId);
 
   if (!isFamilyTreeRelationType(input.type)) {
     throw new FamilyTreeError("Unknown relationship type.", {
@@ -429,8 +437,8 @@ export async function createFamilyTreeRelationshipWithScaffold(
   }
 
   await Promise.all([
-    requireNodeForUser(input.userId, input.fromNodeId),
-    requireNodeForUser(input.userId, input.toNodeId),
+    requireNodeInScope(input.scope, input.fromNodeId),
+    requireNodeInScope(input.scope, input.toNodeId),
   ]);
 
   const endpoints = canonicalizeRelationshipEndpoints(
@@ -447,7 +455,7 @@ export async function createFamilyTreeRelationshipWithScaffold(
       .from(familyTreeRelationships)
       .where(
         and(
-          eq(familyTreeRelationships.userId, input.userId),
+          eq(familyTreeRelationships.familyId, input.scope.familyId),
           eq(familyTreeRelationships.fromNodeId, endpoints.fromNodeId),
           eq(familyTreeRelationships.toNodeId, endpoints.toNodeId),
           eq(familyTreeRelationships.type, input.type),
@@ -461,7 +469,7 @@ export async function createFamilyTreeRelationshipWithScaffold(
     }
   }
 
-  const graph = await getFamilyTreeGraph(input.userId);
+  const graph = await getFamilyTreeGraph(input.scope);
   const existingEdges: AncestryEdge[] = graph.relationships.map((r) => ({
     fromNodeId: r.fromNodeId,
     toNodeId: r.toNodeId,
@@ -545,7 +553,7 @@ export async function createFamilyTreeRelationshipWithScaffold(
 
     for (const planned of plan.nodes) {
       const created = await createFamilyTreeNode({
-        userId: input.userId,
+        scope: input.scope,
         label: planned.label,
         personId: null,
       });
@@ -562,7 +570,7 @@ export async function createFamilyTreeRelationshipWithScaffold(
       }
       try {
         const bridge = await createFamilyTreeRelationshipWithScaffold({
-          userId: input.userId,
+          scope: input.scope,
           fromNodeId: fromId,
           toNodeId: toId,
           type: planned.type,
@@ -596,7 +604,7 @@ export async function createFamilyTreeRelationshipWithScaffold(
   }
 
   const relationship = await insertFamilyTreeRelationship({
-    userId: input.userId,
+    scope: input.scope,
     fromNodeId: endpoints.fromNodeId,
     toNodeId: endpoints.toNodeId,
     type: input.type,
@@ -606,7 +614,7 @@ export async function createFamilyTreeRelationshipWithScaffold(
   if (input.type === "parent_of") {
     if (input.linkSpousesAsCoParents !== false) {
       const linked = await linkExistingSpousesAsCoParents({
-        userId: input.userId,
+        scope: input.scope,
         parentNodeId: endpoints.fromNodeId,
         childNodeId: endpoints.toNodeId,
         labelById,
@@ -617,7 +625,7 @@ export async function createFamilyTreeRelationshipWithScaffold(
     }
     if (input.linkCoParentsAsSpouses !== false) {
       const linked = await linkCoParentsAsSpouses({
-        userId: input.userId,
+        scope: input.scope,
         parentNodeId: endpoints.fromNodeId,
         childNodeId: endpoints.toNodeId,
         labelById,
@@ -629,7 +637,7 @@ export async function createFamilyTreeRelationshipWithScaffold(
 
   if (input.type === "sibling_of") {
     const linked = await linkSharedSiblingParents({
-      userId: input.userId,
+      scope: input.scope,
       siblingA: endpoints.fromNodeId,
       siblingB: endpoints.toNodeId,
       labelById,
@@ -643,7 +651,7 @@ export async function createFamilyTreeRelationshipWithScaffold(
     input.linkSpouseAsParentOfExistingChildren !== false
   ) {
     const linked = await linkNewSpouseAsParentOfExistingChildren({
-      userId: input.userId,
+      scope: input.scope,
       spouseA: endpoints.fromNodeId,
       spouseB: endpoints.toNodeId,
       labelById,
@@ -653,7 +661,7 @@ export async function createFamilyTreeRelationshipWithScaffold(
     notices.push(...linked.notices);
   }
 
-  await assertPreservedFamilyTreeNodes(input.userId, preservedNodeIds);
+  await assertPreservedFamilyTreeNodes(input.scope, preservedNodeIds);
 
   // Extended types: undo only auto-placeholders. Keeping the primary edge
   // prevents orphan peers (Scott with no cousin_of) when users tap Undo.
@@ -678,12 +686,12 @@ export async function createFamilyTreeRelationshipWithScaffold(
   };
 }
 
-async function listFamilyTreeNodeIds(userId: string): Promise<string[]> {
+async function listFamilyTreeNodeIds(scope: FamilyTreeScope): Promise<string[]> {
   const db = getDb();
   const rows = await db
     .select({ id: familyTreeNodes.id })
     .from(familyTreeNodes)
-    .where(eq(familyTreeNodes.userId, userId));
+    .where(eq(familyTreeNodes.familyId, scope.familyId));
   return rows.map((r) => r.id);
 }
 
@@ -692,7 +700,7 @@ async function listFamilyTreeNodeIds(userId: string): Promise<string[]> {
  * people who already existed on the tree.
  */
 async function assertPreservedFamilyTreeNodes(
-  userId: string,
+  scope: FamilyTreeScope,
   requiredIds: string[],
 ): Promise<void> {
   if (requiredIds.length === 0) return;
@@ -702,7 +710,7 @@ async function assertPreservedFamilyTreeNodes(
     .from(familyTreeNodes)
     .where(
       and(
-        eq(familyTreeNodes.userId, userId),
+        eq(familyTreeNodes.familyId, scope.familyId),
         inArray(familyTreeNodes.id, requiredIds),
       ),
     );
@@ -719,7 +727,7 @@ async function assertPreservedFamilyTreeNodes(
  * that same parent union (Donna joins Diane+Frank when sibling_of Kat).
  */
 async function linkSharedSiblingParents(input: {
-  userId: string;
+  scope: FamilyTreeScope;
   siblingA: string;
   siblingB: string;
   labelById: Map<string, string>;
@@ -732,7 +740,7 @@ async function linkSharedSiblingParents(input: {
       type: familyTreeRelationships.type,
     })
     .from(familyTreeRelationships)
-    .where(eq(familyTreeRelationships.userId, input.userId));
+    .where(eq(familyTreeRelationships.familyId, input.scope.familyId));
 
   const missing = missingSharedSiblingParentLinks(
     rows,
@@ -748,7 +756,7 @@ async function linkSharedSiblingParents(input: {
   for (const { parentId, childId } of missing) {
     try {
       const bridge = await createFamilyTreeRelationshipWithScaffold({
-        userId: input.userId,
+        scope: input.scope,
         fromNodeId: parentId,
         toNodeId: childId,
         type: "parent_of",
@@ -780,7 +788,7 @@ async function linkSharedSiblingParents(input: {
  * spouse so the kids sit under the couple (Danielle+Rob → Nova).
  */
 async function linkNewSpouseAsParentOfExistingChildren(input: {
-  userId: string;
+  scope: FamilyTreeScope;
   spouseA: string;
   spouseB: string;
   labelById: Map<string, string>;
@@ -794,7 +802,7 @@ async function linkNewSpouseAsParentOfExistingChildren(input: {
       type: familyTreeRelationships.type,
     })
     .from(familyTreeRelationships)
-    .where(eq(familyTreeRelationships.userId, input.userId));
+    .where(eq(familyTreeRelationships.familyId, input.scope.familyId));
 
   const exclude = input.excludeChildIds ?? [];
   const pairs: Array<{ parentId: string; childId: string }> = [];
@@ -820,7 +828,7 @@ async function linkNewSpouseAsParentOfExistingChildren(input: {
   for (const { parentId, childId } of pairs) {
     try {
       const bridge = await createFamilyTreeRelationshipWithScaffold({
-        userId: input.userId,
+        scope: input.scope,
         fromNodeId: parentId,
         toNodeId: childId,
         type: "parent_of",
@@ -857,7 +865,7 @@ async function linkNewSpouseAsParentOfExistingChildren(input: {
  * child. It never attaches a new parent of person A to person A's spouse.
  */
 async function linkExistingSpousesAsCoParents(input: {
-  userId: string;
+  scope: FamilyTreeScope;
   parentNodeId: string;
   childNodeId: string;
   labelById: Map<string, string>;
@@ -872,7 +880,7 @@ async function linkExistingSpousesAsCoParents(input: {
       type: familyTreeRelationships.type,
     })
     .from(familyTreeRelationships)
-    .where(eq(familyTreeRelationships.userId, input.userId));
+    .where(eq(familyTreeRelationships.familyId, input.scope.familyId));
 
   let spouseIds = missingCoParentSpouseIds(
     rows,
@@ -895,7 +903,7 @@ async function linkExistingSpousesAsCoParents(input: {
   for (const spouseId of spouseIds) {
     try {
       const bridge = await createFamilyTreeRelationshipWithScaffold({
-        userId: input.userId,
+        scope: input.scope,
         fromNodeId: spouseId,
         toNodeId: input.childNodeId,
         type: "parent_of",
@@ -929,7 +937,7 @@ async function linkExistingSpousesAsCoParents(input: {
  * existing parent(s) as spouses — e.g. adding Father to Wife when Mother exists.
  */
 async function linkCoParentsAsSpouses(input: {
-  userId: string;
+  scope: FamilyTreeScope;
   parentNodeId: string;
   childNodeId: string;
   labelById: Map<string, string>;
@@ -942,7 +950,7 @@ async function linkCoParentsAsSpouses(input: {
       type: familyTreeRelationships.type,
     })
     .from(familyTreeRelationships)
-    .where(eq(familyTreeRelationships.userId, input.userId));
+    .where(eq(familyTreeRelationships.familyId, input.scope.familyId));
 
   const otherParents = coParentsToAutoSpouse(
     rows,
@@ -961,7 +969,7 @@ async function linkCoParentsAsSpouses(input: {
   for (const otherId of otherParents) {
     try {
       const bridge = await createFamilyTreeRelationshipWithScaffold({
-        userId: input.userId,
+        scope: input.scope,
         fromNodeId: input.parentNodeId,
         toNodeId: otherId,
         type: "partner_of",
@@ -991,7 +999,7 @@ async function linkCoParentsAsSpouses(input: {
 }
 
 async function insertFamilyTreeRelationship(input: {
-  userId: string;
+  scope: FamilyTreeScope;
   fromNodeId: string;
   toNodeId: string;
   type: FamilyTreeRelationType;
@@ -1016,7 +1024,7 @@ async function insertFamilyTreeRelationship(input: {
       type: familyTreeRelationships.type,
     })
     .from(familyTreeRelationships)
-    .where(eq(familyTreeRelationships.userId, input.userId));
+    .where(eq(familyTreeRelationships.familyId, input.scope.familyId));
 
   const existingEdges: AncestryEdge[] = existingRows.map((r) => ({
     fromNodeId: r.fromNodeId,
@@ -1065,7 +1073,8 @@ async function insertFamilyTreeRelationship(input: {
     .insert(familyTreeRelationships)
     .values({
       id: nanoid(),
-      userId: input.userId,
+      userId: input.scope.peopleOwnerId,
+      familyId: input.scope.familyId,
       fromNodeId: endpoints.fromNodeId,
       toNodeId: endpoints.toNodeId,
       type: input.type,
@@ -1087,11 +1096,11 @@ async function insertFamilyTreeRelationship(input: {
  * auto-created placeholder nodes (their edges cascade).
  */
 export async function undoFamilyTreeScaffold(input: {
-  userId: string;
+  scope: FamilyTreeScope;
   relationshipIds: string[];
   nodeIds: string[];
 }): Promise<void> {
-  await assertFamilyTreeAllowed(input.userId);
+  await assertFamilyTreeAllowed(input.scope.peopleOwnerId);
   const db = getDb();
 
   const relIds = [...new Set(input.relationshipIds.filter(Boolean))];
@@ -1100,7 +1109,7 @@ export async function undoFamilyTreeScaffold(input: {
       .delete(familyTreeRelationships)
       .where(
         and(
-          eq(familyTreeRelationships.userId, input.userId),
+          eq(familyTreeRelationships.familyId, input.scope.familyId),
           inArray(familyTreeRelationships.id, relIds),
         ),
       );
@@ -1114,7 +1123,7 @@ export async function undoFamilyTreeScaffold(input: {
       .from(familyTreeNodes)
       .where(
         and(
-          eq(familyTreeNodes.userId, input.userId),
+          eq(familyTreeNodes.familyId, input.scope.familyId),
           inArray(familyTreeNodes.id, nodeIds),
           sql`${familyTreeNodes.personId} is null`,
         ),
@@ -1125,7 +1134,7 @@ export async function undoFamilyTreeScaffold(input: {
         .delete(familyTreeNodes)
         .where(
           and(
-            eq(familyTreeNodes.userId, input.userId),
+            eq(familyTreeNodes.familyId, input.scope.familyId),
             inArray(familyTreeNodes.id, deletable),
           ),
         );
@@ -1134,17 +1143,17 @@ export async function undoFamilyTreeScaffold(input: {
 }
 
 export async function deleteFamilyTreeRelationship(
-  userId: string,
+  scope: FamilyTreeScope,
   relationshipId: string,
 ): Promise<void> {
-  await assertFamilyTreeAllowed(userId);
+  await assertFamilyTreeAllowed(scope.peopleOwnerId);
   const db = getDb();
   const deleted = await db
     .delete(familyTreeRelationships)
     .where(
       and(
         eq(familyTreeRelationships.id, relationshipId),
-        eq(familyTreeRelationships.userId, userId),
+        eq(familyTreeRelationships.familyId, scope.familyId),
       ),
     )
     .returning({ id: familyTreeRelationships.id });
@@ -1177,27 +1186,27 @@ export type FamilyTreeGraph = {
 };
 
 /**
- * Load the vault owner's family tree graph.
+ * Load a family's tree graph (scoped by familyId).
  * Runs a safe, idempotent repair pass when corruption is detected
  * (unless `skipRepair` is set).
  */
 export async function getFamilyTreeGraph(
-  userId: string,
+  scope: FamilyTreeScope,
   options: { skipRepair?: boolean } = {},
 ): Promise<FamilyTreeGraph> {
-  await assertFamilyTreeAllowed(userId);
+  await assertFamilyTreeAllowed(scope.peopleOwnerId);
   const db = getDb();
 
   const [rawNodes, rawRelationships] = await Promise.all([
     db
       .select()
       .from(familyTreeNodes)
-      .where(eq(familyTreeNodes.userId, userId))
+      .where(eq(familyTreeNodes.familyId, scope.familyId))
       .orderBy(asc(familyTreeNodes.createdAt)),
     db
       .select()
       .from(familyTreeRelationships)
-      .where(eq(familyTreeRelationships.userId, userId))
+      .where(eq(familyTreeRelationships.familyId, scope.familyId))
       .orderBy(asc(familyTreeRelationships.createdAt)),
   ]);
 
@@ -1226,7 +1235,7 @@ export async function getFamilyTreeGraph(
           },
         } satisfies RepairApplyResult,
       }
-    : await runFamilyTreeRepairPass(userId, rawNodes, rawRelationships);
+    : await runFamilyTreeRepairPass(scope, rawNodes, rawRelationships);
   const nodes = repaired.nodes;
   const relationships = repaired.relationships;
 
@@ -1247,7 +1256,7 @@ export async function getFamilyTreeGraph(
           })
           .from(people)
           .where(
-            and(eq(people.userId, userId), inArray(people.id, personIds)),
+            and(eq(people.userId, scope.peopleOwnerId), inArray(people.id, personIds)),
           )
       : [];
 
@@ -1325,11 +1334,11 @@ export async function getFamilyTreeGraph(
   };
 }
 
-/** Owner-scoped People not yet placed on this user’s tree (never other members’). */
+/** People from peopleOwnerId vault not yet placed on this family's tree. */
 export async function listPeopleAvailableForTree(
-  userId: string,
+  scope: FamilyTreeScope,
 ): Promise<FamilyTreePersonPreview[]> {
-  await assertFamilyTreeAllowed(userId);
+  await assertFamilyTreeAllowed(scope.peopleOwnerId);
   const db = getDb();
 
   const placed = await db
@@ -1337,7 +1346,7 @@ export async function listPeopleAvailableForTree(
     .from(familyTreeNodes)
     .where(
       and(
-        eq(familyTreeNodes.userId, userId),
+        eq(familyTreeNodes.familyId, scope.familyId),
         sql`${familyTreeNodes.personId} is not null`,
       ),
     );
@@ -1351,7 +1360,7 @@ export async function listPeopleAvailableForTree(
   const all = await db
     .select({ id: people.id, name: people.name })
     .from(people)
-    .where(eq(people.userId, userId))
+    .where(eq(people.userId, scope.peopleOwnerId))
     .orderBy(asc(people.name));
 
   return all

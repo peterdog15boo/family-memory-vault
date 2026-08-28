@@ -33,6 +33,8 @@ type Props = {
   peopleCount: number;
   canEdit?: boolean;
   isOwner?: boolean;
+  /** Active family for this tree — required for API scoping. */
+  familyId: string;
 };
 
 type ScaffoldNotice = {
@@ -82,12 +84,15 @@ export function FamilyTreeBuilder({
   peopleCount,
   canEdit = true,
   isOwner = true,
+  familyId,
 }: Props) {
   const [tree, setTree] = useState(initialTree);
   const [availablePeople, setAvailablePeople] = useState(
     initialAvailablePeople,
   );
   const [error, setError] = useState<string | null>(null);
+
+  const familyQuery = `familyId=${encodeURIComponent(familyId)}`;
   const [scaffoldNotice, setScaffoldNotice] = useState<ScaffoldNotice | null>(
     null,
   );
@@ -193,7 +198,7 @@ export function FamilyTreeBuilder({
   }, [peopleCovers]);
 
   async function refreshAvailable() {
-    const res = await fetch("/api/family-tree");
+    const res = await fetch(`/api/family-tree?${familyQuery}`);
     const data = (await res.json().catch(() => ({}))) as ApiTreeResponse;
     if (!res.ok) throw new Error(data.error || "Could not refresh tree.");
     if (data.tree) setTree(data.tree);
@@ -252,10 +257,10 @@ export function FamilyTreeBuilder({
   async function runEngineCommand(
     command: GenealogyEngineCommand,
   ): Promise<ApiTreeResponse> {
-    const res = await fetch("/api/family-tree/commands", {
+    const res = await fetch(`/api/family-tree/commands?${familyQuery}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(command),
+      body: JSON.stringify({ ...command, familyId }),
     });
     const data = (await res.json().catch(() => ({}))) as ApiTreeResponse;
     if (res.status === 409 && data.needsInput?.kind === "cousinSide") {
@@ -532,7 +537,7 @@ export function FamilyTreeBuilder({
 
   function exportTreeDebugJson() {
     runMutation(async () => {
-      const res = await fetch("/api/family-tree/export");
+      const res = await fetch(`/api/family-tree/export?${familyQuery}`);
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as {
           error?: string;

@@ -40,7 +40,7 @@ export function FamilyTreeSharingSettings({
         <p className="mt-1 text-xs text-ink-muted">
           Open{" "}
           <Link
-            href="/family-tree"
+            href={`/family-tree?familyId=${encodeURIComponent(familyId)}`}
             className="font-semibold text-accent-deep underline-offset-2 hover:underline"
           >
             Family Tree
@@ -90,7 +90,7 @@ export function FamilyTreeSharingSettings({
           Use the per-member toggles below for view / contribute. Manage the tree
           in{" "}
           <Link
-            href="/family-tree"
+            href={`/family-tree?familyId=${encodeURIComponent(familyId)}`}
             className="font-semibold text-accent-deep underline-offset-2 hover:underline"
           >
             Family Tree

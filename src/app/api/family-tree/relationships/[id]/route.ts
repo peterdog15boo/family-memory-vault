@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { runGenealogyCommand } from "@/lib/family-tree/engine";
 import {
+  familyIdFromRequestUrl,
   familyTreeApiErrorResponse,
   requireFamilyTreeEditAccess,
 } from "@/lib/family-tree/http";
@@ -12,13 +13,15 @@ type RouteContext = { params: Promise<{ id: string }> };
  * DELETE /api/family-tree/relationships/[id]
  * Delegates to the Genealogy Relationship Engine.
  */
-export async function DELETE(_request: Request, context: RouteContext) {
-  const authResult = await requireFamilyTreeEditAccess();
+export async function DELETE(request: Request, context: RouteContext) {
+  const authResult = await requireFamilyTreeEditAccess(
+    familyIdFromRequestUrl(request),
+  );
   if (!authResult.ok) return authResult.response;
 
   try {
     const { id } = await context.params;
-    const result = await runGenealogyCommand(authResult.treeOwnerId, {
+    const result = await runGenealogyCommand(authResult.scope, {
       type: "removeRelationship",
       edgeId: id,
     });

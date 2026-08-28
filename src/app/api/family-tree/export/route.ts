@@ -4,6 +4,7 @@ import {
   familyTreeDebugFilename,
 } from "@/lib/family-tree/debug-export";
 import {
+  familyIdFromRequestUrl,
   familyTreeApiErrorResponse,
   requireFamilyTreeViewAccess,
 } from "@/lib/family-tree/http";
@@ -15,8 +16,8 @@ export const runtime = "nodejs";
  * GET /api/family-tree/export — download debug JSON for the current tree.
  * Tree owner only (admins use /api/admin/family-tree/export). No secrets/media URLs.
  */
-export async function GET() {
-  const auth = await requireFamilyTreeViewAccess();
+export async function GET(request: Request) {
+  const auth = await requireFamilyTreeViewAccess(familyIdFromRequestUrl(request));
   if (!auth.ok) return auth.response;
 
   if (!auth.access.isOwner) {
@@ -27,11 +28,11 @@ export async function GET() {
   }
 
   try {
-    const payload = await buildFamilyTreeDebugExport(auth.treeOwnerId, {
+    const payload = await buildFamilyTreeDebugExport(auth.scope, {
       skipRepair: true,
     });
     const body = `${JSON.stringify(payload, null, 2)}\n`;
-    const filename = familyTreeDebugFilename(auth.treeOwnerId);
+    const filename = familyTreeDebugFilename(auth.scope);
     return new NextResponse(body, {
       status: 200,
       headers: {

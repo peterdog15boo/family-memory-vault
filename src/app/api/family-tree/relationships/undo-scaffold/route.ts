@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { runGenealogyCommand } from "@/lib/family-tree/engine";
 import {
+  familyIdFromRequestUrl,
   familyTreeApiErrorResponse,
   requireFamilyTreeEditAccess,
 } from "@/lib/family-tree/http";
@@ -17,7 +18,9 @@ const undoBodySchema = z.object({
  * Delegates to the Genealogy Relationship Engine.
  */
 export async function POST(request: Request) {
-  const authResult = await requireFamilyTreeEditAccess();
+  const authResult = await requireFamilyTreeEditAccess(
+    familyIdFromRequestUrl(request),
+  );
   if (!authResult.ok) return authResult.response;
 
   try {
@@ -30,7 +33,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await runGenealogyCommand(authResult.treeOwnerId, {
+    const result = await runGenealogyCommand(authResult.scope, {
       type: "undoScaffold",
       nodeIds: parsed.data.nodeIds,
       relationshipIds: parsed.data.relationshipIds,

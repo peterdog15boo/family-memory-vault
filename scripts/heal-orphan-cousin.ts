@@ -3,10 +3,12 @@
  * addCousin(subject, cousin) structure: cousin_of + subject-side parent bridge.
  *
  * Usage:
- *   npm run export:family-tree -- --userId=…   # inspect first
+ *   npm run export:family-tree -- --familyId=…   # inspect first
+ *   npx tsx scripts/heal-orphan-cousin.ts --familyId=fam_xxx --subject=Kat --cousin=Scott --side=maternal
  *   npx tsx scripts/heal-orphan-cousin.ts --userId=user_xxx --subject=Kat --cousin=Scott --side=maternal
  */
 import { config } from "dotenv";
+import { eq } from "drizzle-orm";
 
 config({ path: ".env.local", override: true });
 config({ override: true });
@@ -30,8 +32,46 @@ function norm(s: string) {
   return s.trim().toLowerCase();
 }
 
+async function resolveScope(
+  userId: string | undefined,
+  familyId: string | undefined,
+): Promise<{ familyId: string; peopleOwnerId: string }> {
+  const { getDb } = await import("@/lib/db");
+  const { families } = await import("@/lib/db/schema");
+  const db = getDb();
+
+  if (familyId) {
+    const [row] = await db
+      .select({
+        id: families.id,
+        createdByUserId: families.createdByUserId,
+      })
+      .from(families)
+      .where(eq(families.id, familyId))
+      .limit(1);
+    if (!row) throw new Error(`Family not found: ${familyId}`);
+    return { familyId: row.id, peopleOwnerId: row.createdByUserId };
+  }
+
+  if (!userId) {
+    throw new Error("Provide --userId=… or --familyId=…");
+  }
+
+  const [row] = await db
+    .select({
+      id: families.id,
+      createdByUserId: families.createdByUserId,
+    })
+    .from(families)
+    .where(eq(families.createdByUserId, userId))
+    .limit(1);
+  if (!row) throw new Error(`No family found for user: ${userId}`);
+  return { familyId: row.id, peopleOwnerId: row.createdByUserId };
+}
+
 async function main() {
   const userId = arg("userId")?.trim();
+  const familyId = arg("familyId")?.trim();
   const subjectLabel = arg("subject")?.trim() || "Kat";
   const cousinLabel = arg("cousin")?.trim() || "Scott";
   const sideRaw = arg("side")?.trim() || "maternal";
@@ -40,18 +80,19 @@ async function main() {
       ? sideRaw
       : "maternal";
 
-  if (!userId) {
+  if (!userId && !familyId) {
     console.error(
-      "Usage: npx tsx scripts/heal-orphan-cousin.ts --userId=user_xxx [--subject=Kat] [--cousin=Scott] [--side=maternal]",
+      "Usage: npx tsx scripts/heal-orphan-cousin.ts --familyId=fam_xxx | --userId=user_xxx [--subject=Kat] [--cousin=Scott] [--side=maternal]",
     );
     process.exit(1);
   }
 
+  const scope = await resolveScope(userId, familyId);
   const { getFamilyTreeGraph, createFamilyTreeRelationshipWithScaffold } =
     await import("@/lib/family-tree/index");
   const { runGenealogyCommand } = await import("@/lib/family-tree/engine");
 
-  const before = await getFamilyTreeGraph(userId, { skipRepair: true });
+  const before = await getFamilyTreeGraph(scope, { skipRepair: true });
   const subject = before.nodes.find(
     (n) =>
       norm(n.label).includes(norm(subjectLabel)) ||
@@ -81,7 +122,7 @@ async function main() {
 
   if (existingCousin) {
     console.error("cousin_of already exists — running repairTree instead");
-    const repaired = await runGenealogyCommand(userId, { type: "repairTree" });
+    const repaired = await runGenealogyCommand(scope, { type: "repairTree" });
     if (repaired.ok) {
       console.error("repairTree ok", repaired.tree.repair);
     }
@@ -93,7 +134,7 @@ async function main() {
   );
 
   const result = await createFamilyTreeRelationshipWithScaffold({
-    userId,
+    scope,
     fromNodeId: subject.id,
     toNodeId: cousin.id,
     type: "cousin_of",
@@ -101,7 +142,7 @@ async function main() {
     cousinSubjectId: subject.id,
   });
 
-  const after = await getFamilyTreeGraph(userId, { skipRepair: true });
+  const after = await getFamilyTreeGraph(scope, { skipRepair: true });
   const scott = after.nodes.find((n) => n.id === cousin.id);
   const kat = after.nodes.find((n) => n.id === subject.id);
   const parents = after.relationships.filter(

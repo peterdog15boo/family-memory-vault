@@ -19,6 +19,7 @@ function node(
   return {
     id,
     userId: "u1",
+    familyId: "fam1",
     personId,
     label,
     notes: null,
@@ -44,6 +45,7 @@ function rel(
   return {
     id,
     userId: "u1",
+    familyId: "fam1",
     type,
     fromNodeId,
     toNodeId,

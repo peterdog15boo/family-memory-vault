@@ -1,15 +1,14 @@
 /**
- * Export a vault owner's Family Tree as debug JSON.
+ * Export a family's Family Tree as debug JSON.
  *
  * Usage:
- *   npm run export:family-tree -- --userId=user_xxx
  *   npm run export:family-tree -- --familyId=fam_xxx
- *   npm run export:family-tree -- --userId=user_xxx --out=./scott-tree.json
- *   npm run export:family-tree -- --userId=user_xxx --includeRepair
+ *   npm run export:family-tree -- --userId=user_xxx
+ *   npm run export:family-tree -- --familyId=fam_xxx --out=./scott-tree.json
+ *   npm run export:family-tree -- --familyId=fam_xxx --includeRepair
  *
- * Trees are keyed by vault owner userId. --familyId resolves to the family's
- * createdByUserId (tree owner). Requires DATABASE_URL (.env.local).
- * No emails or secrets in the file.
+ * Prefer --familyId. --userId resolves the creator's first family.
+ * Requires DATABASE_URL (.env.local). No emails or secrets in the file.
  */
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -34,26 +33,45 @@ function arg(name: string): string | undefined {
   return undefined;
 }
 
-async function resolveTreeOwnerUserId(
+async function resolveScope(
   userId: string | undefined,
   familyId: string | undefined,
-): Promise<string> {
-  if (userId) return userId;
-  if (!familyId) {
-    throw new Error("Provide --userId=… or --familyId=…");
-  }
+): Promise<{ familyId: string; peopleOwnerId: string }> {
   const { getDb } = await import("@/lib/db");
   const { families } = await import("@/lib/db/schema");
   const db = getDb();
+
+  if (familyId) {
+    const [row] = await db
+      .select({
+        id: families.id,
+        createdByUserId: families.createdByUserId,
+      })
+      .from(families)
+      .where(eq(families.id, familyId))
+      .limit(1);
+    if (!row) {
+      throw new Error(`Family not found: ${familyId}`);
+    }
+    return { familyId: row.id, peopleOwnerId: row.createdByUserId };
+  }
+
+  if (!userId) {
+    throw new Error("Provide --userId=… or --familyId=…");
+  }
+
   const [row] = await db
-    .select({ createdByUserId: families.createdByUserId })
+    .select({
+      id: families.id,
+      createdByUserId: families.createdByUserId,
+    })
     .from(families)
-    .where(eq(families.id, familyId))
+    .where(eq(families.createdByUserId, userId))
     .limit(1);
   if (!row) {
-    throw new Error(`Family not found: ${familyId}`);
+    throw new Error(`No family found for user: ${userId}`);
   }
-  return row.createdByUserId;
+  return { familyId: row.id, peopleOwnerId: row.createdByUserId };
 }
 
 async function main() {
@@ -73,12 +91,12 @@ async function main() {
     throw new Error("DATABASE_URL missing");
   }
 
-  const userId = await resolveTreeOwnerUserId(userIdArg, familyId);
+  const scope = await resolveScope(userIdArg, familyId);
   const { buildFamilyTreeDebugExport, familyTreeDebugFilename } = await import(
     "@/lib/family-tree/debug-export"
   );
 
-  const payload = await buildFamilyTreeDebugExport(userId, {
+  const payload = await buildFamilyTreeDebugExport(scope, {
     skipRepair: !includeRepair,
   });
   const json = `${JSON.stringify(payload, null, 2)}\n`;
@@ -88,11 +106,11 @@ async function main() {
     writeFileSync(path, json, "utf8");
     console.error(`Wrote ${path}`);
     console.error(
-      `treeOwner=${userId} nodes=${payload.meta.nodeCount} relationships=${payload.meta.relationshipCount}`,
+      `familyId=${scope.familyId} peopleOwner=${scope.peopleOwnerId} nodes=${payload.meta.nodeCount} relationships=${payload.meta.relationshipCount}`,
     );
   } else {
-    const suggested = familyTreeDebugFilename(userId);
-    console.error(`# treeOwner=${userId}`);
+    const suggested = familyTreeDebugFilename(scope);
+    console.error(`# familyId=${scope.familyId} peopleOwner=${scope.peopleOwnerId}`);
     console.error(`# Suggested filename: ${suggested}`);
     process.stdout.write(json);
   }

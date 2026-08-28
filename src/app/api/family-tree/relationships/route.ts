@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { runGenealogyCommand } from "@/lib/family-tree/engine";
 import {
+  familyIdFromRequestUrl,
   familyTreeApiErrorResponse,
   requireFamilyTreeEditAccess,
 } from "@/lib/family-tree/http";
@@ -26,7 +27,9 @@ const createBodySchema = z.object({
  * Prefer POST /api/family-tree/commands.
  */
 export async function POST(request: Request) {
-  const authResult = await requireFamilyTreeEditAccess();
+  const authResult = await requireFamilyTreeEditAccess(
+    familyIdFromRequestUrl(request),
+  );
   if (!authResult.ok) return authResult.response;
 
   try {
@@ -42,7 +45,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await runGenealogyCommand(authResult.treeOwnerId, {
+    const result = await runGenealogyCommand(authResult.scope, {
       type: "connect",
       fromNodeId: parsed.data.fromNodeId,
       toNodeId: parsed.data.toNodeId,

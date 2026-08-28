@@ -840,8 +840,9 @@ export type FamilyTreeRelationType =
   (typeof FAMILY_TREE_RELATION_TYPES)[number];
 
 /**
- * A node on the vault owner's family tree.
+ * A node on a family's tree (exactly one tree per family).
  * May link to a People identity (photo) or remain a label-only placeholder.
+ * `userId` is the People-vault owner (usually the family creator) for person links.
  */
 export const familyTreeNodes = pgTable(
   "family_tree_nodes",
@@ -850,7 +851,11 @@ export const familyTreeNodes = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    /** Optional link to a People record in this vault. */
+    /** Family this tree belongs to. Required for new rows; backfilled for legacy. */
+    familyId: text("family_id").references((): AnyPgColumn => families.id, {
+      onDelete: "cascade",
+    }),
+    /** Optional link to a People record in the people-owner vault. */
     personId: text("person_id").references(() => people.id, {
       onDelete: "set null",
     }),
@@ -866,15 +871,17 @@ export const familyTreeNodes = pgTable(
   },
   (table) => [
     index("family_tree_nodes_user_id_idx").on(table.userId),
+    index("family_tree_nodes_family_id_idx").on(table.familyId),
     index("family_tree_nodes_person_id_idx").on(table.personId),
-    uniqueIndex("family_tree_nodes_user_person_uidx")
-      .on(table.userId, table.personId)
-      .where(sql`${table.personId} is not null`),
+    // One People link per family tree (same vault person may appear on multiple families).
+    uniqueIndex("family_tree_nodes_family_person_uidx")
+      .on(table.familyId, table.personId)
+      .where(sql`${table.personId} is not null and ${table.familyId} is not null`),
   ],
 );
 
 /**
- * Directed/canonical edges between tree nodes (scoped to vault owner).
+ * Directed/canonical edges between tree nodes (scoped to a family).
  */
 export const familyTreeRelationships = pgTable(
   "family_tree_relationships",
@@ -883,6 +890,9 @@ export const familyTreeRelationships = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    familyId: text("family_id").references((): AnyPgColumn => families.id, {
+      onDelete: "cascade",
+    }),
     fromNodeId: text("from_node_id")
       .notNull()
       .references(() => familyTreeNodes.id, { onDelete: "cascade" }),
@@ -899,6 +909,7 @@ export const familyTreeRelationships = pgTable(
   },
   (table) => [
     index("family_tree_rels_user_id_idx").on(table.userId),
+    index("family_tree_rels_family_id_idx").on(table.familyId),
     index("family_tree_rels_from_idx").on(table.fromNodeId),
     index("family_tree_rels_to_idx").on(table.toNodeId),
     uniqueIndex("family_tree_rels_edge_uidx").on(
@@ -1051,11 +1062,11 @@ export const families = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     /**
-     * When true, members with canViewTree may open the family owner's Family Tree.
-     * Contribution still requires canContributeTree (default off).
-     */
+ * When true, active members with canViewTree may open this family's Family Tree.
+ * Default on once a tree exists for the family; contribution still needs canContributeTree.
+ */
     treeSharedWithFamily: boolean("tree_shared_with_family")
-      .default(false)
+      .default(true)
       .notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -1067,6 +1078,31 @@ export const families = pgTable(
   (table) => [
     index("families_created_by_user_id_idx").on(table.createdByUserId),
     index("families_name_idx").on(table.name),
+  ],
+);
+
+/**
+ * Registry: a family has at most one tree. Created on first open / explicit create.
+ */
+export const familyTrees = pgTable(
+  "family_trees",
+  {
+    familyId: text("family_id")
+      .primaryKey()
+      .references(() => families.id, { onDelete: "cascade" }),
+    /** People-vault / billing owner for this tree (usually family creator). */
+    createdByUserId: text("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("family_trees_created_by_user_id_idx").on(table.createdByUserId),
   ],
 );
 

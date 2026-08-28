@@ -4,36 +4,39 @@ import {
   listPeopleAvailableForTree,
 } from "@/lib/family-tree";
 import {
+  familyIdFromRequestUrl,
   familyTreeApiErrorResponse,
   requireFamilyTreeViewAccess,
 } from "@/lib/family-tree/http";
 import { serializeFamilyTreeGraph } from "@/lib/family-tree/serialize";
 
 /**
- * GET /api/family-tree — owner graph or shared family-owner tree.
+ * GET /api/family-tree — family-scoped graph (optional ?familyId=).
  */
-export async function GET() {
-  const authResult = await requireFamilyTreeViewAccess();
+export async function GET(request: Request) {
+  const authResult = await requireFamilyTreeViewAccess(
+    familyIdFromRequestUrl(request),
+  );
   if (!authResult.ok) return authResult.response;
 
   try {
-    const treeOwnerId = authResult.treeOwnerId;
+    const { scope, access } = authResult;
     const [graph, availablePeople] = await Promise.all([
-      getFamilyTreeGraph(treeOwnerId),
-      authResult.access.canEdit
-        ? listPeopleAvailableForTree(treeOwnerId)
+      getFamilyTreeGraph(scope),
+      access.canEdit
+        ? listPeopleAvailableForTree(scope)
         : Promise.resolve([]),
     ]);
     return NextResponse.json({
       tree: serializeFamilyTreeGraph(graph),
       availablePeople,
       access: {
-        treeOwnerId,
-        canView: authResult.access.canView,
-        canEdit: authResult.access.canEdit,
-        isOwner: authResult.access.isOwner,
-        familyId: authResult.access.familyId,
-        treeSharedWithFamily: authResult.access.treeSharedWithFamily,
+        treeOwnerId: access.peopleOwnerId,
+        canView: access.canView,
+        canEdit: access.canEdit,
+        isOwner: access.isOwner,
+        familyId: access.familyId,
+        treeSharedWithFamily: access.treeSharedWithFamily,
       },
     });
   } catch (error) {

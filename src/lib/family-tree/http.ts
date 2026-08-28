@@ -5,8 +5,10 @@ import {
   canEditFamilyTree,
   canViewFamilyTree,
   resolveFamilyTreeAccess,
+  scopeFromAccess,
   type FamilyTreeAccessContext,
 } from "@/lib/family-tree/access";
+import type { FamilyTreeScope } from "@/lib/family-tree/scope";
 import { apiError, apiErrorFromUnknown } from "@/lib/http/api-error";
 import { canUseFamilyTree } from "@/lib/plans/gates";
 import { planGateDeniedResponse } from "@/lib/auth/plan-api";
@@ -15,18 +17,32 @@ export type FamilyTreeApiAuth = {
   ok: true;
   userId: string;
   access: FamilyTreeAccessContext;
+  scope: FamilyTreeScope;
 };
+
+/** Optional `?familyId=` from the request URL. */
+export function familyIdFromRequestUrl(request: Request): string | null {
+  try {
+    const id = new URL(request.url).searchParams.get("familyId")?.trim();
+    return id || null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Require signed-in user who can open a Family Tree (own plan or shared view).
  */
-export async function requireFamilyTreeApiUser(): Promise<
-  FamilyTreeApiAuth | { ok: false; response: NextResponse }
-> {
+export async function requireFamilyTreeApiUser(
+  preferredFamilyId?: string | null,
+): Promise<FamilyTreeApiAuth | { ok: false; response: NextResponse }> {
   const authResult = await requireApiUser();
   if (!authResult.ok) return authResult;
 
-  const access = await resolveFamilyTreeAccess(authResult.userId);
+  const access = await resolveFamilyTreeAccess(
+    authResult.userId,
+    preferredFamilyId,
+  );
   if (!access?.canView) {
     const gate = await canUseFamilyTree(authResult.userId).catch(() => null);
     if (gate && !gate.allowed) {
@@ -41,28 +57,36 @@ export async function requireFamilyTreeApiUser(): Promise<
     };
   }
 
-  return { ok: true, userId: authResult.userId, access };
+  return {
+    ok: true,
+    userId: authResult.userId,
+    access,
+    scope: scopeFromAccess(access),
+  };
 }
 
 /**
- * Require edit rights on the resolved tree (or an explicit tree owner).
+ * Require edit rights on the resolved family tree (optional preferred familyId).
  */
 export async function requireFamilyTreeEditAccess(
-  treeOwnerId?: string,
+  preferredFamilyId?: string | null,
 ): Promise<
   | {
       ok: true;
       userId: string;
+      /** @deprecated Prefer scope.peopleOwnerId */
       treeOwnerId: string;
       access: FamilyTreeAccessContext;
+      scope: FamilyTreeScope;
     }
   | { ok: false; response: NextResponse }
 > {
-  const auth = await requireFamilyTreeApiUser();
+  const auth = await requireFamilyTreeApiUser(preferredFamilyId);
   if (!auth.ok) return auth;
 
-  const ownerId = treeOwnerId ?? auth.access.treeOwnerId;
-  const allowed = await canEditFamilyTree(auth.userId, ownerId);
+  const allowed =
+    auth.access.canEdit ||
+    (await canEditFamilyTree(auth.userId, auth.access.familyId));
   if (!allowed) {
     return {
       ok: false,
@@ -73,6 +97,7 @@ export async function requireFamilyTreeEditAccess(
     };
   }
 
+  const ownerId = auth.access.peopleOwnerId;
   // Owner’s plan must still include Family Tree for the vault graph to exist.
   if (ownerId === auth.userId) {
     const gate = await canUseFamilyTree(ownerId);
@@ -98,26 +123,30 @@ export async function requireFamilyTreeEditAccess(
     ok: true,
     userId: auth.userId,
     treeOwnerId: ownerId,
-    access: { ...auth.access, treeOwnerId: ownerId, canEdit: true },
+    access: { ...auth.access, canEdit: true },
+    scope: scopeFromAccess(auth.access),
   };
 }
 
 export async function requireFamilyTreeViewAccess(
-  treeOwnerId?: string,
+  preferredFamilyId?: string | null,
 ): Promise<
   | {
       ok: true;
       userId: string;
+      /** @deprecated Prefer scope.peopleOwnerId */
       treeOwnerId: string;
       access: FamilyTreeAccessContext;
+      scope: FamilyTreeScope;
     }
   | { ok: false; response: NextResponse }
 > {
-  const auth = await requireFamilyTreeApiUser();
+  const auth = await requireFamilyTreeApiUser(preferredFamilyId);
   if (!auth.ok) return auth;
 
-  const ownerId = treeOwnerId ?? auth.access.treeOwnerId;
-  const allowed = await canViewFamilyTree(auth.userId, ownerId);
+  const allowed =
+    auth.access.canView ||
+    (await canViewFamilyTree(auth.userId, auth.access.familyId));
   if (!allowed) {
     return {
       ok: false,
@@ -128,18 +157,17 @@ export async function requireFamilyTreeViewAccess(
     };
   }
 
-  const canEdit = await canEditFamilyTree(auth.userId, ownerId);
+  const canEdit = await canEditFamilyTree(auth.userId, auth.access.familyId);
   return {
     ok: true,
     userId: auth.userId,
-    treeOwnerId: ownerId,
+    treeOwnerId: auth.access.peopleOwnerId,
     access: {
       ...auth.access,
-      treeOwnerId: ownerId,
       canView: true,
       canEdit,
-      isOwner: ownerId === auth.userId,
     },
+    scope: scopeFromAccess(auth.access),
   };
 }
 
