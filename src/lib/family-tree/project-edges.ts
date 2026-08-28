@@ -218,12 +218,16 @@ export function projectRelationshipsToConnectors(
   const connectors: ProjectedConnector[] = [];
   const relationshipsWithoutConnector: string[] = [];
 
-  const partnerOf = new Map<string, string>();
+  const partnerOf = new Map<string, Set<string>>();
   const parentsOfChild = new Map<string, string[]>();
   for (const rel of relationships) {
     if (rel.type === "partner_of") {
-      partnerOf.set(rel.fromNodeId, rel.toNodeId);
-      partnerOf.set(rel.toNodeId, rel.fromNodeId);
+      const a = partnerOf.get(rel.fromNodeId) ?? new Set<string>();
+      a.add(rel.toNodeId);
+      partnerOf.set(rel.fromNodeId, a);
+      const b = partnerOf.get(rel.toNodeId) ?? new Set<string>();
+      b.add(rel.fromNodeId);
+      partnerOf.set(rel.toNodeId, b);
     } else if (rel.type === "parent_of") {
       const list = parentsOfChild.get(rel.toNodeId) ?? [];
       list.push(rel.fromNodeId);
@@ -257,13 +261,17 @@ export function projectRelationshipsToConnectors(
       labelY = geom.labelY;
       emphasis = "structure";
     } else if (rel.type === "parent_of") {
-      const spouseId = partnerOf.get(rel.fromNodeId);
-      const spouse = spouseId ? posById.get(spouseId) : undefined;
+      // Drop from this parent + a partner who is ALSO a parent of this child
+      // (Teresa+Duane Sr for Duane Jr — never Dana unless Dana has parent_of).
       const coParents = parentsOfChild.get(rel.toNodeId) ?? [];
-      const spouseAlsoParent =
-        Boolean(spouseId) && coParents.includes(spouseId!);
+      const coParentPartnerId = [...(partnerOf.get(rel.fromNodeId) ?? [])].find(
+        (p) => coParents.includes(p) && posById.has(p),
+      );
+      const spouse = coParentPartnerId
+        ? posById.get(coParentPartnerId)
+        : undefined;
       path =
-        spouse && spouseAlsoParent
+        spouse
           ? coupleParentConnectorPath(from, spouse, to)
           : parentConnectorPath(from, to);
       emphasis = "structure";

@@ -4,8 +4,9 @@
  * Relationships decide who connects to whom (Genealogy Engine).
  * Layout IQ decides where same-generation people sit on the row:
  * spouses stay as atomic couple units, blood siblings form one contiguous
- * spine on that person’s outer side (in-laws dock on free ends — never
- * between two blood siblings), maternal/paternal clusters kept separate.
+ * spine (partners dock on each sibling’s outer/owner side — never wedge
+ * someone else’s spouse between two blood siblings), maternal/paternal
+ * clusters kept separate.
  *
  * Critical: never split a spouse pair by treating one partner as an
  * "outer sibling" of someone else (that creates one long top bar and
@@ -293,24 +294,50 @@ function unitSortKey(unit: LayoutUnit, ctx: LayoutIqContext): string {
 }
 
 /**
- * Everyone on this row who partners with `bloodId` (supports one-way /
- * multi-spouse maps where only one direction is mutual).
+ * Multi-partner index: person → all partners on the tree (partner_of may repeat).
+ */
+export type PartnerIndex = ReadonlyMap<string, ReadonlySet<string>>;
+
+export function emptyPartnerIndex(): Map<string, Set<string>> {
+  return new Map();
+}
+
+export function addPartnerLink(
+  index: Map<string, Set<string>>,
+  a: string,
+  b: string,
+): void {
+  if (a === b) return;
+  const sa = index.get(a) ?? new Set<string>();
+  sa.add(b);
+  index.set(a, sa);
+  const sb = index.get(b) ?? new Set<string>();
+  sb.add(a);
+  index.set(b, sb);
+}
+
+/** Prefer a single “primary” partner (stable) for focus-couple heuristics. */
+export function primaryPartnerOf(
+  id: string,
+  partners: PartnerIndex,
+): string | undefined {
+  const set = partners.get(id);
+  if (!set || set.size === 0) return undefined;
+  return [...set].sort((a, b) => a.localeCompare(b))[0];
+}
+
+/**
+ * Everyone on this row who partners with `bloodId`.
  */
 export function spousesOnRowOf(
   bloodId: string,
   idSet: ReadonlySet<string>,
-  partnerOf: ReadonlyMap<string, string>,
+  partners: PartnerIndex,
   exclude: ReadonlySet<string> = new Set(),
 ): string[] {
   const found = new Set<string>();
-  const mutual = partnerOf.get(bloodId);
-  if (mutual && idSet.has(mutual) && !exclude.has(mutual)) {
-    found.add(mutual);
-  }
-  for (const [a, b] of partnerOf) {
-    if (exclude.has(a) || !idSet.has(a)) continue;
-    if (b === bloodId) found.add(a);
-    if (a === bloodId && idSet.has(b) && !exclude.has(b)) found.add(b);
+  for (const p of partners.get(bloodId) ?? []) {
+    if (idSet.has(p) && !exclude.has(p)) found.add(p);
   }
   found.delete(bloodId);
   return [...found].sort((a, b) => a.localeCompare(b));
@@ -322,15 +349,19 @@ export type SiblingHousehold = {
 };
 
 /**
- * Permanent sibling-block packing rule:
- * - Blood siblings form one contiguous spine (no in-law between two bloods).
- * - Spouses dock on the outer ends of that spine with their sibling —
- *   partnered households sit at the free ends so in-laws never sit between
- *   blood siblings.
- * - Units are ordered by the sibling, not by the spouse.
+ * Permanent sibling-block packing (order of `households` is the blood spine):
+ * - Blood siblings stay in given order as one flank block.
+ * - Each sibling’s partners all dock on ONE side of that sibling (never
+ *   split left+right, never onto another sibling’s rail).
+ * - Outermost household: partners on the free outer end; following households:
+ *   [blood, partners…] (toward focus) so the first blood-blood abut
+ *   (Teresa|Donna) and Scott/Todd stay glued to Donna — never between them.
+ * - Someone else’s spouse must never sit between two consecutive bloods
+ *   at the start of the spine; later gaps may hold only that left sibling’s
+ *   own partners (Donna [Todd+Scott] | Kevan).
  *
- * `towardFocus: "right"` → block sits left of the focus (outer = left).
- * `towardFocus: "left"` → block sits right of the focus (outer = right).
+ * `towardFocus: "right"` → block sits left of the focus.
+ * `towardFocus: "left"` → block sits right of the focus.
  */
 export function packSiblingHouseholdRow(
   households: readonly SiblingHousehold[],
@@ -338,45 +369,37 @@ export function packSiblingHouseholdRow(
 ): string[] {
   if (households.length === 0) return [];
 
-  const byId = (a: SiblingHousehold, b: SiblingHousehold) =>
-    a.blood.localeCompare(b.blood);
-  const partnered = households
-    .filter((h) => h.spouses.length > 0)
-    .slice()
-    .sort(byId);
-  const singles = households
-    .filter((h) => h.spouses.length === 0)
-    .slice()
-    .sort(byId);
-
-  /** Outer → inner (toward focus). Partnered claim the free ends. */
-  let ordered: SiblingHousehold[];
-  if (partnered.length === 0) {
-    ordered = singles;
-  } else if (partnered.length === 1) {
-    ordered = [...partnered, ...singles];
-  } else {
-    const outerH = partnered[0]!;
-    const innerH = partnered[partnered.length - 1]!;
-    const midPartnered = partnered.slice(1, -1);
-    ordered = [outerH, ...midPartnered, ...singles, innerH];
+  const row: string[] = [];
+  for (let i = 0; i < households.length; i++) {
+    const h = households[i]!;
+    const spouses = [...h.spouses];
+    if (towardFocus === "right") {
+      if (i === 0) row.push(...spouses, h.blood);
+      else row.push(h.blood, ...spouses);
+    } else if (i === 0) {
+      row.push(h.blood, ...spouses);
+    } else {
+      row.push(...spouses, h.blood);
+    }
   }
+  return row;
+}
 
-  const spine = ordered.map((h) => h.blood);
-  const outer = ordered[0]!;
-  const inner = ordered[ordered.length - 1]!;
-
-  const outerSpouses = [
-    ...outer.spouses,
-    ...ordered.slice(1, ordered.length - 1).flatMap((h) => [...h.spouses]),
-  ];
-  const innerSpouses =
-    inner.blood !== outer.blood ? [...inner.spouses] : [];
-
-  if (towardFocus === "right") {
-    return [...outerSpouses, ...spine, ...innerSpouses];
-  }
-  return [...innerSpouses, ...spine, ...outerSpouses];
+/**
+ * Order blood siblings for a flank: heavier partner clusters toward the free
+ * outer end so in-laws do not wedge into the first blood-blood abut.
+ */
+export function orderSiblingHouseholdsForFlank(
+  households: readonly SiblingHousehold[],
+  towardFocus: "left" | "right",
+): SiblingHousehold[] {
+  const sorted = households.slice().sort((a, b) => {
+    const d = b.spouses.length - a.spouses.length;
+    if (d !== 0) return d;
+    return a.blood.localeCompare(b.blood);
+  });
+  // towardFocus "left" mirrors: free outer end is the last household.
+  return towardFocus === "left" ? sorted.reverse() : sorted;
 }
 
 /**
@@ -385,23 +408,16 @@ export function packSiblingHouseholdRow(
 export function unitsFromSiblingPersonRow(
   personIds: readonly string[],
   bloodSet: ReadonlySet<string>,
-  partnerOf: ReadonlyMap<string, string>,
+  partners: PartnerIndex,
 ): LayoutUnit[] {
   const partnersBlood = (spouseId: string, bloodId: string) =>
-    partnerOf.get(spouseId) === bloodId ||
-    partnerOf.get(bloodId) === spouseId ||
-    [...partnerOf.entries()].some(
-      ([a, b]) =>
-        (a === spouseId && b === bloodId) ||
-        (a === bloodId && b === spouseId),
-    );
+    Boolean(partners.get(bloodId)?.has(spouseId));
 
   const units: LayoutUnit[] = [];
   let i = 0;
   while (i < personIds.length) {
     const id = personIds[i]!;
     if (!bloodSet.has(id)) {
-      // Leading spouse rail before a blood end.
       const run: string[] = [];
       while (i < personIds.length && !bloodSet.has(personIds[i]!)) {
         run.push(personIds[i]!);
@@ -423,7 +439,6 @@ export function unitsFromSiblingPersonRow(
       continue;
     }
 
-    // Blood, optionally followed by docked spouses (inner end).
     const blood = id;
     const spouses: string[] = [];
     let j = i + 1;
@@ -451,7 +466,7 @@ export function unitsFromSiblingPersonRow(
 export function siblingFlankUnits(input: {
   bloodIds: readonly string[];
   idSet: ReadonlySet<string>;
-  partnerOf: ReadonlyMap<string, string>;
+  partners: PartnerIndex;
   exclude: ReadonlySet<string>;
   towardFocus: "left" | "right";
 }): LayoutUnit[] {
@@ -467,13 +482,17 @@ export function siblingFlankUnits(input: {
     spouses: spousesOnRowOf(
       blood,
       input.idSet,
-      input.partnerOf,
+      input.partners,
       excludeWithBlood,
     ),
   }));
 
-  const row = packSiblingHouseholdRow(households, input.towardFocus);
-  return unitsFromSiblingPersonRow(row, bloodSet, input.partnerOf);
+  const ordered = orderSiblingHouseholdsForFlank(
+    households,
+    input.towardFocus,
+  );
+  const row = packSiblingHouseholdRow(ordered, input.towardFocus);
+  return unitsFromSiblingPersonRow(row, bloodSet, input.partners);
 }
 
 /**

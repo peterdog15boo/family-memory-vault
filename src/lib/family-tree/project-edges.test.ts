@@ -112,6 +112,52 @@ describe("projectRelationshipsToConnectors", () => {
     expect(parentPaths.every((p) => p.includes("L 120 "))).toBe(true);
     expect(parentPaths.every((p) => !p.includes("C "))).toBe(true);
   });
+
+  it("drops Duane Jr from Teresa+Duane Sr only — not Dana", () => {
+    // Layout: Duane Sr(0) Dana(140) Teresa(280) — Jr under Teresa+Duane Sr mid.
+    const { connectors } = projectRelationshipsToConnectors(
+      [
+        {
+          id: "p-former",
+          fromNodeId: "teresa",
+          toNodeId: "duane-sr",
+          type: "partner_of",
+        },
+        {
+          id: "p-current",
+          fromNodeId: "teresa",
+          toNodeId: "dana",
+          type: "partner_of",
+        },
+        {
+          id: "c-t",
+          fromNodeId: "teresa",
+          toNodeId: "duane-jr",
+          type: "parent_of",
+        },
+        {
+          id: "c-d",
+          fromNodeId: "duane-sr",
+          toNodeId: "duane-jr",
+          type: "parent_of",
+        },
+      ],
+      [
+        { id: "duane-sr", x: 0, y: 0 },
+        { id: "dana", x: 140, y: 0 },
+        { id: "teresa", x: 280, y: 0 },
+        { id: "duane-jr", x: 140, y: 200 },
+      ],
+    );
+    const parentPaths = connectors
+      .filter((c) => c.type === "parent_of")
+      .map((c) => c.path);
+    expect(parentPaths).toHaveLength(2);
+    // Couple mid of Duane Sr (0) + Teresa (280): (0+280+100)/2 = 190
+    expect(parentPaths.every((p) => p.includes("L 190 "))).toBe(true);
+    // Must NOT use Dana(140)+Teresa(280) mid = 260
+    expect(parentPaths.some((p) => p.includes("L 260 "))).toBe(false);
+  });
 });
 
 describe("relation label anchors", () => {

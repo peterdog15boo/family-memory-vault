@@ -7,10 +7,13 @@
 import type { FamilyTreeRelationType } from "@/lib/db/schema";
 import { inferredCoParentPairs } from "@/lib/family-tree/genealogy-iq";
 import {
+  addPartnerLink,
   applyInLawSoftSiblings,
+  emptyPartnerIndex,
   familyUnitsForGeneration,
   isCoupledOnRow,
   orderGenerationForLayout,
+  primaryPartnerOf,
   siblingFlankUnits,
   suppressSpouseSideCousinBridges,
   type LayoutUnit,
@@ -128,7 +131,8 @@ export function computeFamilyTreeLayout(
 
   const parentsByChild = new Map<string, string[]>();
   const childrenByParent = new Map<string, string[]>();
-  const partnerOf = new Map<string, string>();
+  /** Multi-partner index — partner_of may repeat per person. */
+  const partnersIndex = emptyPartnerIndex();
   const siblingAdj = new Map<string, Set<string>>();
   const cousinAdj = new Map<string, Set<string>>();
 
@@ -141,8 +145,7 @@ export function computeFamilyTreeLayout(
       kids.push(edge.toNodeId);
       childrenByParent.set(edge.fromNodeId, kids);
     } else if (edge.type === "partner_of") {
-      partnerOf.set(edge.fromNodeId, edge.toNodeId);
-      partnerOf.set(edge.toNodeId, edge.fromNodeId);
+      addPartnerLink(partnersIndex, edge.fromNodeId, edge.toNodeId);
     } else if (edge.type === "sibling_of") {
       const a = siblingAdj.get(edge.fromNodeId) ?? new Set<string>();
       a.add(edge.toNodeId);
@@ -163,10 +166,16 @@ export function computeFamilyTreeLayout(
   // Soft-pair co-parents who share a child but lack a spouse edge yet, so the
   // child still sits under the couple visually (Genealogy IQ layout assist).
   for (const [a, b] of inferredCoParentPairs(validEdges)) {
-    if (!partnerOf.has(a) && !partnerOf.has(b)) {
-      partnerOf.set(a, b);
-      partnerOf.set(b, a);
+    if (!partnersIndex.has(a) && !partnersIndex.has(b)) {
+      addPartnerLink(partnersIndex, a, b);
     }
+  }
+
+  // Single-partner view for focus / couple heuristics (stable primary).
+  const partnerOf = new Map<string, string>();
+  for (const id of partnersIndex.keys()) {
+    const primary = primaryPartnerOf(id, partnersIndex);
+    if (primary) partnerOf.set(id, primary);
   }
 
   // Soft-link in-laws onto the spouse's outer side for traditional placement.
@@ -527,8 +536,9 @@ export function computeFamilyTreeLayout(
   /**
    * Flank units ordered outer → inner toward the focus spouse.
    *
-   * Cousins stay outer. Blood siblings pack as one contiguous spine with
-   * spouses docked on the free ends — never between two blood siblings.
+   * Cousins stay outer. Blood siblings pack as one spine with each person’s
+   * partners glued to that person (outer free end / owner’s side) — never
+   * wedge someone else’s spouse between two blood siblings (esp. Teresa|Donna).
    *
    * Includes structural cousins: children of a parent’s sibling (e.g. David
    * under Betty, Helene’s sister) even without an explicit cousin_of edge.
@@ -602,7 +612,7 @@ export function computeFamilyTreeLayout(
       const sibUnits = siblingFlankUnits({
         bloodIds: sibs,
         idSet,
-        partnerOf,
+        partners: partnersIndex,
         exclude: used,
         towardFocus: towardLeft ? "right" : "left",
       });
@@ -893,28 +903,36 @@ export function computeFamilyTreeLayout(
     const rightLeftovers: LayoutUnit[] = [];
     for (const id of gens[focusGen] ?? []) {
       if (claimed.has(id)) continue;
-      const p = partnerOf.get(id);
+      const partnerIds = [...(partnersIndex.get(id) ?? [])].filter(
+        (p) =>
+          !claimed.has(p) &&
+          (gens[focusGen] ?? []).includes(p) &&
+          !(focusUnit.ids as readonly string[]).includes(p),
+      );
       let unit: LayoutUnit;
-      if (
-        p &&
-        !claimed.has(p) &&
-        (gens[focusGen] ?? []).includes(p) &&
-        partnerOf.get(p) === id
-      ) {
-        unit = { ids: [id, p], isCouple: true };
+      if (partnerIds.length > 0) {
+        const orderedPartners = partnerIds.sort((a, b) =>
+          a.localeCompare(b),
+        );
+        unit = {
+          ids: [...orderedPartners, id],
+          isCouple: orderedPartners.length === 1,
+        };
         claimed.add(id);
-        claimed.add(p);
+        for (const p of orderedPartners) claimed.add(p);
       } else {
         unit = { ids: [id], isCouple: false };
         claimed.add(id);
       }
       // Inherit side from parents / aunt-uncle attachment — never dump a
       // right-side cousin (David Foltz) into the left leftovers pack.
-      const side = sideForFocusPerson(unit.ids[0]!, leftId, rightId);
-      const partnerSide =
-        unit.ids[1] != null
-          ? sideForFocusPerson(unit.ids[1], leftId, rightId)
-          : "unknown";
+      const side = sideForFocusPerson(unit.ids[unit.ids.length - 1]!, leftId, rightId);
+      let partnerSide: "left" | "right" | "unknown" = "unknown";
+      for (const pid of unit.ids.slice(0, -1)) {
+        const s = sideForFocusPerson(pid, leftId, rightId);
+        if (s === "right") partnerSide = "right";
+        else if (s === "left" && partnerSide === "unknown") partnerSide = "left";
+      }
       if (side === "right" || partnerSide === "right") {
         rightLeftovers.push(unit);
       } else {

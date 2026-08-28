@@ -136,6 +136,43 @@ export function FamilyTreeCanvas({
     return ids;
   }, [tree.nodes, tree.relationships]);
 
+  /** Ex partners when that person also has a current partner (readable chrome). */
+  const formerPartnerIds = useMemo(() => {
+    const currentOf = new Map<string, Set<string>>();
+    const formerOf = new Map<string, Set<string>>();
+    for (const r of tree.relationships) {
+      if (r.type !== "partner_of") continue;
+      const status = r.partnerStatus === "former" ? "former" : "current";
+      const bump = (map: Map<string, Set<string>>, a: string, b: string) => {
+        const set = map.get(a) ?? new Set<string>();
+        set.add(b);
+        map.set(a, set);
+      };
+      if (status === "former") {
+        bump(formerOf, r.fromNodeId, r.toNodeId);
+        bump(formerOf, r.toNodeId, r.fromNodeId);
+      } else {
+        bump(currentOf, r.fromNodeId, r.toNodeId);
+        bump(currentOf, r.toNodeId, r.fromNodeId);
+      }
+    }
+    const ids = new Set<string>();
+    for (const [personId, formers] of formerOf) {
+      if ((currentOf.get(personId)?.size ?? 0) === 0) continue;
+      for (const exId of formers) ids.add(exId);
+    }
+    return ids;
+  }, [tree.relationships]);
+
+  const selectedHasPartner = useMemo(() => {
+    if (!selectedNodeId) return false;
+    return tree.relationships.some(
+      (r) =>
+        r.type === "partner_of" &&
+        (r.fromNodeId === selectedNodeId || r.toNodeId === selectedNodeId),
+    );
+  }, [selectedNodeId, tree.relationships]);
+
   const clampZoom = useCallback((z: number) => {
     return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
   }, []);
@@ -517,6 +554,14 @@ export function FamilyTreeCanvas({
                     step
                   </span>
                 ) : null}
+                {formerPartnerIds.has(node.id) ? (
+                  <span
+                    className="family-tree-person-former"
+                    title="Former spouse / partner"
+                  >
+                    former
+                  </span>
+                ) : null}
                 {node.needsReview ? (
                   <span className="family-tree-person-review" title={node.reviewReason ?? "Needs review"}>
                     Needs review
@@ -584,7 +629,9 @@ export function FamilyTreeCanvas({
                     }}
                   >
                     <Heart className="size-3.5" aria-hidden />
-                    Spouse / partner
+                    {selectedHasPartner
+                      ? "Add another partner"
+                      : "Spouse / partner"}
                   </button>
                   <button
                     type="button"

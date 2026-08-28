@@ -15,7 +15,7 @@ import type {
   SerializedFamilyTreeGraph,
   SerializedFamilyTreePerson,
 } from "@/lib/family-tree/serialize";
-import { childIdsOf, spouseIdsOf } from "@/lib/family-tree/genealogy-iq";
+import { spouseIdsOf } from "@/lib/family-tree/genealogy-iq";
 import type { CousinSide } from "@/lib/family-tree/cousin-side";
 import type { GenealogyEngineCommand } from "@/lib/family-tree/engine";
 import { correctFamilyTreeLayout } from "@/lib/family-tree/layout-correct";
@@ -342,20 +342,9 @@ export function FamilyTreeBuilder({
   }
 
   function addPartnerForNode(nodeId: string) {
-    const edges = tree.relationships.map((r) => ({
-      fromNodeId: r.fromNodeId,
-      toNodeId: r.toNodeId,
-      type: r.type,
-    }));
-    if (childIdsOf(edges, nodeId).length > 0) {
-      setError(null);
-      setSpouseConfirmPersonId(nodeId);
-      return;
-    }
-    runMutation(async () => {
-      await runEngineCommand({ type: "addSpouse", personId: nodeId });
-      await refreshAvailable();
-    });
+    // Always confirm: status (current/former) + shared-children checkboxes.
+    setError(null);
+    setSpouseConfirmPersonId(nodeId);
   }
 
   function addSiblingForNode(nodeId: string) {
@@ -369,6 +358,7 @@ export function FamilyTreeBuilder({
     personId: string;
     label: string;
     excludeChildIds: string[];
+    partnerStatus: "current" | "former";
   }) {
     runMutation(async () => {
       await runEngineCommand({
@@ -376,6 +366,7 @@ export function FamilyTreeBuilder({
         personId: payload.personId,
         label: payload.label,
         excludeChildIds: payload.excludeChildIds,
+        partnerStatus: payload.partnerStatus,
       });
       setSpouseConfirmPersonId(null);
       setSelectedNodeId(null);

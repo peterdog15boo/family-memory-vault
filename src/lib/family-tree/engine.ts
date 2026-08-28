@@ -44,6 +44,8 @@ export type GenealogyEngineCommand =
        * (“not this child’s parent”).
        */
       excludeChildIds?: string[];
+      /** current (default) or former / divorced. */
+      partnerStatus?: "current" | "former";
     }
   | {
       type: "addParent";
@@ -281,6 +283,7 @@ export async function runGenealogyCommand(
           type: "partner_of",
           scaffold: false,
           excludeChildIds: command.excludeChildIds,
+          partnerStatus: command.partnerStatus ?? "current",
         });
         return snapshot(scope,
           result.notices,
@@ -296,6 +299,7 @@ export async function runGenealogyCommand(
           otherNodeId: command.personId,
           newNodeIs: "from",
           excludeChildIds: command.excludeChildIds,
+          partnerStatus: command.partnerStatus ?? "current",
         },
       });
       return snapshot(scope, created.notices, null, created.node.id);

@@ -22,6 +22,7 @@ const commandSchema = z.discriminatedUnion("type", [
     spouseNodeId: z.string().trim().min(1).optional(),
     label: z.string().trim().min(1).max(120).optional(),
     excludeChildIds: z.array(z.string().trim().min(1)).optional(),
+    partnerStatus: z.enum(["current", "former"]).optional(),
   }),
   z.object({
     type: z.literal("addParent"),

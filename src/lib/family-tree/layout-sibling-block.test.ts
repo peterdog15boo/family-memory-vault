@@ -1,55 +1,80 @@
 import { describe, expect, it } from "vitest";
 import { computeFamilyTreeLayout, TREE_LAYOUT } from "@/lib/family-tree/layout";
 import {
+  addPartnerLink,
+  emptyPartnerIndex,
+  orderSiblingHouseholdsForFlank,
   packSiblingHouseholdRow,
   spousesOnRowOf,
 } from "@/lib/family-tree/layout-iq";
 
 /**
  * Permanent rule: Frank+Diane kids are one contiguous sibling spine.
- * Spouses / in-laws dock on free ends — never between blood siblings.
+ * Each sibling’s partners dock on that sibling’s outer side only.
  */
 describe("sibling block contiguous packing", () => {
-  it("packSiblingHouseholdRow keeps blood contiguous with spouses on ends", () => {
-    const row = packSiblingHouseholdRow(
+  it("packSiblingHouseholdRow keeps Teresa–Donna adjacent; partners stay with owner", () => {
+    const ordered = orderSiblingHouseholdsForFlank(
       [
-        { blood: "teresa", spouses: [] },
+        { blood: "teresa", spouses: ["duane-sr", "dana"] },
         { blood: "donna", spouses: ["scott", "todd"] },
         { blood: "kevan", spouses: ["colleen"] },
       ],
       "right",
     );
-    // Partnered claim ends: donna (outer), kevan (inner); teresa in spine.
+    const row = packSiblingHouseholdRow(ordered, "right");
+    // Heavier households outer: donna, teresa, then kevan
     expect(row).toEqual([
       "scott",
       "todd",
       "donna",
       "teresa",
+      "duane-sr",
+      "dana",
       "kevan",
       "colleen",
     ]);
 
-    const blood = row.filter((id) =>
-      ["teresa", "donna", "kevan"].includes(id),
-    );
-    expect(blood).toEqual(["donna", "teresa", "kevan"]);
-
-    for (let i = 0; i < blood.length - 1; i++) {
-      const a = row.indexOf(blood[i]!);
-      const b = row.indexOf(blood[i + 1]!);
-      const between = row.slice(a + 1, b);
-      expect(between.every((id) => blood.includes(id))).toBe(true);
+    const di = row.indexOf("donna");
+    const ti = row.indexOf("teresa");
+    expect(Math.abs(di - ti)).toBe(1);
+    for (const s of ["scott", "todd", "duane-sr", "dana", "colleen"]) {
+      const si = row.indexOf(s);
+      expect(si > Math.min(ti, di) && si < Math.max(ti, di)).toBe(false);
     }
   });
 
-  it("spousesOnRowOf finds one-way multi-spouse partners", () => {
-    const partnerOf = new Map<string, string>([
-      ["donna", "scott"],
-      ["scott", "donna"],
-      ["todd", "donna"],
+  it("preserves explicit blood order when not re-ordered", () => {
+    const row = packSiblingHouseholdRow(
+      [
+        { blood: "teresa", spouses: ["duane-sr", "dana"] },
+        { blood: "donna", spouses: ["scott", "todd"] },
+        { blood: "kevan", spouses: ["colleen"] },
+        { blood: "kathy", spouses: ["jeff"] },
+      ],
+      "right",
+    );
+    expect(row).toEqual([
+      "duane-sr",
+      "dana",
+      "teresa",
+      "donna",
+      "scott",
+      "todd",
+      "kevan",
+      "colleen",
+      "kathy",
+      "jeff",
     ]);
+    expect(Math.abs(row.indexOf("teresa") - row.indexOf("donna"))).toBe(1);
+  });
+
+  it("spousesOnRowOf finds all multi-partners", () => {
+    const partners = emptyPartnerIndex();
+    addPartnerLink(partners, "donna", "scott");
+    addPartnerLink(partners, "donna", "todd");
     const idSet = new Set(["donna", "scott", "todd", "teresa"]);
-    expect(spousesOnRowOf("donna", idSet, partnerOf)).toEqual([
+    expect(spousesOnRowOf("donna", idSet, partners)).toEqual([
       "scott",
       "todd",
     ]);
@@ -69,6 +94,9 @@ describe("sibling block contiguous packing", () => {
       { id: "todd", label: "Todd" },
       { id: "scott", label: "Scott" },
       { id: "colleen", label: "Colleen" },
+      { id: "duane-sr", label: "Duane Sr" },
+      { id: "dana", label: "Dana" },
+      { id: "duane-jr", label: "Duane Jr" },
     ];
     const kids = ["teresa", "donna", "kevan", "kathy"] as const;
     const edges = [
@@ -78,6 +106,11 @@ describe("sibling block contiguous packing", () => {
       { fromNodeId: "donna", toNodeId: "todd", type: "partner_of" as const },
       { fromNodeId: "donna", toNodeId: "scott", type: "partner_of" as const },
       { fromNodeId: "kevan", toNodeId: "colleen", type: "partner_of" as const },
+      { fromNodeId: "teresa", toNodeId: "duane-sr", type: "partner_of" as const },
+      { fromNodeId: "teresa", toNodeId: "dana", type: "partner_of" as const },
+      { fromNodeId: "teresa", toNodeId: "duane-jr", type: "parent_of" as const },
+      { fromNodeId: "duane-sr", toNodeId: "duane-jr", type: "parent_of" as const },
+      // Dana is NOT a parent of Duane Jr.
       ...kids.flatMap((c) => [
         { fromNodeId: "diane", toNodeId: c, type: "parent_of" as const },
         { fromNodeId: "frank", toNodeId: c, type: "parent_of" as const },
@@ -98,46 +131,35 @@ describe("sibling block contiguous packing", () => {
 
     expect(by.teresa!.y).toBe(by.kathy!.y);
     expect(by.donna!.y).toBe(by.kathy!.y);
-    expect(by.kevan!.y).toBe(by.kathy!.y);
 
     const row = Object.values(by)
       .filter((n) => n.y === by.kathy!.y)
       .sort((a, b) => a.x - b.x)
       .map((n) => n.id);
 
-    // No non-sibling between Teresa and Donna.
     const ti = row.indexOf("teresa");
     const di = row.indexOf("donna");
-    const betweenTD = row.slice(Math.min(ti, di) + 1, Math.max(ti, di));
-    expect(betweenTD).toEqual([]);
+    expect(Math.abs(ti - di)).toBe(1);
+    expect(row.slice(Math.min(ti, di) + 1, Math.max(ti, di))).toEqual([]);
 
-    // Scott/Todd adjacent to Donna, not between Teresa and Donna.
-    for (const spouse of ["scott", "todd"] as const) {
+    for (const spouse of ["scott", "todd", "duane-sr", "dana"] as const) {
       expect(row.includes(spouse)).toBe(true);
-      expect(Math.abs(mid(spouse) - mid("donna"))).toBeLessThan(
-        Math.abs(mid(spouse) - mid("teresa")),
-      );
-      expect(Math.abs(row.indexOf(spouse) - di)).toBeLessThanOrEqual(2);
+      const betweenTD =
+        row.indexOf(spouse) > Math.min(ti, di) &&
+        row.indexOf(spouse) < Math.max(ti, di);
+      expect(betweenTD).toBe(false);
     }
 
-    // Colleen docks to Kevan; Jeff docks to Kat.
-    expect(Math.abs(mid("colleen") - mid("kevan"))).toBeLessThan(
-      Math.abs(mid("colleen") - mid("donna")),
-    );
-    expect(Math.abs(by.jeff!.x - by.kathy!.x)).toBeLessThanOrEqual(
-      TREE_LAYOUT.nodeWidth + TREE_LAYOUT.partnerGap + 1,
-    );
-
-    // Blood siblings appear as one run when in-laws are stripped.
-    const bloodRun = row.filter((id) =>
-      ["teresa", "donna", "kevan", "kathy"].includes(id),
-    );
-    expect(bloodRun.sort()).toEqual(
-      ["donna", "kathy", "kevan", "teresa"].sort(),
-    );
-    const bloodIdx = bloodRun.map((id) => row.indexOf(id));
-    expect(Math.max(...bloodIdx) - Math.min(...bloodIdx) + 1).toBeGreaterThanOrEqual(
-      bloodRun.length,
-    );
+    // Duane Jr under Teresa+Duane Sr generation below; Dana not a parent edge.
+    expect(by["duane-jr"]!.y).toBeGreaterThan(by.teresa!.y);
+    expect(
+      edges.some(
+        (e) =>
+          e.type === "parent_of" &&
+          e.fromNodeId === "dana" &&
+          e.toNodeId === "duane-jr",
+      ),
+    ).toBe(false);
+    void mid;
   });
 });

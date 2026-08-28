@@ -414,6 +414,13 @@
       "when": 1787960000000,
       "tag": "0069_person_story_posts",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1787970000000,
+      "tag": "0070_family_tree_partner_status",
+      "breakpoints": true
     }
   ]
 }

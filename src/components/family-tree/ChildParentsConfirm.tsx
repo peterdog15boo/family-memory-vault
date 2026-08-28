@@ -23,9 +23,9 @@ type Props = {
 };
 
 /**
- * When adding a child from someone who has a spouse, ask which adults are
- * parents. Starter is always included; spouses default on (uncheck for
- * step-child / prior relationship).
+ * When adding a child from someone who has a partner, ask which partner is
+ * the other parent (or this parent only). With multiple partners, nothing
+ * is auto-checked — never attach the child to every spouse by default.
  */
 export function ChildParentsConfirm({
   open,
@@ -67,8 +67,10 @@ export function ChildParentsConfirm({
     if (!open) return;
     setChildLabel("");
     const next: Record<string, boolean> = {};
+    const multiPartner = spouses.length > 1;
     for (const spouse of spouses) {
-      next[spouse.id] = true;
+      // One partner → default co-parent; multiple → ask (default: this parent only).
+      next[spouse.id] = !multiPartner;
     }
     setSpouseChecked(next);
   }, [open, personId]); // eslint-disable-line react-hooks/exhaustive-deps -- reset on open only
@@ -139,7 +141,8 @@ export function ChildParentsConfirm({
           </label>
 
           <p className="text-sm text-ink">
-            Who are the parents of {childName}?
+            Who else is a parent of {childName}? Leave everyone unchecked for{" "}
+            {personName} only.
           </p>
 
           <ul className="space-y-2">

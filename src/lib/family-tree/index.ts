@@ -133,6 +133,7 @@ export type CreateFamilyTreeNodeInput = {
     newNodeIs: "from" | "to";
     /** Child ids to skip when auto-linking a new spouse as co-parent. */
     excludeChildIds?: string[];
+    partnerStatus?: "current" | "former";
   };
 };
 
@@ -230,6 +231,7 @@ export async function createFamilyTreeNode(
         type: input.link.type,
         scaffold: false,
         excludeChildIds: input.link.excludeChildIds,
+        partnerStatus: input.link.partnerStatus,
       });
       notices = linked.notices;
     } catch (error) {
@@ -376,6 +378,8 @@ export type CreateFamilyTreeRelationshipInput = {
    * (“not this child’s parent”).
    */
   excludeChildIds?: string[];
+  /** current | former for partner_of (ignored for other types). */
+  partnerStatus?: "current" | "former";
   /**
    * When set, only these spouses of the new parent are linked as co-parents.
    * Empty array = no spouse co-parents. Omit to link all spouses (default).
@@ -1078,6 +1082,10 @@ async function insertFamilyTreeRelationship(input: {
       fromNodeId: endpoints.fromNodeId,
       toNodeId: endpoints.toNodeId,
       type: input.type,
+      partnerStatus:
+        input.type === "partner_of"
+          ? (input.partnerStatus ?? "current")
+          : null,
       createdAt: now,
       updatedAt: now,
     })

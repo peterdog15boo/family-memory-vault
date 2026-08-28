@@ -958,6 +958,11 @@ export const familyTreeRelationships = pgTable(
       .notNull()
       .references(() => familyTreeNodes.id, { onDelete: "cascade" }),
     type: text("type").$type<FamilyTreeRelationType>().notNull(),
+    /**
+     * For partner_of edges: current vs former (divorced / separated).
+     * Null/ignored for other relationship types.
+     */
+    partnerStatus: text("partner_status").$type<"current" | "former">(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
