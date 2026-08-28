@@ -58,7 +58,7 @@ describe("planFamilyTreeRepair", () => {
     expect(plan.summary).toMatch(/fixed/i);
   });
 
-  it("pairs two co-parents with a spouse link when safe", () => {
+  it("flags co-parents without a spouse link instead of auto-adding partner_of", () => {
     const plan = planFamilyTreeRepair({
       nodes: [
         { id: "mom", label: "Mom", personId: null, notes: null },
@@ -71,14 +71,36 @@ describe("planFamilyTreeRepair", () => {
       ],
     });
 
+    expect(plan.ops.some((o) => o.op === "add_partner")).toBe(false);
     expect(
-      plan.ops.some(
-        (o) =>
-          o.op === "add_partner" &&
-          ((o.a === "mom" && o.b === "dad") ||
-            (o.a === "dad" && o.b === "mom")),
-      ),
-    ).toBe(true);
+      plan.ops.filter((o) => o.op === "flag_review").map((o) => o.nodeId).sort(),
+    ).toEqual(["dad", "mom"]);
+  });
+
+  it("does not recreate a removed partner_of between co-parents", () => {
+    // User removed the spouse edge; shared kids remain — repair must not undo Remove.
+    const plan = planFamilyTreeRepair({
+      nodes: [
+        { id: "teresa", label: "Teresa", personId: null, notes: null },
+        { id: "duane-sr", label: "Duane Sr", personId: null, notes: null },
+        { id: "duane-jr", label: "Duane Jr", personId: null, notes: null },
+      ],
+      relationships: [
+        {
+          id: "c1",
+          fromNodeId: "teresa",
+          toNodeId: "duane-jr",
+          type: "parent_of",
+        },
+        {
+          id: "c2",
+          fromNodeId: "duane-sr",
+          toNodeId: "duane-jr",
+          type: "parent_of",
+        },
+      ],
+    });
+    expect(plan.ops.some((o) => o.op === "add_partner")).toBe(false);
   });
 
   it("flips mislinked co-parent siblings to partners", () => {

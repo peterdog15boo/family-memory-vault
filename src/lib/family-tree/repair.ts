@@ -415,7 +415,9 @@ export function planFamilyTreeRepair(graph: RepairGraph): RepairPlan {
     }
   }
 
-  // 3) Pair parent couples (missing spouse between safe co-parents)
+  // 3) Co-parents without a spouse link — flag only (never auto-add partner_of).
+  //    Auto-pairing undoes intentional Remove / divorce / multi-partner edits;
+  //    layout still soft-pairs co-parents via inferredCoParentPairs.
   const parentsByChild = new Map<string, string[]>();
   for (const e of workingEdges) {
     if (e.type !== "parent_of") continue;
@@ -442,18 +444,17 @@ export function planFamilyTreeRepair(graph: RepairGraph): RepairPlan {
     const key = a < b ? `${a}|${b}` : `${b}|${a}`;
     if (paired.has(key)) continue;
     paired.add(key);
+    if (hasPartnerLink(workingEdges, a, b)) continue;
     if (!canAutoSpouseCoParents(workingEdges, a, b)) continue;
-    ops.push({
-      op: "add_partner",
+    const childLabel = nodeById.get(childId)?.label ?? "child";
+    pushFlag(
       a,
+      `Shares a child (${childLabel}) with someone who isn’t linked as a partner — connect them if they are a couple.`,
+    );
+    pushFlag(
       b,
-      reason: `Co-parents of ${nodeById.get(childId)?.label ?? "child"}`,
-    });
-    workingEdges.push({
-      fromNodeId: a < b ? a : b,
-      toNodeId: a < b ? b : a,
-      type: "partner_of",
-    });
+      `Shares a child (${childLabel}) with someone who isn’t linked as a partner — connect them if they are a couple.`,
+    );
   }
 
   // 4) Cross-spouse parent fan-in (same parent of both spouses) → flag, don't delete
@@ -637,9 +638,9 @@ export function planFamilyTreeRepair(graph: RepairGraph): RepairPlan {
     }
   }
 
-  // 7e) Couple default: spouse of a parent also parents that person's children
-  //     unless the spouse already has a separate set of kids (blended).
-  //     Fixes James+Nettie → Helene/Betty when Nettie was only linked as partner.
+  // 7e) Couple default gaps: spouse of a parent missing parent_of → flag only.
+  //     Auto-adding parent_of here undoes intentional Remove (and blended /
+  //     multi-partner cases). Write path still links on addSpouse/addChild.
   {
     const seenPartners = new Set<string>();
     for (const e of workingEdges) {
@@ -659,34 +660,12 @@ export function planFamilyTreeRepair(graph: RepairGraph): RepairPlan {
       }
 
       for (const link of pairs) {
-        const alreadyPlanned = ops.some(
-          (o) =>
-            o.op === "add_parent" &&
-            o.parentId === link.parentId &&
-            o.childId === link.childId,
-        );
-        if (alreadyPlanned) continue;
-        if (wouldCreateParentCycle(ancestry, link.parentId, link.childId)) {
-          continue;
-        }
         const childLabel = nodeById.get(link.childId)?.label ?? "child";
         const parentLabel = nodeById.get(link.parentId)?.label ?? "spouse";
-        ops.push({
-          op: "add_parent",
-          parentId: link.parentId,
-          childId: link.childId,
-          reason: `${parentLabel} is married to a parent of ${childLabel} and should share that parent link by default.`,
-        });
-        ancestry.push({
-          fromNodeId: link.parentId,
-          toNodeId: link.childId,
-          type: "parent_of",
-        });
-        workingEdges.push({
-          fromNodeId: link.parentId,
-          toNodeId: link.childId,
-          type: "parent_of",
-        });
+        pushFlag(
+          link.parentId,
+          `${parentLabel} is partnered with a parent of ${childLabel} but isn’t linked as a parent — connect them if they share that child.`,
+        );
       }
     }
   }

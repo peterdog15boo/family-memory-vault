@@ -67,7 +67,7 @@ describe("James+Nettie couple parent drops", () => {
     },
   ];
 
-  it("repair plans Nettie→Helene and Nettie→Betty when only James is linked", () => {
+  it("flags Nettie when she is partnered with James but not linked as parent", () => {
     const plan = planFamilyTreeRepair({
       nodes: nodes.map((n) => ({
         id: n.id,
@@ -103,21 +103,10 @@ describe("James+Nettie couple parent drops", () => {
       ],
     });
 
+    // Do not auto-add parent_of — that undoes intentional Remove.
+    expect(plan.ops.some((o) => o.op === "add_parent")).toBe(false);
     expect(
-      plan.ops.some(
-        (o) =>
-          o.op === "add_parent" &&
-          o.parentId === "nettie" &&
-          o.childId === "helene",
-      ),
-    ).toBe(true);
-    expect(
-      plan.ops.some(
-        (o) =>
-          o.op === "add_parent" &&
-          o.parentId === "nettie" &&
-          o.childId === "betty",
-      ),
+      plan.ops.some((o) => o.op === "flag_review" && o.nodeId === "nettie"),
     ).toBe(true);
   });
 
