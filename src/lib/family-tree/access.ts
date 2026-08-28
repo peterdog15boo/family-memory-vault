@@ -54,38 +54,76 @@ async function listFamilyTreeMemberships(
   viewerUserId: string,
 ): Promise<MembershipRow[]> {
   const db = getDb();
-  const rows = await db
-    .select({
-      familyId: families.id,
-      familyName: families.name,
-      peopleOwnerId: families.createdByUserId,
-      treeSharedWithFamily: families.treeSharedWithFamily,
-      canViewTree: familyMembers.canViewTree,
-      canContributeTree: familyMembers.canContributeTree,
-      role: familyMembers.role,
-      treeFamilyId: familyTrees.familyId,
-    })
-    .from(familyMembers)
-    .innerJoin(families, eq(families.id, familyMembers.familyId))
-    .leftJoin(familyTrees, eq(familyTrees.familyId, families.id))
-    .where(
-      and(
-        eq(familyMembers.userId, viewerUserId),
-        eq(familyMembers.status, "active"),
-      ),
-    )
-    .orderBy(asc(families.createdAt));
+  try {
+    const rows = await db
+      .select({
+        familyId: families.id,
+        familyName: families.name,
+        peopleOwnerId: families.createdByUserId,
+        treeSharedWithFamily: families.treeSharedWithFamily,
+        canViewTree: familyMembers.canViewTree,
+        canContributeTree: familyMembers.canContributeTree,
+        role: familyMembers.role,
+        treeFamilyId: familyTrees.familyId,
+      })
+      .from(familyMembers)
+      .innerJoin(families, eq(families.id, familyMembers.familyId))
+      .leftJoin(familyTrees, eq(familyTrees.familyId, families.id))
+      .where(
+        and(
+          eq(familyMembers.userId, viewerUserId),
+          eq(familyMembers.status, "active"),
+        ),
+      )
+      .orderBy(asc(families.createdAt));
 
-  return rows.map((r) => ({
-    familyId: r.familyId,
-    familyName: r.familyName,
-    peopleOwnerId: r.peopleOwnerId,
-    treeSharedWithFamily: r.treeSharedWithFamily,
-    canViewTree: r.canViewTree,
-    canContributeTree: r.canContributeTree,
-    role: r.role,
-    hasTree: Boolean(r.treeFamilyId),
-  }));
+    return rows.map((r) => ({
+      familyId: r.familyId,
+      familyName: r.familyName,
+      peopleOwnerId: r.peopleOwnerId,
+      treeSharedWithFamily: r.treeSharedWithFamily,
+      canViewTree: r.canViewTree,
+      canContributeTree: r.canContributeTree,
+      role: r.role,
+      hasTree: Boolean(r.treeFamilyId),
+    }));
+  } catch (error) {
+    // Pre-migration / missing family_trees: still allow Family nav from membership.
+    console.warn(
+      "[family-tree.access] listFamilyTreeMemberships failed; falling back",
+      error,
+    );
+    const rows = await db
+      .select({
+        familyId: families.id,
+        familyName: families.name,
+        peopleOwnerId: families.createdByUserId,
+        treeSharedWithFamily: families.treeSharedWithFamily,
+        canViewTree: familyMembers.canViewTree,
+        canContributeTree: familyMembers.canContributeTree,
+        role: familyMembers.role,
+      })
+      .from(familyMembers)
+      .innerJoin(families, eq(families.id, familyMembers.familyId))
+      .where(
+        and(
+          eq(familyMembers.userId, viewerUserId),
+          eq(familyMembers.status, "active"),
+        ),
+      )
+      .orderBy(asc(families.createdAt));
+
+    return rows.map((r) => ({
+      familyId: r.familyId,
+      familyName: r.familyName,
+      peopleOwnerId: r.peopleOwnerId,
+      treeSharedWithFamily: r.treeSharedWithFamily,
+      canViewTree: r.canViewTree,
+      canContributeTree: r.canContributeTree,
+      role: r.role,
+      hasTree: false,
+    }));
+  }
 }
 
 /** Pure ACL for one membership row — exported for tests. */
