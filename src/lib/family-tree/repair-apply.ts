@@ -219,6 +219,92 @@ async function applyOp(
       return;
     }
 
+    case "ensure_cousin_lineage": {
+      const { planFamilyTreeScaffold, isScaffoldTempKey } = await import(
+        "@/lib/family-tree/scaffold"
+      );
+      const plan = planFamilyTreeScaffold(
+        {
+          nodes: state.nodes.map((n) => ({
+            id: n.id,
+            label: n.label,
+            personId: n.personId,
+          })),
+          relationships: state.relationships.map((r) => ({
+            fromNodeId: r.fromNodeId,
+            toNodeId: r.toNodeId,
+            type: r.type,
+          })),
+        },
+        {
+          fromNodeId: op.subjectId,
+          toNodeId: op.cousinId,
+          type: "cousin_of",
+          cousinSide: op.side ?? "unknown",
+          cousinSubjectId: op.subjectId,
+        },
+      );
+      if (plan.nodes.length === 0 && plan.relationships.length === 0) {
+        return;
+      }
+
+      const keyToId = new Map<string, string>();
+      for (const n of state.nodes) keyToId.set(n.id, n.id);
+
+      for (const planned of plan.nodes) {
+        const id = nanoid();
+        const [created] = await db
+          .insert(familyTreeNodes)
+          .values({
+            id,
+            userId,
+            personId: null,
+            label: planned.label,
+          })
+          .returning();
+        if (created) {
+          state.nodes = [...state.nodes, created];
+          keyToId.set(planned.key, created.id);
+        }
+      }
+
+      const resolve = (key: string) =>
+        keyToId.get(key) ?? (isScaffoldTempKey(key) ? null : key);
+
+      for (const planned of plan.relationships) {
+        const fromNodeId = resolve(planned.fromKey);
+        const toNodeId = resolve(planned.toKey);
+        if (!fromNodeId || !toNodeId) continue;
+        const endpoints = canonicalizeRelationshipEndpoints(
+          planned.type,
+          fromNodeId,
+          toNodeId,
+        );
+        const exists = state.relationships.some(
+          (r) =>
+            r.type === planned.type &&
+            r.fromNodeId === endpoints.fromNodeId &&
+            r.toNodeId === endpoints.toNodeId,
+        );
+        if (exists) continue;
+        const [created] = await db
+          .insert(familyTreeRelationships)
+          .values({
+            id: nanoid(),
+            userId,
+            fromNodeId: endpoints.fromNodeId,
+            toNodeId: endpoints.toNodeId,
+            type: planned.type,
+          })
+          .onConflictDoNothing()
+          .returning();
+        if (created) {
+          state.relationships = [...state.relationships, created];
+        }
+      }
+      return;
+    }
+
     case "split_merged_label": {
       const existing = state.nodes.find((n) => n.id === op.nodeId);
       if (!existing) return;

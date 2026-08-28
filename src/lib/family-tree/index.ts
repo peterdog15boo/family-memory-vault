@@ -465,6 +465,10 @@ export async function createFamilyTreeRelationshipWithScaffold(
         toNodeId: endpoints.toNodeId,
         type: input.type,
         cousinSide: input.cousinSide,
+        // Subject is always the caller’s fromNodeId (addCousin person / connect “X is…”),
+        // never the lexicographically sorted endpoint.
+        cousinSubjectId:
+          input.type === "cousin_of" ? input.fromNodeId : undefined,
       },
     );
 

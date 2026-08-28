@@ -7,6 +7,10 @@
 import type { FamilyTreeRelationType } from "@/lib/db/schema";
 import { pickParentIdForCousinSide } from "@/lib/family-tree/cousin-side";
 import {
+  analyzeCousinLineage,
+  type CousinLineageGraph,
+} from "@/lib/family-tree/cousin-lineage";
+import {
   canAutoSpouseCoParents,
   hasPartnerLink,
   spouseIdsOf,
@@ -70,6 +74,17 @@ export type RepairOp =
       edgeId: string;
       fromNodeId: string;
       toNodeId: string;
+      reason: string;
+    }
+  | {
+      /**
+       * Create missing aunt/uncle parentUnion on the subject's bloodline for
+       * an existing cousin_of edge (does not delete people).
+       */
+      op: "ensure_cousin_lineage";
+      subjectId: string;
+      cousinId: string;
+      side?: "maternal" | "paternal" | "unknown";
       reason: string;
     }
   | {
@@ -527,6 +542,43 @@ export function planFamilyTreeRepair(graph: RepairGraph): RepairPlan {
   ops.push(
     ...planCousinBridgeSideFixes(graph, workingEdges, nodeById),
   );
+
+  // 7c) Missing subject-side parentUnion for cousin_of → create placeholders
+  {
+    const lineageGraph: CousinLineageGraph = {
+      nodes: graph.nodes.map((n) => ({ id: n.id, label: n.label })),
+      relationships: workingEdges.map((e) => ({
+        id: e.id,
+        fromNodeId: e.fromNodeId,
+        toNodeId: e.toNodeId,
+        type: e.type,
+      })),
+    };
+    const seen = new Set<string>();
+    for (const e of workingEdges) {
+      if (e.type !== "cousin_of") continue;
+      const key =
+        e.fromNodeId < e.toNodeId
+          ? `${e.fromNodeId}|${e.toNodeId}`
+          : `${e.toNodeId}|${e.fromNodeId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const status = analyzeCousinLineage(
+        lineageGraph,
+        e.fromNodeId,
+        e.toNodeId,
+      );
+      if (status.ok) continue;
+      ops.push({
+        op: "ensure_cousin_lineage",
+        subjectId: status.subjectId,
+        cousinId: status.cousinId,
+        side: "unknown",
+        reason:
+          "Cousin was missing a parent bridge on this relative’s family side.",
+      });
+    }
+  }
 
   // 8) Partner/sibling on same ancestry line (phantom)
   for (const e of workingEdges) {

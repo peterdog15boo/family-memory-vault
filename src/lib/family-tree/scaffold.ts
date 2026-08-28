@@ -11,6 +11,7 @@ import {
   pickParentIdForCousinSide,
   type CousinSide,
 } from "@/lib/family-tree/cousin-side";
+import { cousinsLinkedOnSubjectLineage } from "@/lib/family-tree/cousin-lineage";
 import { canonicalizeRelationshipEndpoints } from "@/lib/family-tree/relations";
 
 export type ScaffoldGraphNode = {
@@ -319,32 +320,45 @@ function ensureCousinBridgeParent(
 
 function planCousin(
   builder: PlanBuilder,
-  /** Person whose cousin is being added (side applies only here). */
-  personId: string,
+  /** Person whose cousin is being added — lineage side / bridge anchor. */
+  subjectId: string,
   cousinId: string,
   side?: CousinSide,
 ): string | null {
-  if (cousinsStructurallyLinked(builder.working, personId, cousinId)) {
+  // Only skip when already correctly bridged on the *subject's blood* lineage.
+  // A spouse-side aunt bridge must NOT suppress scaffolding on Kathy's side.
+  if (
+    cousinsLinkedOnSubjectLineage(
+      {
+        nodes: builder.working.nodes.map((n) => ({
+          id: n.id,
+          label: n.label,
+        })),
+        relationships: builder.working.relationships,
+      },
+      subjectId,
+      cousinId,
+    )
+  ) {
     return null;
   }
 
   // Bridge through the subject's blood parents — never the spouse's lineage.
   const parentA = ensureCousinBridgeParent(
     builder,
-    personId,
-    `${NEW_PREFIX}cousin-a`,
+    subjectId,
+    `${NEW_PREFIX}cousin-subject`,
     side,
   );
-  // Cousin's own parents: create/reuse without forcing the subject's maternal/paternal side.
+  // Cousin's own parents (aunt/uncle couple for the subject).
   const parentB = ensureCousinBridgeParent(
     builder,
     cousinId,
-    `${NEW_PREFIX}cousin-b`,
+    `${NEW_PREFIX}cousin-peer`,
     undefined,
   );
 
   // Cousins share aunts/uncles: one parent from each side are siblings.
-  // That sibling edge is between families — never between Mom/Dad of one child.
   if (
     parentA !== parentB &&
     safeToAddSibling(builder.working, parentA, parentB)
@@ -485,6 +499,11 @@ export function planFamilyTreeScaffold(
     type: FamilyTreeRelationType;
     /** Which parent's side bridges a cousin link. */
     cousinSide?: CousinSide;
+    /**
+     * Stable subject for cousin_of (the person in addCousin / "X is cousin of").
+     * Required when from/to were lexicographically canonicalized for storage.
+     */
+    cousinSubjectId?: string;
   },
 ): FamilyTreeScaffoldPlan {
   const empty: FamilyTreeScaffoldPlan = {
@@ -501,14 +520,22 @@ export function planFamilyTreeScaffold(
   let message: string | null = null;
 
   switch (input.type) {
-    case "cousin_of":
+    case "cousin_of": {
+      const subjectId =
+        input.cousinSubjectId === input.fromNodeId ||
+        input.cousinSubjectId === input.toNodeId
+          ? input.cousinSubjectId
+          : input.fromNodeId;
+      const cousinId =
+        subjectId === input.fromNodeId ? input.toNodeId : input.fromNodeId;
       message = planCousin(
         builder,
-        input.fromNodeId,
-        input.toNodeId,
+        subjectId,
+        cousinId,
         input.cousinSide,
       );
       break;
+    }
     case "niece_of":
       message = planNieceNephew(
         builder,
