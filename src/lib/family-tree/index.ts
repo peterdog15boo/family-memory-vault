@@ -368,6 +368,11 @@ export type CreateFamilyTreeRelationshipInput = {
    * (“not this child’s parent”).
    */
   excludeChildIds?: string[];
+  /**
+   * When set, only these spouses of the new parent are linked as co-parents.
+   * Empty array = no spouse co-parents. Omit to link all spouses (default).
+   */
+  coParentSpouseIds?: string[];
   /** Which parent's side bridges a cousin_of scaffold. */
   cousinSide?: CousinSide;
   /**
@@ -605,6 +610,7 @@ export async function createFamilyTreeRelationshipWithScaffold(
         parentNodeId: endpoints.fromNodeId,
         childNodeId: endpoints.toNodeId,
         labelById,
+        includeSpouseIds: input.coParentSpouseIds,
       });
       autoLinkedIds.push(...linked.relationshipIds);
       notices.push(...linked.notices);
@@ -855,6 +861,8 @@ async function linkExistingSpousesAsCoParents(input: {
   parentNodeId: string;
   childNodeId: string;
   labelById: Map<string, string>;
+  /** When set, only these spouse ids are linked (empty = none). */
+  includeSpouseIds?: string[];
 }): Promise<{ relationshipIds: string[]; notices: GenealogyIqNotice[] }> {
   const db = getDb();
   const rows = await db
@@ -866,11 +874,15 @@ async function linkExistingSpousesAsCoParents(input: {
     .from(familyTreeRelationships)
     .where(eq(familyTreeRelationships.userId, input.userId));
 
-  const spouseIds = missingCoParentSpouseIds(
+  let spouseIds = missingCoParentSpouseIds(
     rows,
     input.parentNodeId,
     input.childNodeId,
   );
+  if (input.includeSpouseIds !== undefined) {
+    const allow = new Set(input.includeSpouseIds);
+    spouseIds = spouseIds.filter((id) => allow.has(id));
+  }
   if (spouseIds.length === 0) {
     return { relationshipIds: [], notices: [] };
   }

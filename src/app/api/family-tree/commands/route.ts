@@ -34,6 +34,7 @@ const commandSchema = z.discriminatedUnion("type", [
     childNodeId: z.string().trim().min(1).optional(),
     label: z.string().trim().min(1).max(120).optional(),
     oneParentOnly: z.boolean().optional(),
+    coParentSpouseIds: z.array(z.string().trim().min(1)).optional(),
   }),
   z.object({
     type: z.literal("addSibling"),

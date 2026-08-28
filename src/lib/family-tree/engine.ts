@@ -57,6 +57,11 @@ export type GenealogyEngineCommand =
       label?: string;
       /** When true, do not also link the parent's existing spouse. */
       oneParentOnly?: boolean;
+      /**
+       * Spouses to also link as parents. Empty = none. Omit with
+       * oneParentOnly false to link all spouses.
+       */
+      coParentSpouseIds?: string[];
     }
   | {
       type: "addSibling";
@@ -355,6 +360,12 @@ export async function runGenealogyCommand(
     }
 
     case "addChild": {
+      const coParentSpouseIds = command.coParentSpouseIds;
+      const oneParentOnly =
+        Boolean(command.oneParentOnly) ||
+        (coParentSpouseIds !== undefined && coParentSpouseIds.length === 0);
+      const linkSpousesAsCoParents = !oneParentOnly;
+
       if (command.childNodeId) {
         const result = await createFamilyTreeRelationshipWithScaffold({
           userId,
@@ -362,7 +373,8 @@ export async function runGenealogyCommand(
           toNodeId: command.childNodeId,
           type: "parent_of",
           scaffold: false,
-          linkSpousesAsCoParents: !command.oneParentOnly,
+          linkSpousesAsCoParents,
+          coParentSpouseIds,
         });
         return snapshot(
           userId,
@@ -372,7 +384,7 @@ export async function runGenealogyCommand(
         );
       }
 
-      if (command.oneParentOnly) {
+      if (oneParentOnly || coParentSpouseIds !== undefined) {
         const created = await createFamilyTreeNode({
           userId,
           label: command.label?.trim() || "Child",
@@ -383,8 +395,9 @@ export async function runGenealogyCommand(
           toNodeId: created.node.id,
           type: "parent_of",
           scaffold: false,
-          linkSpousesAsCoParents: false,
+          linkSpousesAsCoParents,
           linkCoParentsAsSpouses: false,
+          coParentSpouseIds,
         });
         return snapshot(
           userId,
