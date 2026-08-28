@@ -5,6 +5,7 @@
  */
 
 import type { FamilyTreeRelationType } from "@/lib/db/schema";
+import { pickParentIdForCousinSide } from "@/lib/family-tree/cousin-side";
 import {
   canAutoSpouseCoParents,
   hasPartnerLink,
@@ -61,6 +62,14 @@ export type RepairOp =
       op: "add_partner";
       a: string;
       b: string;
+      reason: string;
+    }
+  | {
+      /** Move a sibling bridge endpoint onto the subject's blood parent. */
+      op: "retarget_edge";
+      edgeId: string;
+      fromNodeId: string;
+      toNodeId: string;
       reason: string;
     }
   | {
@@ -186,6 +195,116 @@ function childrenOf(edges: RepairEdge[], parentId: string): string[] {
   return edges
     .filter((e) => e.type === "parent_of" && e.fromNodeId === parentId)
     .map((e) => e.toNodeId);
+}
+
+function areSiblings(edges: RepairEdge[], a: string, b: string): boolean {
+  if (a === b) return false;
+  return edges.some(
+    (e) =>
+      e.type === "sibling_of" &&
+      ((e.fromNodeId === a && e.toNodeId === b) ||
+        (e.fromNodeId === b && e.toNodeId === a)),
+  );
+}
+
+function partnersOf(edges: RepairEdge[], id: string): string[] {
+  return spouseIdsOf(edges, id);
+}
+
+/**
+ * When A’s cousin is bridged through A’s spouse’s parents instead of A’s
+ * blood parents, retarget the sibling bridge onto A’s lineage.
+ * Does not delete people or the cousin_of edge.
+ */
+export function planCousinBridgeSideFixes(
+  _graph: RepairGraph,
+  edges: RepairEdge[],
+  nodeById: Map<string, RepairNode>,
+): RepairOp[] {
+  const ops: RepairOp[] = [];
+  const retargeted = new Set<string>();
+
+  for (const e of edges) {
+    if (e.type !== "cousin_of") continue;
+    const endpoints: Array<[string, string]> = [
+      [e.fromNodeId, e.toNodeId],
+      [e.toNodeId, e.fromNodeId],
+    ];
+
+    for (const [subjectId, cousinId] of endpoints) {
+      const spouses = partnersOf(edges, subjectId);
+      if (spouses.length === 0) continue;
+
+      const subjectParents = parentsOf(edges, subjectId);
+      if (subjectParents.length === 0) continue;
+
+      const cousinParents = parentsOf(edges, cousinId);
+      if (cousinParents.length === 0) continue;
+
+      const spouseParentIds = new Set(
+        spouses.flatMap((spouseId) => parentsOf(edges, spouseId)),
+      );
+      if (spouseParentIds.size === 0) continue;
+
+      const linkedToSubject = cousinParents.some((cp) =>
+        subjectParents.some((sp) => areSiblings(edges, cp, sp)),
+      );
+      if (linkedToSubject) continue;
+
+      for (const cousinParentId of cousinParents) {
+        for (const spouseParentId of spouseParentIds) {
+          if (!areSiblings(edges, cousinParentId, spouseParentId)) continue;
+          const bridge = edges.find(
+            (edge) =>
+              edge.type === "sibling_of" &&
+              edge.id &&
+              ((edge.fromNodeId === cousinParentId &&
+                edge.toNodeId === spouseParentId) ||
+                (edge.fromNodeId === spouseParentId &&
+                  edge.toNodeId === cousinParentId)),
+          );
+          if (!bridge?.id || retargeted.has(bridge.id)) continue;
+
+          const labeled = subjectParents.map((id) => ({
+            id,
+            label: nodeById.get(id)?.label ?? id,
+          }));
+          const targetParentId =
+            pickParentIdForCousinSide(labeled, "unknown") ??
+            subjectParents[0]!;
+          if (targetParentId === spouseParentId) continue;
+          if (areSiblings(edges, cousinParentId, targetParentId)) continue;
+
+          const endpointsCanon = canonicalizeRelationshipEndpoints(
+            "sibling_of",
+            cousinParentId,
+            targetParentId,
+          );
+          ops.push({
+            op: "retarget_edge",
+            edgeId: bridge.id,
+            fromNodeId: endpointsCanon.fromNodeId,
+            toNodeId: endpointsCanon.toNodeId,
+            reason:
+              "Cousin bridge was on the spouse’s parents — moved onto this relative’s side.",
+          });
+          retargeted.add(bridge.id);
+
+          // Reflect in working edges for subsequent cousin pairs.
+          const idx = edges.findIndex((x) => x.id === bridge.id);
+          if (idx >= 0) {
+            edges[idx] = {
+              ...edges[idx]!,
+              fromNodeId: endpointsCanon.fromNodeId,
+              toNodeId: endpointsCanon.toNodeId,
+            };
+          }
+        }
+      }
+    }
+  }
+
+  return ops;
 }
 
 /**
@@ -403,6 +522,11 @@ export function planFamilyTreeRepair(graph: RepairGraph): RepairPlan {
       }
     }
   }
+
+  // 7b) Cousin bridged through spouse’s parents → retarget onto subject’s side
+  ops.push(
+    ...planCousinBridgeSideFixes(graph, workingEdges, nodeById),
+  );
 
   // 8) Partner/sibling on same ancestry line (phantom)
   for (const e of workingEdges) {

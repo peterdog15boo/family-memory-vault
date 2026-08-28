@@ -146,6 +146,63 @@ describe("planFamilyTreeRepair", () => {
     ).toBe(true);
   });
 
+  it("retargets a cousin bridge from the spouse’s parents onto Kathy’s side", () => {
+    const plan = planFamilyTreeRepair({
+      nodes: [
+        { id: "jeff", label: "Jeff", personId: null, notes: null },
+        { id: "kathy", label: "Kathy", personId: null, notes: null },
+        { id: "scott", label: "Scott", personId: null, notes: null },
+        { id: "jeff-dad", label: "Dad", personId: null, notes: null },
+        { id: "kathy-mom", label: "Mom", personId: null, notes: null },
+        { id: "scott-mom", label: "Aunt", personId: null, notes: null },
+      ],
+      relationships: [
+        { id: "p1", fromNodeId: "jeff", toNodeId: "kathy", type: "partner_of" },
+        {
+          id: "p2",
+          fromNodeId: "jeff-dad",
+          toNodeId: "jeff",
+          type: "parent_of",
+        },
+        {
+          id: "p3",
+          fromNodeId: "kathy-mom",
+          toNodeId: "kathy",
+          type: "parent_of",
+        },
+        {
+          id: "p4",
+          fromNodeId: "scott-mom",
+          toNodeId: "scott",
+          type: "parent_of",
+        },
+        // Wrong: Scott’s mom bridged to Jeff’s dad instead of Kathy’s mom
+        {
+          id: "bad-bridge",
+          fromNodeId: "jeff-dad",
+          toNodeId: "scott-mom",
+          type: "sibling_of",
+        },
+        {
+          id: "c1",
+          fromNodeId: "kathy",
+          toNodeId: "scott",
+          type: "cousin_of",
+        },
+      ],
+    });
+
+    const retarget = plan.ops.find((o) => o.op === "retarget_edge");
+    expect(retarget).toMatchObject({
+      op: "retarget_edge",
+      edgeId: "bad-bridge",
+    });
+    if (retarget?.op === "retarget_edge") {
+      const ends = [retarget.fromNodeId, retarget.toNodeId].sort();
+      expect(ends).toEqual(["kathy-mom", "scott-mom"].sort());
+    }
+  });
+
   it("does not invent deletions of unrelated people", () => {
     const plan = planFamilyTreeRepair({
       nodes: [

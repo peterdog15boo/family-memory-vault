@@ -176,6 +176,51 @@ export function outerSiblingsOf(
     .sort((a, b) => a.localeCompare(b));
 }
 
+/**
+ * Unmarried cousins of `personId` on this generation — same outer-side
+ * treatment as blood siblings. Never includes someone who already has a
+ * spouse on this row (they stay in their own couple unit).
+ */
+export function outerCousinsOf(
+  personId: string,
+  idsOnRow: ReadonlySet<string>,
+  ctx: LayoutIqContext,
+  exclude: ReadonlySet<string>,
+): string[] {
+  if (!ctx.cousinAdj) return [];
+  return [...(ctx.cousinAdj.get(personId) ?? [])]
+    .filter(
+      (id) =>
+        !exclude.has(id) &&
+        idsOnRow.has(id) &&
+        !isCoupledOnRow(id, idsOnRow, ctx.partnerOf),
+    )
+    .sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Blood siblings + unmarried cousins for a spouse's outer flank.
+ * Cousins must use this path — never insert between spouses.
+ */
+export function outerRelativesOf(
+  personId: string,
+  idsOnRow: ReadonlySet<string>,
+  ctx: LayoutIqContext,
+  exclude: ReadonlySet<string>,
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of [
+    ...outerSiblingsOf(personId, idsOnRow, ctx, exclude),
+    ...outerCousinsOf(personId, idsOnRow, ctx, exclude),
+  ]) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
 function unitsRelated(
   a: LayoutUnit,
   b: LayoutUnit,
@@ -350,10 +395,12 @@ export function orderGenerationForLayout(
     if (unit.isCouple && unit.ids.length === 2) {
       const [left, right] = unit.ids as [string, string];
       const exclude = new Set([left, right]);
-      const leftOuter = outerSiblingsOf(left, idSet, ctx, exclude).filter(
+      // Siblings AND unmarried cousins of each spouse — never insert a
+      // cousin between the couple (that parks them on the spouse's side).
+      const leftOuter = outerRelativesOf(left, idSet, ctx, exclude).filter(
         (id) => !used.has(id),
       );
-      const rightOuter = outerSiblingsOf(right, idSet, ctx, exclude).filter(
+      const rightOuter = outerRelativesOf(right, idSet, ctx, exclude).filter(
         (id) => !used.has(id) && !leftOuter.includes(id),
       );
       for (const id of leftOuter) take(id);
@@ -365,35 +412,14 @@ export function orderGenerationForLayout(
 
     for (const id of unit.ids) {
       if (used.has(id)) continue;
-      // Unmarried sibling cluster around this singleton.
+      // Unmarried sibling/cousin cluster around this singleton.
       const cluster = [
         id,
-        ...outerSiblingsOf(id, idSet, ctx, new Set([id])).filter(
+        ...outerRelativesOf(id, idSet, ctx, new Set([id])).filter(
           (s) => !used.has(s),
         ),
       ];
-      // Prefer attaching near an already-placed cousin.
-      let attachAfter: number | null = null;
-      if (ctx.cousinAdj) {
-        for (const member of cluster) {
-          for (const cousin of ctx.cousinAdj.get(member) ?? []) {
-            if (!used.has(cousin)) continue;
-            const idx = ordered.indexOf(cousin);
-            if (idx >= 0) {
-              attachAfter = idx;
-              break;
-            }
-          }
-          if (attachAfter != null) break;
-        }
-      }
-      if (attachAfter == null) {
-        for (const member of cluster) take(member);
-      } else {
-        const insert = cluster.filter((m) => !used.has(m));
-        ordered.splice(attachAfter + 1, 0, ...insert);
-        for (const member of insert) used.add(member);
-      }
+      for (const member of cluster) take(member);
     }
   }
 

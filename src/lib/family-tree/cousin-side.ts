@@ -58,5 +58,5 @@ export function pickParentIdForCousinSide(
 }
 
 export function cousinSidePromptMessage(personLabel: string): string {
-  return `Which side of ${personLabel}'s family is this cousin on?`;
+  return `Which side of ${personLabel} is this cousin from?`;
 }

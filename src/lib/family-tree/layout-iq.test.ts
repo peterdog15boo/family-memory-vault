@@ -185,6 +185,63 @@ describe("computeFamilyTreeLayout Layout IQ", () => {
     }
   });
 
+  it("places wife’s cousin beside the wife — never between spouses or on husband’s side", () => {
+    const layout = computeFamilyTreeLayout(
+      [
+        { id: "jeff", label: "Jeff" },
+        { id: "kathy", label: "Kathy" },
+        { id: "donna", label: "Donna" },
+        { id: "scott", label: "Scott" },
+      ],
+      [
+        { fromNodeId: "jeff", toNodeId: "kathy", type: "partner_of" },
+        { fromNodeId: "kathy", toNodeId: "donna", type: "sibling_of" },
+        { fromNodeId: "kathy", toNodeId: "scott", type: "cousin_of" },
+      ],
+    );
+
+    const jeff = layout.nodes.find((n) => n.id === "jeff")!;
+    const kathy = layout.nodes.find((n) => n.id === "kathy")!;
+    const donna = layout.nodes.find((n) => n.id === "donna")!;
+    const scott = layout.nodes.find((n) => n.id === "scott")!;
+
+    expect(scott.y).toBe(kathy.y);
+    expect(donna.y).toBe(kathy.y);
+
+    const scottMid = scott.x + TREE_LAYOUT.nodeWidth / 2;
+    const donnaMid = donna.x + TREE_LAYOUT.nodeWidth / 2;
+    const kathyMid = kathy.x + TREE_LAYOUT.nodeWidth / 2;
+    const jeffMid = jeff.x + TREE_LAYOUT.nodeWidth / 2;
+
+    expect(Math.abs(scottMid - kathyMid)).toBeLessThan(
+      Math.abs(scottMid - jeffMid),
+    );
+    expect(Math.abs(donnaMid - kathyMid)).toBeLessThan(
+      Math.abs(donnaMid - jeffMid),
+    );
+
+    // Neither relative sits between Jeff and Kathy.
+    const coupleLeft = Math.min(jeff.x, kathy.x);
+    const coupleRight = Math.max(
+      jeff.x + TREE_LAYOUT.nodeWidth,
+      kathy.x + TREE_LAYOUT.nodeWidth,
+    );
+    const between = (x: number) =>
+      x > coupleLeft + 1 && x + TREE_LAYOUT.nodeWidth < coupleRight - 1;
+    expect(between(scott.x)).toBe(false);
+    expect(between(donna.x)).toBe(false);
+
+    // Same outer flank as Donna (Kathy’s side).
+    const kathyLeft = kathy.x < jeff.x;
+    if (kathyLeft) {
+      expect(scott.x).toBeLessThan(kathy.x);
+      expect(donna.x).toBeLessThan(kathy.x);
+    } else {
+      expect(scott.x).toBeGreaterThan(kathy.x);
+      expect(donna.x).toBeGreaterThan(kathy.x);
+    }
+  });
+
   it("places husband’s sibling beside the husband on his outer side", () => {
     const layout = computeFamilyTreeLayout(
       [

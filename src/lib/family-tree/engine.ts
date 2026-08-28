@@ -474,9 +474,10 @@ export async function runGenealogyCommand(
     case "connect": {
       if (command.relationType === "cousin_of") {
         const tree = await getFamilyTreeGraph(userId);
+        // Side is always about the subject ("X is the cousin of…"), never
+        // the spouse's lineage. Prefer fromNodeId; fall back to toNodeId.
         const fromParents = parentIdsOf(tree, command.fromNodeId);
         const toParents = parentIdsOf(tree, command.toNodeId);
-        // Ask about the endpoint that already has two parents (clear sides).
         const askAbout =
           shouldAskCousinSide(fromParents, command.cousinSide)
             ? command.fromNodeId
@@ -506,6 +507,7 @@ export async function runGenealogyCommand(
         fromNodeId: command.fromNodeId,
         toNodeId: command.toNodeId,
         type: command.relationType,
+        // Side only scaffolds the subject's (from) parent bridge.
         cousinSide: command.cousinSide,
         linkSpousesAsCoParents:
           command.relationType === "parent_of"

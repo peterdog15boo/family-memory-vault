@@ -10,7 +10,7 @@ import {
   applyInLawSoftSiblings,
   familyUnitsForGeneration,
   orderGenerationForLayout,
-  outerSiblingsOf,
+  outerRelativesOf,
   type LayoutUnit,
 } from "@/lib/family-tree/layout-iq";
 import {
@@ -99,7 +99,8 @@ const EMPTY_VERIFICATION: EdgeProjectionVerification = {
  * - maternal / paternal parent couples are separate units — never one sibling bar
  * - each parent couple sits above its own children
  * - shared children cluster under the couple midpoint
- * - cousins stay on their branch / outer side
+ * - cousins stay on their branch / outer side of the related spouse
+ *   (never between a couple, never on the unrelated spouse’s side)
  * - every stored relationship draws a line; none are invented
  */
 export function computeFamilyTreeLayout(
@@ -518,8 +519,8 @@ export function computeFamilyTreeLayout(
   }
 
   /**
-   * Pin unmarried blood siblings to each spouse's outer side (never past the
-   * spouse, never pulling another couple apart).
+   * Pin unmarried blood siblings and cousins to each spouse's outer side
+   * (never between spouses, never pulling another couple apart).
    */
   function snapSiblingsToOuterSides() {
     const idSetByGen = gens.map((ids) => new Set(ids));
@@ -544,13 +545,13 @@ export function computeFamilyTreeLayout(
         const rightPos = positions.get(rightId)!;
         const exclude = new Set([leftId, rightId]);
 
-        const leftSibs = outerSiblingsOf(
+        const leftSibs = outerRelativesOf(
           leftId,
           idSet,
           layoutIqCtx,
           exclude,
         ).filter((s) => !handled.has(s));
-        const rightSibs = outerSiblingsOf(
+        const rightSibs = outerRelativesOf(
           rightId,
           idSet,
           layoutIqCtx,
@@ -575,14 +576,14 @@ export function computeFamilyTreeLayout(
 
       const remaining = ids.filter((id) => {
         if (handled.has(id)) return false;
-        const sibs = outerSiblingsOf(id, idSet, layoutIqCtx, new Set());
+        const sibs = outerRelativesOf(id, idSet, layoutIqCtx, new Set());
         return sibs.some((s) => !handled.has(s));
       });
       for (const seed of remaining) {
         if (handled.has(seed)) continue;
         const cluster = [
           seed,
-          ...outerSiblingsOf(seed, idSet, layoutIqCtx, new Set([seed])),
+          ...outerRelativesOf(seed, idSet, layoutIqCtx, new Set([seed])),
         ].filter((id) => !handled.has(id));
         if (cluster.length <= 1) continue;
         cluster.sort((a, b) => ids.indexOf(a) - ids.indexOf(b));

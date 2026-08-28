@@ -319,23 +319,28 @@ function ensureCousinBridgeParent(
 
 function planCousin(
   builder: PlanBuilder,
-  a: string,
-  b: string,
+  /** Person whose cousin is being added (side applies only here). */
+  personId: string,
+  cousinId: string,
   side?: CousinSide,
 ): string | null {
-  if (cousinsStructurallyLinked(builder.working, a, b)) return null;
+  if (cousinsStructurallyLinked(builder.working, personId, cousinId)) {
+    return null;
+  }
 
+  // Bridge through the subject's blood parents — never the spouse's lineage.
   const parentA = ensureCousinBridgeParent(
     builder,
-    a,
+    personId,
     `${NEW_PREFIX}cousin-a`,
     side,
   );
+  // Cousin's own parents: create/reuse without forcing the subject's maternal/paternal side.
   const parentB = ensureCousinBridgeParent(
     builder,
-    b,
+    cousinId,
     `${NEW_PREFIX}cousin-b`,
-    side,
+    undefined,
   );
 
   // Cousins share aunts/uncles: one parent from each side are siblings.

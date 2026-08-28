@@ -458,7 +458,7 @@ export function FamilyTreeBuilder({
             disabled={pending}
             onClick={() => resolveCousinSide("maternal")}
           >
-            Mom’s side
+            Mom’s side (maternal)
           </button>
           <button
             type="button"
@@ -466,7 +466,7 @@ export function FamilyTreeBuilder({
             disabled={pending}
             onClick={() => resolveCousinSide("paternal")}
           >
-            Dad’s side
+            Dad’s side (paternal)
           </button>
           <button
             type="button"

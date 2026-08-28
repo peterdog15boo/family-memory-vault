@@ -170,6 +170,55 @@ async function applyOp(
       return;
     }
 
+    case "retarget_edge": {
+      const endpoints = canonicalizeRelationshipEndpoints(
+        "sibling_of",
+        op.fromNodeId,
+        op.toNodeId,
+      );
+      const duplicate = state.relationships.some(
+        (r) =>
+          r.id !== op.edgeId &&
+          r.type === "sibling_of" &&
+          r.fromNodeId === endpoints.fromNodeId &&
+          r.toNodeId === endpoints.toNodeId,
+      );
+      if (duplicate) {
+        await db
+          .delete(familyTreeRelationships)
+          .where(
+            and(
+              eq(familyTreeRelationships.id, op.edgeId),
+              eq(familyTreeRelationships.userId, userId),
+            ),
+          );
+        state.relationships = state.relationships.filter(
+          (r) => r.id !== op.edgeId,
+        );
+        return;
+      }
+      const [updated] = await db
+        .update(familyTreeRelationships)
+        .set({
+          fromNodeId: endpoints.fromNodeId,
+          toNodeId: endpoints.toNodeId,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(familyTreeRelationships.id, op.edgeId),
+            eq(familyTreeRelationships.userId, userId),
+          ),
+        )
+        .returning();
+      if (updated) {
+        state.relationships = state.relationships.map((r) =>
+          r.id === op.edgeId ? updated : r,
+        );
+      }
+      return;
+    }
+
     case "split_merged_label": {
       const existing = state.nodes.find((n) => n.id === op.nodeId);
       if (!existing) return;
