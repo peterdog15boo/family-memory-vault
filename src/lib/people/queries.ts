@@ -59,6 +59,13 @@ export type PersonDetail = PersonListItem & {
   photoDateFrom: Date | null;
   /** Latest clean photo createdAt. */
   photoDateTo: Date | null;
+  /** Story from captions on visible photos (null body = empty state). */
+  story: {
+    body: string | null;
+    sourceCaptionCount: number;
+    generatedAt: Date | null;
+    generatedBy: "system" | "user" | null;
+  };
 };
 
 export type SerializedPersonCover = Omit<PersonCoverPreview, "media"> & {
@@ -84,7 +91,13 @@ export type SerializedPersonPhoto = Omit<PersonPhotoItem, "createdAt"> & {
 
 export type SerializedPersonDetail = Omit<
   PersonDetail,
-  "createdAt" | "updatedAt" | "cover" | "photos" | "photoDateFrom" | "photoDateTo"
+  | "createdAt"
+  | "updatedAt"
+  | "cover"
+  | "photos"
+  | "photoDateFrom"
+  | "photoDateTo"
+  | "story"
 > & {
   createdAt: string;
   updatedAt: string;
@@ -92,6 +105,12 @@ export type SerializedPersonDetail = Omit<
   photos: SerializedPersonPhoto[];
   photoDateFrom: string | null;
   photoDateTo: string | null;
+  story: {
+    body: string | null;
+    sourceCaptionCount: number;
+    generatedAt: string | null;
+    generatedBy: "system" | "user" | null;
+  };
 };
 
 function serializeSafeMedia(item: SafeMediaItem): SerializedSafeMedia {
@@ -134,6 +153,14 @@ export function serializePersonDetail(
       ? item.photoDateFrom.toISOString()
       : null,
     photoDateTo: item.photoDateTo ? item.photoDateTo.toISOString() : null,
+    story: {
+      body: item.story.body,
+      sourceCaptionCount: item.story.sourceCaptionCount,
+      generatedAt: item.story.generatedAt
+        ? item.story.generatedAt.toISOString()
+        : null,
+      generatedBy: item.story.generatedBy,
+    },
   };
 }
 
@@ -379,6 +406,15 @@ export async function getPersonWithPhotos(
   };
   const covers = await resolveCoversForPeople(userId, [listShape]);
 
+  const by = person.storyGeneratedBy;
+  const story = {
+    body: person.storyBody?.trim() || null,
+    sourceCaptionCount: person.storySourceCaptionCount ?? 0,
+    generatedAt: person.storyGeneratedAt ?? null,
+    generatedBy:
+      by === "system" || by === "user" ? (by as "system" | "user") : null,
+  };
+
   return {
     ...listShape,
     displayName: displayPersonName(person.name),
@@ -386,5 +422,6 @@ export async function getPersonWithPhotos(
     photos,
     photoDateFrom,
     photoDateTo,
+    story,
   };
 }

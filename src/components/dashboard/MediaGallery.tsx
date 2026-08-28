@@ -8,6 +8,7 @@ import { MediaThumb } from "@/components/memories/MediaThumb";
 import { MediaViewerMedia } from "@/components/media/MediaViewerMedia";
 import { AssignMediaToPersonControl } from "@/components/people/AssignMediaToPersonControl";
 import { MediaTagsControl } from "@/components/media/MediaTagsControl";
+import { MediaCaptionEditor } from "@/components/media/MediaCaptionEditor";
 import { useCopy, useTranslations } from "@/components/i18n/LocaleProvider";
 import { useLightboxKeyboardNav } from "@/hooks/useLightboxKeyboardNav";
 import { useOverlayA11y } from "@/hooks/useOverlayA11y";
@@ -120,9 +121,10 @@ const GalleryTile = memo(function GalleryTile({
 }) {
   const t = useTranslations();
   const label = item.originalFilename || t("mediaUi.familyMedia");
+  const caption = item.caption?.trim() || null;
 
   return (
-    <li>
+    <li className="min-w-0">
       <button
         type="button"
         data-media-id={item.id}
@@ -180,6 +182,11 @@ const GalleryTile = memo(function GalleryTile({
           </span>
         )}
       </button>
+      {caption ? (
+        <p className="mt-1.5 line-clamp-2 px-0.5 text-xs leading-snug text-ink-muted">
+          {caption}
+        </p>
+      ) : null}
     </li>
   );
 });
@@ -211,9 +218,26 @@ export function MediaGallery({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const [tagsOpen, setTagsOpen] = useState(false);
+  const [captionEditing, setCaptionEditing] = useState(false);
+  const [captionOverrides, setCaptionOverrides] = useState<
+    Record<string, string | null>
+  >({});
   const viewerRef = useRef<HTMLDivElement>(null);
   const tagModeEnabled = Boolean(tagMode);
-  const active = items.find((item) => item.id === activeId) ?? null;
+
+  const displayItems = useMemo(
+    () =>
+      items.map((item) =>
+        Object.prototype.hasOwnProperty.call(captionOverrides, item.id)
+          ? { ...item, caption: captionOverrides[item.id]! }
+          : item.caption === undefined
+            ? { ...item, caption: null }
+            : item,
+      ),
+    [items, captionOverrides],
+  );
+
+  const active = displayItems.find((item) => item.id === activeId) ?? null;
   const deleting = Boolean(active && deletingId === active.id);
 
   const open = useCallback(
@@ -228,6 +252,7 @@ export function MediaGallery({
   );
   const close = useCallback(() => {
     setActiveId(null);
+    setCaptionEditing(false);
     announce(t("a11y.viewerClosed"), { priority: "polite" });
   }, [t]);
 
@@ -240,7 +265,14 @@ export function MediaGallery({
     if (tagModeEnabled) setActiveId(null);
   }, [tagModeEnabled]);
 
-  const itemIds = useMemo(() => items.map((item) => item.id), [items]);
+  const itemIds = useMemo(() => displayItems.map((item) => item.id), [displayItems]);
+
+  const handleCaptionChange = useCallback(
+    (mediaId: string, caption: string | null) => {
+      setCaptionOverrides((prev) => ({ ...prev, [mediaId]: caption }));
+    },
+    [],
+  );
 
   // Announce viewer open / photo change (skip close — handled in close()).
   const viewerAnnounceRef = useRef<string | null>(null);
@@ -289,6 +321,8 @@ export function MediaGallery({
     onClose: close,
     containerRef: viewerRef,
     lockScrollPadding: true,
+    // Caption editor owns Esc while editing.
+    escapeEnabled: !captionEditing && !tagsOpen,
   });
 
   const { canNavigate, index, count, goPrev, goNext } = useLightboxKeyboardNav({
@@ -296,7 +330,7 @@ export function MediaGallery({
     itemIds,
     activeId,
     onActiveIdChange: setActiveId,
-    enabled: !tagsOpen,
+    enabled: !tagsOpen && !captionEditing,
   });
 
   // Close the lightbox if the active item was removed from the list.
@@ -392,6 +426,20 @@ export function MediaGallery({
                   <p className="text-sm">Preview unavailable</p>
                 </div>
               )}
+              {active.type === "photo" || active.type === "video" ? (
+                <div className="shrink-0 border-t border-ink/8 px-4 py-2.5">
+                  <MediaCaptionEditor
+                    key={active.id}
+                    mediaId={active.id}
+                    initialCaption={active.caption}
+                    compact
+                    onEditingChange={setCaptionEditing}
+                    onCaptionChange={(caption) =>
+                      handleCaptionChange(active.id, caption)
+                    }
+                  />
+                </div>
+              ) : null}
               <div className="flex flex-col gap-3 border-t border-ink/8 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <p
@@ -451,7 +499,7 @@ export function MediaGallery({
   return (
     <>
       <ul className="media-gallery-grid grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4">
-        {items.map((item) => (
+        {displayItems.map((item) => (
           <GalleryTile
             key={item.id}
             item={item}

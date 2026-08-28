@@ -37,6 +37,7 @@ const mediaGalleryColumns = {
   originalKey: media.originalKey,
   moderationStatus: media.moderationStatus,
   status: media.status,
+  caption: media.caption,
 } as const;
 
 export type MediaGalleryRow = {
@@ -51,6 +52,7 @@ export type MediaGalleryRow = {
   originalKey: string;
   moderationStatus: Media["moderationStatus"];
   status: Media["status"];
+  caption?: string | null;
 };
 
 export type SafeMediaItem = {
@@ -64,6 +66,8 @@ export type SafeMediaItem = {
   /** Short-lived signed URL for display — only set for clean media. */
   previewUrl: string | null;
   hasThumbnail: boolean;
+  /** User caption (Photos library); null/omit when unset. */
+  caption?: string | null;
 };
 
 /** Split gallery payload for My Library vs Shared with Family. */
@@ -141,7 +145,7 @@ export async function canAccessCleanMedia(
  * Returns null when the row is not clean/ready (defense in depth).
  */
 export async function toSafeMediaItem(
-  row: MediaGalleryRow | Media,
+  row: MediaGalleryRow | Media | (Omit<MediaGalleryRow, "caption"> & { caption?: string | null }),
 ): Promise<SafeMediaItem | null> {
   if (!isSafeToServe(row.moderationStatus) || row.status !== "ready") {
     return null;
@@ -190,6 +194,7 @@ export async function toSafeMediaItem(
     createdAt: row.createdAt,
     previewUrl,
     hasThumbnail: Boolean(row.thumbnailKey),
+    caption: "caption" in row ? (row.caption ?? null) : null,
   };
 }
 

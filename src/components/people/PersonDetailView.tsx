@@ -27,6 +27,7 @@ import { AddPhotosToPersonSheet } from "@/components/people/AddPhotosToPersonShe
 import { MediaThumb } from "@/components/memories/MediaThumb";
 import { MediaViewerMedia } from "@/components/media/MediaViewerMedia";
 import { MediaTagsControl } from "@/components/media/MediaTagsControl";
+import { PersonStorySection } from "@/components/people/PersonStorySection";
 import { useFormat, useTranslations } from "@/components/i18n/LocaleProvider";
 import { useLightboxKeyboardNav } from "@/hooks/useLightboxKeyboardNav";
 import { useOverlayA11y } from "@/hooks/useOverlayA11y";
@@ -476,6 +477,23 @@ export function PersonDetailView({
           </div>
         </div>
       </header>
+
+      <PersonStorySection
+        className="mt-6"
+        personId={person.id}
+        displayName={person.displayName}
+        story={
+          person.story ?? {
+            body: null,
+            sourceCaptionCount: 0,
+            generatedAt: null,
+            generatedBy: null,
+          }
+        }
+        onStoryChange={(story) => {
+          setPerson((prev) => ({ ...prev, story }));
+        }}
+      />
 
       {person.cover?.media.previewUrl ? (
         <AvatarFramingEditor

@@ -22,6 +22,8 @@ export type SerializedSafeMedia = {
   createdAt: string | Date;
   previewUrl: string | null;
   hasThumbnail: boolean;
+  /** User caption for Photos library; null/omit when unset. */
+  caption?: string | null;
 };
 
 export type SerializedMemoryMediaItem = SerializedSafeMedia & {

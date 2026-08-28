@@ -488,6 +488,17 @@ export const media = pgTable(
     userTags: jsonb("user_tags").$type<string[]>().default([]).notNull(),
 
     /**
+     * Family-writable caption for Photos library (clean/ready only).
+     * Distinct from AI captions (`ai_caption` / `scene_caption`).
+     */
+    caption: text("caption"),
+    captionUpdatedAt: timestamp("caption_updated_at", { withTimezone: true }),
+    captionUpdatedByUserId: text("caption_updated_by_user_id").references(
+      () => users.id,
+      { onDelete: "set null" },
+    ),
+
+    /**
      * AI labels the user explicitly removed. Kept so re-analysis does not
      * restore them; also used to filter display/search if arrays are stale.
      */
@@ -779,6 +790,17 @@ export const people = pgTable(
     avatarFocusX: doublePrecision("avatar_focus_x"),
     avatarFocusY: doublePrecision("avatar_focus_y"),
     avatarZoom: doublePrecision("avatar_zoom"),
+    /**
+     * Short family story built from captions on photos where this person appears.
+     * Never invents biography when there are no captions.
+     */
+    storyBody: text("story_body"),
+    storySourceCaptionCount: integer("story_source_caption_count")
+      .default(0)
+      .notNull(),
+    storyGeneratedAt: timestamp("story_generated_at", { withTimezone: true }),
+    /** system (auto) | user (refresh) */
+    storyGeneratedBy: text("story_generated_by").$type<"system" | "user">(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
