@@ -7,7 +7,6 @@ import { FamilyTreeCanvas } from "@/components/family-tree/FamilyTreeCanvas";
 import { FamilyTreeCompleteness } from "@/components/family-tree/FamilyTreeCompleteness";
 import { FamilyTreeEmpty } from "@/components/family-tree/FamilyTreeEmpty";
 import { FamilyTreeNodePopover } from "@/components/family-tree/FamilyTreeNodePopover";
-import { CousinAddWizard } from "@/components/family-tree/CousinAddWizard";
 import { SpouseParentConfirm } from "@/components/family-tree/SpouseParentConfirm";
 import { ChildParentsConfirm } from "@/components/family-tree/ChildParentsConfirm";
 import { FamilyTreeToolkit } from "@/components/family-tree/FamilyTreeToolkit";
@@ -112,9 +111,6 @@ export function FamilyTreeBuilder({
     toNodeId: string;
     relationType: FamilyTreeRelationType;
   } | null>(null);
-  const [cousinWizardSubjectId, setCousinWizardSubjectId] = useState<
-    string | null
-  >(null);
   const [spouseConfirmPersonId, setSpouseConfirmPersonId] = useState<
     string | null
   >(null);
@@ -362,6 +358,13 @@ export function FamilyTreeBuilder({
     });
   }
 
+  function addSiblingForNode(nodeId: string) {
+    runMutation(async () => {
+      await runEngineCommand({ type: "addSibling", personId: nodeId });
+      await refreshAvailable();
+    });
+  }
+
   function submitSpouseParentConfirm(payload: {
     personId: string;
     label: string;
@@ -375,37 +378,6 @@ export function FamilyTreeBuilder({
         excludeChildIds: payload.excludeChildIds,
       });
       setSpouseConfirmPersonId(null);
-      setSelectedNodeId(null);
-      await refreshAvailable();
-    });
-  }
-
-  function openCousinWizard(personId: string) {
-    setError(null);
-    setCousinWizardSubjectId(personId);
-  }
-
-  function submitCousinWizard(payload: {
-    personId: string;
-    label: string;
-    cousinPeopleId: string | null;
-    parent1Label: string;
-    parent2Label: string;
-    attachWhich: "parent1" | "parent2" | "unsure";
-    attachToNodeId: string;
-  }) {
-    runMutation(async () => {
-      await runEngineCommand({
-        type: "addCousin",
-        personId: payload.personId,
-        label: payload.label,
-        parent1Label: payload.parent1Label,
-        parent2Label: payload.parent2Label || undefined,
-        cousinPeopleId: payload.cousinPeopleId,
-        attachWhich: payload.attachWhich,
-        attachToNodeId: payload.attachToNodeId,
-      });
-      setCousinWizardSubjectId(null);
       setSelectedNodeId(null);
       await refreshAvailable();
     });
@@ -777,6 +749,7 @@ export function FamilyTreeBuilder({
                 onAddParent={() => undefined}
                 onAddChild={() => undefined}
                 onAddPartner={() => undefined}
+                onAddSibling={() => undefined}
                 viewOnly
                 layoutRevision={layoutRevision}
                 className="family-tree-viewport-shell--fill"
@@ -840,6 +813,7 @@ export function FamilyTreeBuilder({
           onAddParent={() => undefined}
           onAddChild={() => undefined}
           onAddPartner={() => undefined}
+          onAddSibling={() => undefined}
           viewOnly
           layoutRevision={layoutRevision}
         />
@@ -906,6 +880,7 @@ export function FamilyTreeBuilder({
         onAddParent={addParentForChild}
         onAddChild={addChildForParent}
         onAddPartner={addPartnerForNode}
+        onAddSibling={addSiblingForNode}
         layoutRevision={layoutRevision}
       />
 
@@ -915,7 +890,6 @@ export function FamilyTreeBuilder({
         open={
           Boolean(selectedNodeId) &&
           !viewMode &&
-          !cousinWizardSubjectId &&
           !spouseConfirmPersonId &&
           !childParentsPersonId
         }
@@ -932,19 +906,9 @@ export function FamilyTreeBuilder({
         onAddParent={addParentForChild}
         onAddChild={addChildForParent}
         onAddPartner={addPartnerForNode}
-        onAddCousin={openCousinWizard}
+        onAddSibling={addSiblingForNode}
         onRemove={removeNode}
         onClearReview={clearNodeReview}
-      />
-
-      <CousinAddWizard
-        open={Boolean(cousinWizardSubjectId) && canEdit}
-        subjectId={cousinWizardSubjectId}
-        tree={tree}
-        availablePeople={availablePeople}
-        pending={pending}
-        onClose={() => setCousinWizardSubjectId(null)}
-        onSubmit={submitCousinWizard}
       />
 
       <SpouseParentConfirm

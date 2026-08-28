@@ -42,6 +42,7 @@ export type FamilyTreeRelationChoiceId =
   | "child"
   | "partner"
   | "sibling"
+  /** @deprecated Not offered in Add UI — kept for resolveRelationChoice. */
   | "cousin"
   | "niece"
   | "nephew"
@@ -50,74 +51,45 @@ export type FamilyTreeRelationChoiceId =
   | "other";
 
 export type FamilyTreeRelationChoice = {
-  id: FamilyTreeRelationChoiceId;
+  id: Exclude<
+    FamilyTreeRelationChoiceId,
+    | "cousin"
+    | "niece"
+    | "nephew"
+    | "sister_in_law"
+    | "brother_in_law"
+    | "other"
+  >;
   /** “Is the … of” phrasing for the connect picker. */
   label: string;
   hint: string;
-  /** Core types shown first; extended under “More”. */
-  group: "core" | "extended";
 };
 
+/**
+ * Direct relationship types offered in Add / connect menus.
+ * Cousin, in-laws, niece/nephew, etc. are never create actions — those
+ * relatives appear when users add parent / partner / child / sibling links.
+ */
 export const FAMILY_TREE_RELATION_CHOICES: FamilyTreeRelationChoice[] = [
   {
     id: "parent",
     label: "Is the parent of…",
     hint: "Mom, Dad, Grandma…",
-    group: "core",
   },
   {
     id: "child",
     label: "Is the child of…",
     hint: "Son, daughter, grandkid…",
-    group: "core",
   },
   {
     id: "partner",
-    label: "Is the spouse of…",
+    label: "Is the spouse / partner of…",
     hint: "Married or long-term",
-    group: "core",
   },
   {
     id: "sibling",
     label: "Is the sibling of…",
     hint: "Brother, sister…",
-    group: "core",
-  },
-  {
-    id: "cousin",
-    label: "Is the cousin of…",
-    hint: "Cousins",
-    group: "extended",
-  },
-  {
-    id: "niece",
-    label: "Is the niece of…",
-    hint: "Niece → aunt or uncle",
-    group: "extended",
-  },
-  {
-    id: "nephew",
-    label: "Is the nephew of…",
-    hint: "Nephew → aunt or uncle",
-    group: "extended",
-  },
-  {
-    id: "sister_in_law",
-    label: "Is the sister-in-law of…",
-    hint: "In-laws",
-    group: "extended",
-  },
-  {
-    id: "brother_in_law",
-    label: "Is the brother-in-law of…",
-    hint: "In-laws",
-    group: "extended",
-  },
-  {
-    id: "other",
-    label: "Is another relative of…",
-    hint: "Less common connection",
-    group: "extended",
   },
 ];
 

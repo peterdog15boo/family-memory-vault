@@ -9,7 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,
 } from "react";
-import { Baby, Heart, Minus, Plus, RotateCcw, UserPlus } from "lucide-react";
+import { Baby, Heart, Minus, Plus, RotateCcw, UserPlus, Users } from "lucide-react";
 import { PersonAvatar } from "@/components/people/PersonAvatar";
 import type { FamilyTreePersonCover } from "@/components/family-tree/types";
 import {
@@ -30,6 +30,7 @@ type Props = {
   onAddParent: (childId: string) => void;
   onAddChild: (parentId: string) => void;
   onAddPartner: (nodeId: string) => void;
+  onAddSibling: (nodeId: string) => void;
   /** Hide edit chrome — pan/zoom only. */
   viewOnly?: boolean;
   /**
@@ -54,6 +55,7 @@ export function FamilyTreeCanvas({
   onAddParent,
   onAddChild,
   onAddPartner,
+  onAddSibling,
   viewOnly = false,
   layoutRevision = 0,
   className,
@@ -582,7 +584,19 @@ export function FamilyTreeCanvas({
                     }}
                   >
                     <Heart className="size-3.5" aria-hidden />
-                    Spouse
+                    Spouse / partner
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAddMenuOpen(false);
+                      onAddSibling(selectedNodeId);
+                    }}
+                  >
+                    <Users className="size-3.5" aria-hidden />
+                    Sibling
                   </button>
                 </div>
               ) : null}

@@ -11,6 +11,7 @@ import {
   familyUnitsForGeneration,
   isCoupledOnRow,
   orderGenerationForLayout,
+  siblingFlankUnits,
   suppressSpouseSideCousinBridges,
   type LayoutUnit,
 } from "@/lib/family-tree/layout-iq";
@@ -99,6 +100,7 @@ const EMPTY_VERIFICATION: EdgeProjectionVerification = {
  * - focus couple anchors the center generation; flanks expand outward
  * - spouse pairs stay atomic (never split by a cousin)
  * - cousins outer, blood siblings inner on each flank
+ * - sibling groups: contiguous blood spine; in-laws dock on free ends
  * - maternal / paternal parent couples sit above their own children by side
  * - every stored relationship draws a line; none are invented
  */
@@ -260,10 +262,12 @@ export function computeFamilyTreeLayout(
   }
 
   function unitWidth(unit: LayoutUnit): number {
-    if (unit.isCouple && unit.ids.length === 2) {
-      return TREE_LAYOUT.nodeWidth * 2 + TREE_LAYOUT.partnerGap;
-    }
-    return TREE_LAYOUT.nodeWidth;
+    const n = unit.ids.length;
+    if (n <= 1) return TREE_LAYOUT.nodeWidth;
+    return (
+      TREE_LAYOUT.nodeWidth * n +
+      TREE_LAYOUT.partnerGap * Math.max(0, n - 1)
+    );
   }
 
   function unitBounds(
@@ -295,16 +299,12 @@ export function computeFamilyTreeLayout(
   }
 
   function placeUnitAt(unit: LayoutUnit, leftX: number, y: number) {
-    if (unit.isCouple && unit.ids.length === 2) {
-      const [a, b] = unit.ids;
-      positions.set(a!, { x: leftX, y });
-      positions.set(b!, {
-        x: leftX + TREE_LAYOUT.nodeWidth + TREE_LAYOUT.partnerGap,
-        y,
-      });
-      return;
+    let x = leftX;
+    for (let i = 0; i < unit.ids.length; i++) {
+      positions.set(unit.ids[i]!, { x, y });
+      x += TREE_LAYOUT.nodeWidth;
+      if (i < unit.ids.length - 1) x += TREE_LAYOUT.partnerGap;
     }
-    positions.set(unit.ids[0]!, { x: leftX, y });
   }
 
   function gapBetweenUnits(a: LayoutUnit, b: LayoutUnit): number {
@@ -526,8 +526,9 @@ export function computeFamilyTreeLayout(
 
   /**
    * Flank units ordered outer → inner toward the focus spouse.
-   * Left flank: blood sits on the RIGHT of each couple (closer to focus).
-   * Right flank: blood sits on the LEFT of each couple (closer to focus).
+   *
+   * Cousins stay outer. Blood siblings pack as one contiguous spine with
+   * spouses docked on the free ends — never between two blood siblings.
    *
    * Includes structural cousins: children of a parent’s sibling (e.g. David
    * under Betty, Helene’s sister) even without an explicit cousin_of edge.
@@ -544,7 +545,7 @@ export function computeFamilyTreeLayout(
 
     const units: LayoutUnit[] = [];
 
-    function takeBlood(bloodId: string) {
+    function takeCousin(bloodId: string) {
       if (used.has(bloodId) || !idSet.has(bloodId)) return;
       const p = partnerOf.get(bloodId);
       if (
@@ -586,17 +587,30 @@ export function computeFamilyTreeLayout(
       return [...found].sort((a, b) => a.localeCompare(b));
     }
 
-    // Outer: explicit cousins, then aunt/uncle kids, then blood siblings.
+    // Outer: explicit cousins, then aunt/uncle kids.
     const cousins = [...(cousinAdj.get(anchorId) ?? [])]
       .filter((id) => idSet.has(id) && !used.has(id))
       .sort((a, b) => a.localeCompare(b));
-    for (const c of cousins) takeBlood(c);
-    for (const c of auntUncleCousins()) takeBlood(c);
+    for (const c of cousins) takeCousin(c);
+    for (const c of auntUncleCousins()) takeCousin(c);
 
+    // Blood siblings: contiguous spine; spouses dock on free ends only.
     const sibs = [...(siblingAdj.get(anchorId) ?? [])]
       .filter((id) => idSet.has(id) && !used.has(id))
       .sort((a, b) => a.localeCompare(b));
-    for (const s of sibs) takeBlood(s);
+    if (sibs.length > 0) {
+      const sibUnits = siblingFlankUnits({
+        bloodIds: sibs,
+        idSet,
+        partnerOf,
+        exclude: used,
+        towardFocus: towardLeft ? "right" : "left",
+      });
+      for (const unit of sibUnits) {
+        units.push(unit);
+        for (const id of unit.ids) used.add(id);
+      }
+    }
 
     return units;
   }

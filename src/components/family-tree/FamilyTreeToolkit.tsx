@@ -69,7 +69,6 @@ export function FamilyTreeToolkit({
     FamilyTreeRelationChoiceId | ""
   >("");
   const [connectToId, setConnectToId] = useState("");
-  const [showExtended, setShowExtended] = useState(false);
 
   const filteredPeople = useMemo(() => {
     const q = peopleQuery.trim().toLowerCase();
@@ -79,15 +78,7 @@ export function FamilyTreeToolkit({
     );
   }, [availablePeople, peopleQuery]);
 
-  const coreChoices = FAMILY_TREE_RELATION_CHOICES.filter(
-    (c) => c.group === "core",
-  );
-  const extendedChoices = FAMILY_TREE_RELATION_CHOICES.filter(
-    (c) => c.group === "extended",
-  );
-  const visibleChoices = showExtended
-    ? FAMILY_TREE_RELATION_CHOICES
-    : coreChoices;
+  const visibleChoices = FAMILY_TREE_RELATION_CHOICES;
 
   function submitPlaceholder(label?: string) {
     const value = (label ?? placeholderLabel).trim();
@@ -281,7 +272,7 @@ export function FamilyTreeToolkit({
           <p className="family-tree-form-lead">
             {tree.nodes.length < 2
               ? "Add at least two people first, then connect them here."
-              : "Pick who, how they’re related, and to whom. We only save what you choose."}
+              : "Add a parent, partner, child, or brother/sister. Other relatives are created through those links."}
           </p>
 
           <ol className="family-tree-connect-steps">
@@ -331,21 +322,6 @@ export function FamilyTreeToolkit({
                   );
                 })}
               </div>
-              {!showExtended ? (
-                <button
-                  type="button"
-                  className="mt-2 text-xs font-semibold text-accent-deep underline-offset-2 hover:underline"
-                  disabled={pending || !connectFromId}
-                  onClick={() => setShowExtended(true)}
-                >
-                  More relatives (cousin, niece, in-laws…)
-                </button>
-              ) : (
-                <p className="mt-2 text-[0.7rem] text-ink-muted">
-                  Showing {extendedChoices.length} extra options — only saved if
-                  you tap Save connection.
-                </p>
-              )}
             </li>
             <li>
               <label className="block text-sm">

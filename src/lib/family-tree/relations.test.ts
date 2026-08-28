@@ -1,8 +1,32 @@
 import { describe, expect, it } from "vitest";
 import {
   describeRelationFromViewer,
+  FAMILY_TREE_RELATION_CHOICES,
   resolveRelationChoice,
 } from "@/lib/family-tree/relations";
+
+describe("FAMILY_TREE_RELATION_CHOICES (Add menu)", () => {
+  it("offers only parent, partner, child, and sibling", () => {
+    expect(FAMILY_TREE_RELATION_CHOICES.map((c) => c.id).sort()).toEqual([
+      "child",
+      "parent",
+      "partner",
+      "sibling",
+    ]);
+    expect(
+      FAMILY_TREE_RELATION_CHOICES.some((c) =>
+        [
+          "cousin",
+          "niece",
+          "nephew",
+          "sister_in_law",
+          "brother_in_law",
+          "other",
+        ].includes(c.id),
+      ),
+    ).toBe(false);
+  });
+});
 
 describe("resolveRelationChoice", () => {
   it("maps child to inverse parent_of", () => {
@@ -13,7 +37,7 @@ describe("resolveRelationChoice", () => {
     });
   });
 
-  it("maps niece and cousin", () => {
+  it("still resolves legacy cousin/niece for stored edges (not Add UI)", () => {
     expect(resolveRelationChoice("niece", "n", "a")).toEqual({
       fromNodeId: "n",
       toNodeId: "a",

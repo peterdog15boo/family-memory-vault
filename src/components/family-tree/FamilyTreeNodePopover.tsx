@@ -50,7 +50,7 @@ type Props = {
   onAddParent: (childId: string) => void;
   onAddChild: (parentId: string) => void;
   onAddPartner: (nodeId: string) => void;
-  onAddCousin: (personId: string) => void;
+  onAddSibling: (nodeId: string) => void;
   onRemove: (nodeId: string) => void;
   onClearReview?: (nodeId: string) => void;
 };
@@ -73,7 +73,7 @@ export function FamilyTreeNodePopover({
   onAddParent,
   onAddChild,
   onAddPartner,
-  onAddCousin,
+  onAddSibling,
   onRemove,
   onClearReview,
 }: Props) {
@@ -213,6 +213,10 @@ export function FamilyTreeNodePopover({
 
         <div className="mt-5">
           <p className="text-sm font-medium text-ink">Grow from here</p>
+          <p className="mt-1 text-xs text-ink-muted">
+            Add a parent, partner, child, or brother/sister. Other relatives are
+            created through those links.
+          </p>
           <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <button
               type="button"
@@ -239,22 +243,18 @@ export function FamilyTreeNodePopover({
               onClick={() => onAddPartner(node.id)}
             >
               <Heart className="size-4" aria-hidden />
-              Add spouse
+              Add spouse / partner
             </button>
             <button
               type="button"
               className="family-tree-shortcut"
               disabled={pending}
-              onClick={() => onAddCousin(node.id)}
+              onClick={() => onAddSibling(node.id)}
             >
               <Users className="size-4" aria-hidden />
-              Add cousin
+              Add sibling
             </button>
           </div>
-          <p className="mt-2 text-xs text-ink-muted">
-            Cousin opens a short wizard so their parents are named and attached
-            on this side of the family — never left floating alone.
-          </p>
         </div>
 
         <label className="mt-5 block text-sm">
