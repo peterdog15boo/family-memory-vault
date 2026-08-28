@@ -59,18 +59,39 @@ function cubicPath(
   return `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
 }
 
-function relationArc(x1: number, y1: number, x2: number, y2: number): string {
+/**
+ * Same-generation relation arc (sibling / cousin / in-law).
+ * Always bows upward so the stroke and its label clear node photos.
+ * Label anchors to the quadratic midpoint of THIS edge — never a nearby chord.
+ */
+function relationArcGeom(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  cardTop: number,
+): { path: string; labelX: number; labelY: number } {
   const midX = (x1 + x2) / 2;
   const midY = (y1 + y2) / 2;
   const dx = x2 - x1;
   const dy = y2 - y1;
   const len = Math.max(1, Math.hypot(dx, dy));
-  const lift = Math.min(36, len * 0.18 + 12);
-  const nx = -dy / len;
-  const ny = dx / len;
-  const cx = midX + nx * lift;
-  const cy = midY + ny * lift;
-  return `M ${x1} ${y1} Q ${cx} ${cy}, ${x2} ${y2}`;
+  // Clear the taller card top; longer spans lift a bit more for readability.
+  const minLift = midY - (cardTop - 28);
+  const lift = Math.max(minLift, Math.min(56, len * 0.16 + 18));
+  const cx = midX;
+  const cy = midY - lift;
+  const path = `M ${x1} ${y1} Q ${cx} ${cy}, ${x2} ${y2}`;
+
+  // Quadratic B(t=0.5) = 1/4 P0 + 1/2 Ctrl + 1/4 P2 — sits on this edge’s stroke.
+  const qx = 0.25 * x1 + 0.5 * cx + 0.25 * x2;
+  const qy = 0.25 * y1 + 0.5 * cy + 0.25 * y2;
+  return {
+    path,
+    labelX: qx,
+    // Nudge further above the stroke so the badge doesn’t cover faces.
+    labelY: qy - 12,
+  };
 }
 
 /**
@@ -137,12 +158,8 @@ function extendedConnectorPath(
   const tx = to.x + NODE_WIDTH / 2;
   const fy = from.y + NODE_HEIGHT * 0.42;
   const ty = to.y + NODE_HEIGHT * 0.42;
-  const path = relationArc(fx, fy, tx, ty);
-  return {
-    path,
-    labelX: (fx + tx) / 2,
-    labelY: (fy + ty) / 2 - 8,
-  };
+  const cardTop = Math.min(from.y, to.y);
+  return relationArcGeom(fx, fy, tx, ty, cardTop);
 }
 
 /**

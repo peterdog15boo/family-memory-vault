@@ -114,6 +114,145 @@ describe("projectRelationshipsToConnectors", () => {
   });
 });
 
+describe("relation label anchors", () => {
+  const nodes = [
+    { id: "harvey", label: "Harvey" },
+    { id: "mary", label: "Mary" },
+    { id: "diane", label: "Diane" },
+    { id: "frank", label: "Frank" },
+    { id: "paul", label: "Paul" },
+    { id: "helene", label: "Helene" },
+    { id: "scott", label: "Scott" },
+    { id: "donna", label: "Donna" },
+    { id: "todd", label: "Todd" },
+    { id: "kathy", label: "Kathy" },
+    { id: "jeff", label: "Jeff" },
+  ];
+
+  const edges = [
+    { id: "e-hm", fromNodeId: "harvey", toNodeId: "mary", type: "partner_of" as const },
+    { id: "e-hs", fromNodeId: "harvey", toNodeId: "scott", type: "parent_of" as const },
+    { id: "e-ms", fromNodeId: "mary", toNodeId: "scott", type: "parent_of" as const },
+    { id: "e-df", fromNodeId: "diane", toNodeId: "frank", type: "partner_of" as const },
+    { id: "e-dk", fromNodeId: "diane", toNodeId: "kathy", type: "parent_of" as const },
+    { id: "e-fk", fromNodeId: "frank", toNodeId: "kathy", type: "parent_of" as const },
+    { id: "e-dd", fromNodeId: "diane", toNodeId: "donna", type: "parent_of" as const },
+    { id: "e-fd", fromNodeId: "frank", toNodeId: "donna", type: "parent_of" as const },
+    { id: "e-ph", fromNodeId: "paul", toNodeId: "helene", type: "partner_of" as const },
+    { id: "e-pj", fromNodeId: "paul", toNodeId: "jeff", type: "parent_of" as const },
+    { id: "e-hj", fromNodeId: "helene", toNodeId: "jeff", type: "parent_of" as const },
+    { id: "e-kj", fromNodeId: "kathy", toNodeId: "jeff", type: "partner_of" as const },
+    {
+      id: "e-sib-dk",
+      fromNodeId: "kathy",
+      toNodeId: "donna",
+      type: "sibling_of" as const,
+    },
+    {
+      id: "e-spouse-dt",
+      fromNodeId: "donna",
+      toNodeId: "todd",
+      type: "partner_of" as const,
+    },
+    {
+      id: "e-cousin-sk",
+      fromNodeId: "kathy",
+      toNodeId: "scott",
+      type: "cousin_of" as const,
+    },
+    {
+      id: "e-sib-md",
+      fromNodeId: "diane",
+      toNodeId: "mary",
+      type: "sibling_of" as const,
+    },
+  ];
+
+  function endpoints(
+    edge: { fromId: string; toId: string },
+    a: string,
+    b: string,
+  ) {
+    return (
+      (edge.fromId === a && edge.toId === b) ||
+      (edge.fromId === b && edge.toId === a)
+    );
+  }
+
+  it("puts Cousin on Scott–Kat (not Scott–Todd) and Sibling on real sibling edges", () => {
+    const layout = computeFamilyTreeLayout(nodes, edges);
+    const by = Object.fromEntries(layout.nodes.map((n) => [n.id, n]));
+    const mid = (id: string) => by[id]!.x + 50;
+
+    const cousin = layout.edges.find((e) => e.type === "cousin_of");
+    expect(cousin).toBeTruthy();
+    expect(cousin!.label).toBe("Cousin");
+    expect(cousin!.relationshipId).toBe("e-cousin-sk");
+    expect(endpoints(cousin!, "scott", "kathy")).toBe(true);
+
+    // On the elevated Scott–Kat arc — above card tops, not on the face row.
+    expect(cousin!.labelY!).toBeLessThan(Math.min(by.scott!.y, by.kathy!.y));
+
+    // Horizontally between Scott and Kat.
+    const scottKatLeft = Math.min(mid("scott"), mid("kathy"));
+    const scottKatRight = Math.max(mid("scott"), mid("kathy"));
+    expect(cousin!.labelX!).toBeGreaterThan(scottKatLeft);
+    expect(cousin!.labelX!).toBeLessThan(scottKatRight);
+
+    // Closer to Scott–Kat elevated mid than to Scott–Todd face-row mid.
+    const scottKatElevated = {
+      x: (mid("scott") + mid("kathy")) / 2,
+      y: Math.min(by.scott!.y, by.kathy!.y) - 40,
+    };
+    const scottToddFace = {
+      x: (mid("scott") + mid("todd")) / 2,
+      y: by.scott!.y + 50,
+    };
+    const d = (
+      ax: number,
+      ay: number,
+      bx: number,
+      byy: number,
+    ) => Math.hypot(ax - bx, ay - byy);
+    expect(
+      d(cousin!.labelX!, cousin!.labelY!, scottKatElevated.x, scottKatElevated.y),
+    ).toBeLessThan(
+      d(cousin!.labelX!, cousin!.labelY!, scottToddFace.x, scottToddFace.y),
+    );
+
+    const sibDonnaKat = layout.edges.find(
+      (e) => e.type === "sibling_of" && endpoints(e, "donna", "kathy"),
+    );
+    expect(sibDonnaKat?.label).toBe("Sibling");
+    expect(sibDonnaKat!.labelY!).toBeLessThan(
+      Math.min(by.donna!.y, by.kathy!.y),
+    );
+    expect(sibDonnaKat!.labelX!).toBeGreaterThan(
+      Math.min(mid("donna"), mid("kathy")),
+    );
+    expect(sibDonnaKat!.labelX!).toBeLessThan(
+      Math.max(mid("donna"), mid("kathy")),
+    );
+
+    const sibMaryDiane = layout.edges.find(
+      (e) => e.type === "sibling_of" && endpoints(e, "mary", "diane"),
+    );
+    expect(sibMaryDiane?.label).toBe("Sibling");
+    expect(sibMaryDiane!.labelY!).toBeLessThan(
+      Math.min(by.mary!.y, by.diane!.y),
+    );
+
+    // Spouse connectors never inherit cousin/sibling badges.
+    for (const e of layout.edges.filter((x) => x.type === "partner_of")) {
+      expect(e.label).toBeUndefined();
+    }
+    // Parent drops stay unlabeled (avoid clutter).
+    for (const e of layout.edges.filter((x) => x.type === "parent_of")) {
+      expect(e.label).toBeUndefined();
+    }
+  });
+});
+
 describe("computeFamilyTreeLayout projection parity", () => {
   it("matches dialog source: every edge carries a relationshipId", () => {
     const layout = computeFamilyTreeLayout(
