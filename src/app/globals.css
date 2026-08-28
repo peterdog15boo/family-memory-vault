@@ -1882,6 +1882,16 @@ body {
   white-space: nowrap;
 }
 
+.family-tree-person-step {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
 .family-tree-ghost-slot {
   display: none;
 }

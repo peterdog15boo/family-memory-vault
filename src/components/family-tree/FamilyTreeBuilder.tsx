@@ -8,12 +8,14 @@ import { FamilyTreeCompleteness } from "@/components/family-tree/FamilyTreeCompl
 import { FamilyTreeEmpty } from "@/components/family-tree/FamilyTreeEmpty";
 import { FamilyTreeNodePopover } from "@/components/family-tree/FamilyTreeNodePopover";
 import { CousinAddWizard } from "@/components/family-tree/CousinAddWizard";
+import { SpouseParentConfirm } from "@/components/family-tree/SpouseParentConfirm";
 import { FamilyTreeToolkit } from "@/components/family-tree/FamilyTreeToolkit";
 import type { FamilyTreePersonCover } from "@/components/family-tree/types";
 import type {
   SerializedFamilyTreeGraph,
   SerializedFamilyTreePerson,
 } from "@/lib/family-tree/serialize";
+import { childIdsOf } from "@/lib/family-tree/genealogy-iq";
 import type { CousinSide } from "@/lib/family-tree/cousin-side";
 import type { GenealogyEngineCommand } from "@/lib/family-tree/engine";
 import { correctFamilyTreeLayout } from "@/lib/family-tree/layout-correct";
@@ -105,6 +107,9 @@ export function FamilyTreeBuilder({
     relationType: FamilyTreeRelationType;
   } | null>(null);
   const [cousinWizardSubjectId, setCousinWizardSubjectId] = useState<
+    string | null
+  >(null);
+  const [spouseConfirmPersonId, setSpouseConfirmPersonId] = useState<
     string | null
   >(null);
   const [pending, startTransition] = useTransition();
@@ -303,8 +308,36 @@ export function FamilyTreeBuilder({
   }
 
   function addPartnerForNode(nodeId: string) {
+    const edges = tree.relationships.map((r) => ({
+      fromNodeId: r.fromNodeId,
+      toNodeId: r.toNodeId,
+      type: r.type,
+    }));
+    if (childIdsOf(edges, nodeId).length > 0) {
+      setError(null);
+      setSpouseConfirmPersonId(nodeId);
+      return;
+    }
     runMutation(async () => {
       await runEngineCommand({ type: "addSpouse", personId: nodeId });
+      await refreshAvailable();
+    });
+  }
+
+  function submitSpouseParentConfirm(payload: {
+    personId: string;
+    label: string;
+    excludeChildIds: string[];
+  }) {
+    runMutation(async () => {
+      await runEngineCommand({
+        type: "addSpouse",
+        personId: payload.personId,
+        label: payload.label,
+        excludeChildIds: payload.excludeChildIds,
+      });
+      setSpouseConfirmPersonId(null);
+      setSelectedNodeId(null);
       await refreshAvailable();
     });
   }
@@ -841,7 +874,12 @@ export function FamilyTreeBuilder({
       {toolkit}
 
       <FamilyTreeNodePopover
-        open={Boolean(selectedNodeId) && !viewMode && !cousinWizardSubjectId}
+        open={
+          Boolean(selectedNodeId) &&
+          !viewMode &&
+          !cousinWizardSubjectId &&
+          !spouseConfirmPersonId
+        }
         nodeId={selectedNodeId}
         tree={tree}
         availablePeople={availablePeople}
@@ -868,6 +906,15 @@ export function FamilyTreeBuilder({
         pending={pending}
         onClose={() => setCousinWizardSubjectId(null)}
         onSubmit={submitCousinWizard}
+      />
+
+      <SpouseParentConfirm
+        open={Boolean(spouseConfirmPersonId) && canEdit}
+        personId={spouseConfirmPersonId}
+        tree={tree}
+        pending={pending}
+        onClose={() => setSpouseConfirmPersonId(null)}
+        onSubmit={submitSpouseParentConfirm}
       />
 
       {viewOverlay}

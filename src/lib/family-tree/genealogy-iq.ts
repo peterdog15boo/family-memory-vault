@@ -67,6 +67,72 @@ export function otherParentsOfChild(
     .map((r) => r.fromNodeId);
 }
 
+/** Children of `parentId` via parent_of. */
+export function childIdsOf(
+  relationships: readonly GenealogyEdge[],
+  parentId: string,
+): string[] {
+  const out: string[] = [];
+  for (const r of relationships) {
+    if (r.type === "parent_of" && r.fromNodeId === parentId) {
+      out.push(r.toNodeId);
+    }
+  }
+  return out;
+}
+
+/**
+ * When `newSpouseId` is linked as partner of `parentId`, which of parentId's
+ * children should also get parent_of from the new spouse?
+ *
+ * Default product rule: a new spouse of a parent is also a parent of that
+ * person's existing children — unless the spouse already has separate kids
+ * of their own (blended families are not auto-merged).
+ */
+export function missingChildrenForNewSpouse(
+  relationships: readonly GenealogyEdge[],
+  parentId: string,
+  newSpouseId: string,
+  excludeChildIds: readonly string[] = [],
+): string[] {
+  if (parentId === newSpouseId) return [];
+  const exclude = new Set(excludeChildIds);
+
+  const spouseOwnKids = childIdsOf(relationships, newSpouseId).filter(
+    (kid) => !isParentOfChild(relationships, parentId, kid),
+  );
+  if (spouseOwnKids.length > 0) return [];
+
+  return childIdsOf(relationships, parentId).filter(
+    (kid) =>
+      kid !== newSpouseId &&
+      !exclude.has(kid) &&
+      !isParentOfChild(relationships, newSpouseId, kid),
+  );
+}
+
+/**
+ * True when the child has a parent whose spouse is not also linked as a parent
+ * (remarriage / step-family). Used for an optional UI “step” hint only.
+ */
+export function showsStepChildHint(
+  relationships: readonly GenealogyEdge[],
+  childId: string,
+): boolean {
+  const parents = relationships
+    .filter((r) => r.type === "parent_of" && r.toNodeId === childId)
+    .map((r) => r.fromNodeId);
+  if (parents.length === 0) return false;
+  for (const parentId of parents) {
+    for (const spouseId of spouseIdsOf(relationships, parentId)) {
+      if (!isParentOfChild(relationships, spouseId, childId)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 /**
  * Spouses of `parentId` who should also become parents of `childId`
  * (already-linked spouses are skipped).

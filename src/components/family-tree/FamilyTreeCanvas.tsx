@@ -17,6 +17,7 @@ import {
   TREE_LAYOUT,
   treeNodeInitials,
 } from "@/lib/family-tree/layout";
+import { showsStepChildHint } from "@/lib/family-tree/genealogy-iq";
 import { isFamilyTreeRelationType } from "@/lib/family-tree/relations";
 import type { SerializedFamilyTreeGraph } from "@/lib/family-tree/serialize";
 import { cn } from "@/lib/utils";
@@ -119,6 +120,19 @@ export function FamilyTreeCanvas({
     () => new Map(tree.nodes.map((n) => [n.id, n])),
     [tree.nodes],
   );
+
+  const stepChildIds = useMemo(() => {
+    const edges = tree.relationships.map((r) => ({
+      fromNodeId: r.fromNodeId,
+      toNodeId: r.toNodeId,
+      type: r.type,
+    }));
+    const ids = new Set<string>();
+    for (const node of tree.nodes) {
+      if (showsStepChildHint(edges, node.id)) ids.add(node.id);
+    }
+    return ids;
+  }, [tree.nodes, tree.relationships]);
 
   const clampZoom = useCallback((z: number) => {
     return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
@@ -496,6 +510,11 @@ export function FamilyTreeCanvas({
                   )}
                 </span>
                 <span className="family-tree-person-name">{displayName}</span>
+                {stepChildIds.has(node.id) ? (
+                  <span className="family-tree-person-step" title="Step-family">
+                    step
+                  </span>
+                ) : null}
                 {node.needsReview ? (
                   <span className="family-tree-person-review" title={node.reviewReason ?? "Needs review"}>
                     Needs review

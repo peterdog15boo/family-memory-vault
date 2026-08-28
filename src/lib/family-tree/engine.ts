@@ -38,6 +38,11 @@ export type GenealogyEngineCommand =
       personId: string;
       spouseNodeId?: string;
       label?: string;
+      /**
+       * Child node ids the new spouse should NOT become parent of
+       * (“not this child’s parent”).
+       */
+      excludeChildIds?: string[];
     }
   | {
       type: "addParent";
@@ -269,6 +274,7 @@ export async function runGenealogyCommand(
           toNodeId: command.spouseNodeId,
           type: "partner_of",
           scaffold: false,
+          excludeChildIds: command.excludeChildIds,
         });
         return snapshot(
           userId,
@@ -284,6 +290,7 @@ export async function runGenealogyCommand(
           type: "partner_of",
           otherNodeId: command.personId,
           newNodeIs: "from",
+          excludeChildIds: command.excludeChildIds,
         },
       });
       return snapshot(userId, created.notices, null, created.node.id);

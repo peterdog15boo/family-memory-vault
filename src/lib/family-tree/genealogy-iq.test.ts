@@ -4,8 +4,10 @@ import {
   coParentsToAutoSpouse,
   inferredCoParentPairs,
   isParentOfChild,
+  missingChildrenForNewSpouse,
   missingCoParentSpouseIds,
   preferredExistingCoParentId,
+  showsStepChildHint,
   spouseIdsOf,
   type GenealogyEdge,
 } from "@/lib/family-tree/genealogy-iq";
@@ -121,5 +123,57 @@ describe("genealogy IQ helpers", () => {
     expect(missingCoParentSpouseIds(rels, "mom", "jeff")).toEqual([]);
     expect(coParentsToAutoSpouse(rels, "mom", "jeff")).toEqual([]);
     expect(isParentOfChild(rels, "mom", "kathy")).toBe(false);
+  });
+
+  it("links new spouse as parent of existing children (Danielle→Rob→Nova)", () => {
+    const rels = edges([
+      ["danielle", "nova", "parent_of"],
+      ["danielle", "rob", "partner_of"],
+    ]);
+    expect(missingChildrenForNewSpouse(rels, "danielle", "rob")).toEqual([
+      "nova",
+    ]);
+    expect(missingChildrenForNewSpouse(rels, "rob", "danielle")).toEqual([]);
+  });
+
+  it("skips excluded children when linking a new spouse", () => {
+    const rels = edges([
+      ["danielle", "nova", "parent_of"],
+      ["danielle", "alex", "parent_of"],
+    ]);
+    expect(
+      missingChildrenForNewSpouse(rels, "danielle", "rob", ["nova"]),
+    ).toEqual(["alex"]);
+  });
+
+  it("does not merge blended families when both spouses have their own kids", () => {
+    const rels = edges([
+      ["danielle", "nova", "parent_of"],
+      ["rob", "sam", "parent_of"],
+    ]);
+    expect(missingChildrenForNewSpouse(rels, "danielle", "rob")).toEqual([]);
+    expect(missingChildrenForNewSpouse(rels, "rob", "danielle")).toEqual([]);
+  });
+
+  it("shows a step hint only when a parent’s spouse is not also a parent", () => {
+    expect(
+      showsStepChildHint(
+        edges([
+          ["danielle", "rob", "partner_of"],
+          ["danielle", "nova", "parent_of"],
+        ]),
+        "nova",
+      ),
+    ).toBe(true);
+    expect(
+      showsStepChildHint(
+        edges([
+          ["danielle", "rob", "partner_of"],
+          ["danielle", "nova", "parent_of"],
+          ["rob", "nova", "parent_of"],
+        ]),
+        "nova",
+      ),
+    ).toBe(false);
   });
 });
