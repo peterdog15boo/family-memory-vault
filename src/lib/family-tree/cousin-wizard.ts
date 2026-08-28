@@ -145,7 +145,7 @@ export async function createNamedCousinBranch(
     // may be empty if P has no parents yet; then attachTo must exist.
   }
 
-  let cousinPersonId: string | null = input.cousinPersonId?.trim() || null;
+  const cousinPersonId: string | null = input.cousinPersonId?.trim() || null;
   let resolvedCousinLabel = cousinLabel;
   if (cousinPersonId) {
     const person = await getPersonForUser(cousinPersonId, input.userId);
