@@ -612,6 +612,7 @@ export async function createFamilyTreeRelationshipWithScaffold(
     fromNodeId: endpoints.fromNodeId,
     toNodeId: endpoints.toNodeId,
     type: input.type,
+    partnerStatus: input.partnerStatus,
   });
 
   const autoLinkedIds: string[] = [];
@@ -1007,6 +1008,7 @@ async function insertFamilyTreeRelationship(input: {
   fromNodeId: string;
   toNodeId: string;
   type: FamilyTreeRelationType;
+  partnerStatus?: "current" | "former";
 }): Promise<FamilyTreeRelationship> {
   const endpoints = canonicalizeRelationshipEndpoints(
     input.type,

@@ -962,7 +962,7 @@ export const familyTreeRelationships = pgTable(
      * For partner_of edges: current vs former (divorced / separated).
      * Null/ignored for other relationship types.
      */
-    partnerStatus: text("partner_status").$type<"current" | "former">(),
+    partnerStatus: text("partner_status").$type<"current" | "former" | null>(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

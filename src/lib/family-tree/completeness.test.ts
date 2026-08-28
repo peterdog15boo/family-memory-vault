@@ -49,6 +49,7 @@ function rel(
     type,
     fromNodeId,
     toNodeId,
+    partnerStatus: null as "current" | "former" | null,
     createdAt: now,
     updatedAt: now,
   };
