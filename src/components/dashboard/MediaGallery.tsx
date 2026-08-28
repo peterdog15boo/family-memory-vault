@@ -8,7 +8,7 @@ import { MediaThumb } from "@/components/memories/MediaThumb";
 import { MediaViewerMedia } from "@/components/media/MediaViewerMedia";
 import { AssignMediaToPersonControl } from "@/components/people/AssignMediaToPersonControl";
 import { MediaTagsControl } from "@/components/media/MediaTagsControl";
-import { MediaCaptionEditor } from "@/components/media/MediaCaptionEditor";
+import { MediaCommentThread } from "@/components/media/MediaCommentThread";
 import { useCopy, useTranslations } from "@/components/i18n/LocaleProvider";
 import { useLightboxKeyboardNav } from "@/hooks/useLightboxKeyboardNav";
 import { useOverlayA11y } from "@/hooks/useOverlayA11y";
@@ -411,28 +411,30 @@ export function MediaGallery({
             ) : null}
 
             <div
-              className="relative flex max-h-[min(85vh,100%)] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-ink/10 bg-canvas shadow-2xl"
+              className="relative flex max-h-[min(90vh,100%)] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-ink/10 bg-canvas shadow-2xl"
               onClick={(event) => event.stopPropagation()}
             >
               {active.type === "photo" || active.type === "video" ? (
-                <MediaViewerMedia
-                  mediaId={active.id}
-                  type={active.type}
-                  alt={active.originalFilename || "Family photo"}
-                />
+                <div className="shrink-0 bg-ink/[0.03]">
+                  <MediaViewerMedia
+                    mediaId={active.id}
+                    type={active.type}
+                    alt={active.originalFilename || "Family photo"}
+                    className="[&_img]:!max-h-[min(52vh,560px)] [&_video]:!max-h-[min(52vh,560px)]"
+                  />
+                </div>
               ) : (
-                <div className="flex min-h-64 min-w-80 flex-col items-center justify-center gap-3 p-10 text-ink-muted">
+                <div className="flex min-h-64 min-w-80 shrink-0 flex-col items-center justify-center gap-3 p-10 text-ink-muted">
                   <ImageIcon className="size-10 opacity-40" aria-hidden />
                   <p className="text-sm">Preview unavailable</p>
                 </div>
               )}
               {active.type === "photo" || active.type === "video" ? (
-                <div className="shrink-0 border-t border-ink/8 px-4 py-2.5">
-                  <MediaCaptionEditor
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-ink/8 px-4 py-3">
+                  <MediaCommentThread
                     key={active.id}
                     mediaId={active.id}
                     initialCaption={active.caption}
-                    compact
                     onEditingChange={setCaptionEditing}
                     onCaptionChange={(caption) =>
                       handleCaptionChange(active.id, caption)
@@ -440,7 +442,7 @@ export function MediaGallery({
                   />
                 </div>
               ) : null}
-              <div className="flex flex-col gap-3 border-t border-ink/8 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex shrink-0 flex-col gap-3 border-t border-ink/8 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <p
                     id="media-viewer-title"

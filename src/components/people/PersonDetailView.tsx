@@ -26,6 +26,7 @@ import { FaceLabelEditor } from "@/components/people/FaceLabelEditor";
 import { AddPhotosToPersonSheet } from "@/components/people/AddPhotosToPersonSheet";
 import { MediaThumb } from "@/components/memories/MediaThumb";
 import { MediaViewerMedia } from "@/components/media/MediaViewerMedia";
+import { MediaCommentThread } from "@/components/media/MediaCommentThread";
 import { MediaTagsControl } from "@/components/media/MediaTagsControl";
 import { PersonStorySection } from "@/components/people/PersonStorySection";
 import { useFormat, useTranslations } from "@/components/i18n/LocaleProvider";
@@ -841,7 +842,7 @@ export function PersonDetailView({
                 </>
               ) : null}
               <div
-                className="relative max-h-[85vh] max-w-4xl overflow-hidden rounded-xl bg-canvas shadow-2xl"
+                className="relative flex max-h-[min(90vh,100%)] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-canvas shadow-2xl"
                 onClick={(e) => e.stopPropagation()}
               >
                 <p id="person-lightbox-title" className="sr-only">
@@ -862,17 +863,28 @@ export function PersonDetailView({
                   </p>
                 ) : null}
                 {lightbox.type === "photo" || lightbox.type === "video" ? (
-                  <MediaViewerMedia
-                    mediaId={lightbox.id}
-                    type={lightbox.type}
-                    alt={lightbox.originalFilename || person.displayName}
-                  />
+                  <div className="shrink-0 bg-ink/[0.03]">
+                    <MediaViewerMedia
+                      mediaId={lightbox.id}
+                      type={lightbox.type}
+                      alt={lightbox.originalFilename || person.displayName}
+                      className="[&_img]:!max-h-[min(52vh,560px)] [&_video]:!max-h-[min(52vh,560px)]"
+                    />
+                  </div>
                 ) : (
-                  <div className="flex min-h-64 min-w-80 flex-col items-center justify-center gap-3 p-10 text-ink-muted">
+                  <div className="flex min-h-64 min-w-80 shrink-0 flex-col items-center justify-center gap-3 p-10 text-ink-muted">
                     {t("people.previewUnavailable")}
                   </div>
                 )}
-                <div className="flex flex-col gap-3 border-t border-ink/8 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                {lightbox.type === "photo" || lightbox.type === "video" ? (
+                  <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-ink/8 px-4 py-3">
+                    <MediaCommentThread
+                      key={lightbox.id}
+                      mediaId={lightbox.id}
+                    />
+                  </div>
+                ) : null}
+                <div className="flex shrink-0 flex-col gap-3 border-t border-ink/8 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-ink-muted">
                     {person.cover?.faceId === lightbox.faceId
                       ? t("memories.currentCover")

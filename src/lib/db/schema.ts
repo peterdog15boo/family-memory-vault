@@ -596,6 +596,35 @@ export const media = pgTable(
 );
 
 /**
+ * Family comment thread on a media item (clean/ready only).
+ * The original `media.caption` remains the first feed entry when present.
+ */
+export const mediaComments = pgTable(
+  "media_comments",
+  {
+    id: text("id").primaryKey(),
+    mediaId: text("media_id")
+      .notNull()
+      .references(() => media.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    editedAt: timestamp("edited_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("media_comments_media_id_created_at_idx").on(
+      table.mediaId,
+      table.createdAt,
+    ),
+    index("media_comments_user_id_idx").on(table.userId),
+  ],
+);
+
+/**
  * Albums and stories owned by a user.
  *
  * Cover media should always be the owner's clean/ready media — enforced in
@@ -2988,8 +3017,20 @@ export const mediaRelations = relations(media, ({ one, many }) => ({
   }),
   memoryLinks: many(memoryMedia),
   faces: many(faces),
+  comments: many(mediaComments),
   processingJobs: many(processingJobs),
   moderationEvents: many(moderationEvents),
+}));
+
+export const mediaCommentsRelations = relations(mediaComments, ({ one }) => ({
+  media: one(media, {
+    fields: [mediaComments.mediaId],
+    references: [media.id],
+  }),
+  user: one(users, {
+    fields: [mediaComments.userId],
+    references: [users.id],
+  }),
 }));
 
 export const memoriesRelations = relations(memories, ({ one, many }) => ({
@@ -3462,6 +3503,8 @@ export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Media = typeof media.$inferSelect;
 export type NewMedia = typeof media.$inferInsert;
+export type MediaComment = typeof mediaComments.$inferSelect;
+export type NewMediaComment = typeof mediaComments.$inferInsert;
 export type MediaConnection = typeof mediaConnections.$inferSelect;
 export type NewMediaConnection = typeof mediaConnections.$inferInsert;
 export type Memory = typeof memories.$inferSelect;

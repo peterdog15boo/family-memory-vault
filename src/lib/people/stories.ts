@@ -12,6 +12,8 @@ import { getDb } from "@/lib/db";
 import { people, type Media } from "@/lib/db/schema";
 import { listVisibleMediaLinkedToPerson } from "@/lib/people/person-media";
 import { getPersonForUser } from "@/lib/people";
+import { listCommentBodiesForMediaIds } from "@/lib/media/comments";
+import { isLowSignalMediaComment } from "@/lib/media/comments-shared";
 
 export const PERSON_STORY_GENERATED_BY = ["system", "user"] as const;
 export type PersonStoryGeneratedBy = (typeof PERSON_STORY_GENERATED_BY)[number];
@@ -48,21 +50,34 @@ function dateLabelFromMedia(row: Media): string | null {
 }
 
 /**
- * Collect caption beats from media visible for this person (oldest → newest).
+ * Collect caption + comment beats from media visible for this person (oldest → newest).
  */
 export function collectCaptionBeatsFromMedia(
   rows: readonly Media[],
+  commentsByMediaId: ReadonlyMap<string, readonly string[]> = new Map(),
 ): PersonStoryCaptionBeat[] {
   const beats: PersonStoryCaptionBeat[] = [];
   for (const row of rows) {
     if (row.moderationStatus !== "clean" || row.status !== "ready") continue;
     const caption = row.caption?.trim().replace(/\s+/g, " ") ?? "";
-    if (!caption) continue;
-    beats.push({
-      mediaId: row.id,
-      caption,
-      dateLabel: dateLabelFromMedia(row),
-    });
+    if (caption) {
+      beats.push({
+        mediaId: row.id,
+        caption,
+        dateLabel: dateLabelFromMedia(row),
+      });
+    }
+    const extras = commentsByMediaId.get(row.id) ?? [];
+    for (const raw of extras) {
+      const text = raw.trim().replace(/\s+/g, " ");
+      if (!text) continue;
+      if (isLowSignalMediaComment(text)) continue;
+      beats.push({
+        mediaId: row.id,
+        caption: text,
+        dateLabel: dateLabelFromMedia(row),
+      });
+    }
   }
   beats.sort((a, b) => {
     const da = a.dateLabel ?? "";
@@ -207,9 +222,13 @@ export async function listPersonStoryCaptionBeats(
   const visible = await listVisibleMediaLinkedToPerson(userId, personId);
   if (!visible) return null;
 
+  const commentsByMediaId = await listCommentBodiesForMediaIds(
+    visible.mediaRows.map((m) => m.id),
+  );
+
   return {
     displayName: person.name,
-    beats: collectCaptionBeatsFromMedia(visible.mediaRows),
+    beats: collectCaptionBeatsFromMedia(visible.mediaRows, commentsByMediaId),
   };
 }
 
