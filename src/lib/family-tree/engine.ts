@@ -20,6 +20,10 @@ import {
   type FamilyTreeRelationshipScaffoldResult,
 } from "@/lib/family-tree/index";
 import {
+  createNamedCousinBranch,
+  listCousinAttachCandidates,
+} from "@/lib/family-tree/cousin-wizard";
+import {
   cousinSidePromptMessage,
   shouldAskCousinSide,
   type CousinSide,
@@ -60,9 +64,17 @@ export type GenealogyEngineCommand =
   | {
       type: "addCousin";
       personId: string;
+      /** Existing cousin node (legacy connect-style). */
       cousinNodeId?: string;
       label?: string;
       side?: CousinSide;
+      /** Wizard: required when creating a new cousin person. */
+      parent1Label?: string;
+      parent2Label?: string;
+      cousinPeopleId?: string | null;
+      attachWhich?: "parent1" | "parent2" | "unsure";
+      /** Existing tree person the cousin’s parent siblings with. */
+      attachToNodeId?: string;
     }
   | {
       type: "connect";
@@ -421,6 +433,58 @@ export async function runGenealogyCommand(
       const tree = await getFamilyTreeGraph(userId);
       const person = tree.nodes.find((n) => n.id === command.personId);
       const parents = parentIdsOf(tree, command.personId);
+
+      // Named-parent wizard path — never creates an unattached cousin.
+      if (command.parent1Label?.trim() && !command.cousinNodeId) {
+        const attachWhich = command.attachWhich ?? "unsure";
+        let attachToNodeId = command.attachToNodeId?.trim() || "";
+        if (!attachToNodeId) {
+          const candidates = listCousinAttachCandidates(tree, command.personId);
+          attachToNodeId = candidates[0]?.id ?? "";
+        }
+        if (!attachToNodeId) {
+          return {
+            ok: false,
+            needsInput: {
+              kind: "cousinSide",
+              message:
+                "Add parents for this person first, then add their cousin.",
+              personId: command.personId,
+            },
+            tree,
+            notices: [],
+            scaffold: null,
+          };
+        }
+        if (!command.label?.trim()) {
+          throw new FamilyTreeError("Cousin name is required.", {
+            code: "validation",
+          });
+        }
+        const result = await createNamedCousinBranch({
+          userId,
+          subjectId: command.personId,
+          cousinLabel: command.label,
+          cousinPersonId: command.cousinPeopleId ?? null,
+          parent1Label: command.parent1Label,
+          parent2Label: command.parent2Label ?? null,
+          attachWhich,
+          attachToNodeId,
+        });
+        return snapshot(
+          userId,
+          [],
+          {
+            message: result.message,
+            createdNodeIds: result.createdNodeIds,
+            createdRelationshipIds: result.createdRelationshipIds,
+            undoNodeIds: result.createdNodeIds,
+            undoRelationshipIds: result.createdRelationshipIds,
+          },
+          result.cousinNodeId,
+        );
+      }
+
       if (shouldAskCousinSide(parents, command.side)) {
         return {
           ok: false,
@@ -454,55 +518,11 @@ export async function runGenealogyCommand(
         );
       }
 
-      const created = await createFamilyTreeNode({
-        userId,
-        label: command.label?.trim() || "Cousin",
-      });
-      try {
-        const result = await createFamilyTreeRelationshipWithScaffold({
-          userId,
-          fromNodeId: command.personId,
-          toNodeId: created.node.id,
-          type: "cousin_of",
-          cousinSide: command.side ?? "unknown",
-          cousinSubjectId: command.personId,
-        });
-        // Full undo removes the new cousin person + primary edge + placeholders.
-        const scaffold = result.scaffold
-          ? {
-              ...result.scaffold,
-              undoNodeIds: [
-                ...new Set([
-                  ...result.scaffold.undoNodeIds,
-                  created.node.id,
-                ]),
-              ],
-              undoRelationshipIds: [
-                ...new Set([
-                  result.relationship.id,
-                  ...result.scaffold.undoRelationshipIds,
-                ]),
-              ],
-            }
-          : {
-              message: null,
-              createdNodeIds: [created.node.id],
-              createdRelationshipIds: [result.relationship.id],
-              undoNodeIds: [created.node.id],
-              undoRelationshipIds: [result.relationship.id],
-            };
-        return snapshot(
-          userId,
-          [...created.notices, ...result.notices],
-          scaffold,
-          created.node.id,
-        );
-      } catch (error) {
-        await deleteFamilyTreeNode(userId, created.node.id).catch(
-          () => undefined,
-        );
-        throw error;
-      }
+      // Creating a new cousin without named parents is no longer allowed.
+      throw new FamilyTreeError(
+        "Use Add cousin and enter the cousin’s parents so they are not left unattached.",
+        { code: "validation" },
+      );
     }
 
     case "connect": {

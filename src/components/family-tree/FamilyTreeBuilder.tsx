@@ -7,6 +7,7 @@ import { FamilyTreeCanvas } from "@/components/family-tree/FamilyTreeCanvas";
 import { FamilyTreeCompleteness } from "@/components/family-tree/FamilyTreeCompleteness";
 import { FamilyTreeEmpty } from "@/components/family-tree/FamilyTreeEmpty";
 import { FamilyTreeNodePopover } from "@/components/family-tree/FamilyTreeNodePopover";
+import { CousinAddWizard } from "@/components/family-tree/CousinAddWizard";
 import { FamilyTreeToolkit } from "@/components/family-tree/FamilyTreeToolkit";
 import type { FamilyTreePersonCover } from "@/components/family-tree/types";
 import type {
@@ -103,6 +104,9 @@ export function FamilyTreeBuilder({
     toNodeId: string;
     relationType: FamilyTreeRelationType;
   } | null>(null);
+  const [cousinWizardSubjectId, setCousinWizardSubjectId] = useState<
+    string | null
+  >(null);
   const [pending, startTransition] = useTransition();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState(false);
@@ -301,6 +305,37 @@ export function FamilyTreeBuilder({
   function addPartnerForNode(nodeId: string) {
     runMutation(async () => {
       await runEngineCommand({ type: "addSpouse", personId: nodeId });
+      await refreshAvailable();
+    });
+  }
+
+  function openCousinWizard(personId: string) {
+    setError(null);
+    setCousinWizardSubjectId(personId);
+  }
+
+  function submitCousinWizard(payload: {
+    personId: string;
+    label: string;
+    cousinPeopleId: string | null;
+    parent1Label: string;
+    parent2Label: string;
+    attachWhich: "parent1" | "parent2" | "unsure";
+    attachToNodeId: string;
+  }) {
+    runMutation(async () => {
+      await runEngineCommand({
+        type: "addCousin",
+        personId: payload.personId,
+        label: payload.label,
+        parent1Label: payload.parent1Label,
+        parent2Label: payload.parent2Label || undefined,
+        cousinPeopleId: payload.cousinPeopleId,
+        attachWhich: payload.attachWhich,
+        attachToNodeId: payload.attachToNodeId,
+      });
+      setCousinWizardSubjectId(null);
+      setSelectedNodeId(null);
       await refreshAvailable();
     });
   }
@@ -806,7 +841,7 @@ export function FamilyTreeBuilder({
       {toolkit}
 
       <FamilyTreeNodePopover
-        open={Boolean(selectedNodeId) && !viewMode}
+        open={Boolean(selectedNodeId) && !viewMode && !cousinWizardSubjectId}
         nodeId={selectedNodeId}
         tree={tree}
         availablePeople={availablePeople}
@@ -820,8 +855,19 @@ export function FamilyTreeBuilder({
         onAddParent={addParentForChild}
         onAddChild={addChildForParent}
         onAddPartner={addPartnerForNode}
+        onAddCousin={openCousinWizard}
         onRemove={removeNode}
         onClearReview={clearNodeReview}
+      />
+
+      <CousinAddWizard
+        open={Boolean(cousinWizardSubjectId) && canEdit}
+        subjectId={cousinWizardSubjectId}
+        tree={tree}
+        availablePeople={availablePeople}
+        pending={pending}
+        onClose={() => setCousinWizardSubjectId(null)}
+        onSubmit={submitCousinWizard}
       />
 
       {viewOverlay}

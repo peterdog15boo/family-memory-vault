@@ -10,6 +10,7 @@ import {
   Loader2,
   Trash2,
   UserPlus,
+  Users,
   X,
 } from "lucide-react";
 import { PersonAvatar } from "@/components/people/PersonAvatar";
@@ -49,6 +50,7 @@ type Props = {
   onAddParent: (childId: string) => void;
   onAddChild: (parentId: string) => void;
   onAddPartner: (nodeId: string) => void;
+  onAddCousin: (personId: string) => void;
   onRemove: (nodeId: string) => void;
   onClearReview?: (nodeId: string) => void;
 };
@@ -71,6 +73,7 @@ export function FamilyTreeNodePopover({
   onAddParent,
   onAddChild,
   onAddPartner,
+  onAddCousin,
   onRemove,
   onClearReview,
 }: Props) {
@@ -210,7 +213,7 @@ export function FamilyTreeNodePopover({
 
         <div className="mt-5">
           <p className="text-sm font-medium text-ink">Grow from here</p>
-          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <button
               type="button"
               className="family-tree-shortcut"
@@ -238,10 +241,19 @@ export function FamilyTreeNodePopover({
               <Heart className="size-4" aria-hidden />
               Add spouse
             </button>
+            <button
+              type="button"
+              className="family-tree-shortcut"
+              disabled={pending}
+              onClick={() => onAddCousin(node.id)}
+            >
+              <Users className="size-4" aria-hidden />
+              Add cousin
+            </button>
           </div>
           <p className="mt-2 text-xs text-ink-muted">
-            Adds a temporary name you can link to a real Person next — or place
-            someone from People first when you can.
+            Cousin opens a short wizard so their parents are named and attached
+            on this side of the family — never left floating alone.
           </p>
         </div>
 

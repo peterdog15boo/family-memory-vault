@@ -11,6 +11,15 @@ describe("GenealogyEngineCommand shape", () => {
       { type: "addSibling", personId: "a" },
       { type: "addCousin", personId: "a", side: "maternal" },
       {
+        type: "addCousin",
+        personId: "a",
+        label: "Scott",
+        parent1Label: "Mary",
+        parent2Label: "Harvey",
+        attachWhich: "parent1",
+        attachToNodeId: "diane",
+      },
+      {
         type: "connect",
         fromNodeId: "a",
         toNodeId: "b",
@@ -28,7 +37,7 @@ describe("GenealogyEngineCommand shape", () => {
       { type: "correctLayout" },
       { type: "clearNodeReview", nodeId: "n1" },
     ];
-    expect(commands).toHaveLength(17);
+    expect(commands).toHaveLength(18);
     expect(new Set(commands.map((c) => c.type)).size).toBe(16);
   });
 });

@@ -226,13 +226,27 @@ export function projectRelationshipsToConnectors(
           ? coupleParentConnectorPath(from, spouse, to)
           : parentConnectorPath(from, to);
       emphasis = "structure";
-    } else {
+    } else if (rel.type === "sibling_of") {
+      // Only short same-row sibling links (family block). Long arcs across
+      // the chart stay in data but are not drawn.
+      const sameRow = Math.abs(from.y - to.y) < NODE_HEIGHT * 0.55;
+      const span = Math.abs(
+        from.x + NODE_WIDTH / 2 - (to.x + NODE_WIDTH / 2),
+      );
+      const maxLocalSpan = NODE_WIDTH * 5 + 160;
+      if (!sameRow || span > maxLocalSpan) {
+        continue;
+      }
       const geom = extendedConnectorPath(from, to);
       path = geom.path;
       label = edgeLabelForRelation(rel.type);
       labelX = geom.labelX;
       labelY = geom.labelY;
       emphasis = "relation";
+    } else {
+      // cousin_of and other extended ties stay in the graph for search /
+      // structure but are not drawn (they cross the chart and add noise).
+      continue;
     }
 
     if (!path || path.includes("NaN")) {
@@ -263,10 +277,10 @@ export function projectRelationshipsToConnectors(
     renderedEdgeCount: connectors.length,
     relationshipsWithoutConnector,
     connectorsWithoutRelationship,
+    // Cousin / long / extended ties may be stored without a connector.
     ok:
       relationshipsWithoutConnector.length === 0 &&
-      connectorsWithoutRelationship.length === 0 &&
-      connectors.length === relationships.length,
+      connectorsWithoutRelationship.length === 0,
   };
 
   return { connectors, verification };

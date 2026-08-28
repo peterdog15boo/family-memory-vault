@@ -111,7 +111,7 @@ describe("computeFamilyTreeLayout", () => {
           e.type === "parent_of" && e.fromId === "dad" && e.toId === "jeff",
       ),
     ).toBe(true);
-    expect(layout.edges.some((e) => e.type === "cousin_of")).toBe(true);
+    expect(layout.edges.some((e) => e.type === "cousin_of")).toBe(false);
     // No invented Jeff↔Scott link.
     expect(
       layout.edges.some(

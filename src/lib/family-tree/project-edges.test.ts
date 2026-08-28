@@ -179,47 +179,24 @@ describe("relation label anchors", () => {
     );
   }
 
-  it("puts Cousin on Scott–Kat (not Scott–Todd) and Sibling on real sibling edges", () => {
+  it("does not draw cousin polylines; keeps local sibling badges", () => {
     const layout = computeFamilyTreeLayout(nodes, edges);
     const by = Object.fromEntries(layout.nodes.map((n) => [n.id, n]));
     const mid = (id: string) => by[id]!.x + 50;
 
     const cousin = layout.edges.find((e) => e.type === "cousin_of");
-    expect(cousin).toBeTruthy();
-    expect(cousin!.label).toBe("Cousin");
-    expect(cousin!.relationshipId).toBe("e-cousin-sk");
-    expect(endpoints(cousin!, "scott", "kathy")).toBe(true);
-
-    // On the elevated Scott–Kat arc — above card tops, not on the face row.
-    expect(cousin!.labelY!).toBeLessThan(Math.min(by.scott!.y, by.kathy!.y));
-
-    // Horizontally between Scott and Kat.
-    const scottKatLeft = Math.min(mid("scott"), mid("kathy"));
-    const scottKatRight = Math.max(mid("scott"), mid("kathy"));
-    expect(cousin!.labelX!).toBeGreaterThan(scottKatLeft);
-    expect(cousin!.labelX!).toBeLessThan(scottKatRight);
-
-    // Closer to Scott–Kat elevated mid than to Scott–Todd face-row mid.
-    const scottKatElevated = {
-      x: (mid("scott") + mid("kathy")) / 2,
-      y: Math.min(by.scott!.y, by.kathy!.y) - 40,
-    };
-    const scottToddFace = {
-      x: (mid("scott") + mid("todd")) / 2,
-      y: by.scott!.y + 50,
-    };
-    const d = (
-      ax: number,
-      ay: number,
-      bx: number,
-      byy: number,
-    ) => Math.hypot(ax - bx, ay - byy);
+    expect(cousin).toBeUndefined();
+    // cousin_of stays in the graph for search / structure — just not drawn.
     expect(
-      d(cousin!.labelX!, cousin!.labelY!, scottKatElevated.x, scottKatElevated.y),
-    ).toBeLessThan(
-      d(cousin!.labelX!, cousin!.labelY!, scottToddFace.x, scottToddFace.y),
-    );
+      edges.some(
+        (e) =>
+          e.type === "cousin_of" &&
+          ((e.fromNodeId === "kathy" && e.toNodeId === "scott") ||
+            (e.fromNodeId === "scott" && e.toNodeId === "kathy")),
+      ),
+    ).toBe(true);
 
+    // Sibling badges still sit on real sibling connectors.
     const sibDonnaKat = layout.edges.find(
       (e) => e.type === "sibling_of" && endpoints(e, "donna", "kathy"),
     );

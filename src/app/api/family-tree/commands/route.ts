@@ -46,6 +46,11 @@ const commandSchema = z.discriminatedUnion("type", [
     cousinNodeId: z.string().trim().min(1).optional(),
     label: z.string().trim().min(1).max(120).optional(),
     side: cousinSideSchema.optional(),
+    parent1Label: z.string().trim().min(1).max(120).optional(),
+    parent2Label: z.string().trim().min(1).max(120).optional(),
+    cousinPeopleId: z.string().trim().min(1).nullable().optional(),
+    attachWhich: z.enum(["parent1", "parent2", "unsure"]).optional(),
+    attachToNodeId: z.string().trim().min(1).optional(),
   }),
   z.object({
     type: z.literal("connect"),
