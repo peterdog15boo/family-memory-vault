@@ -429,6 +429,28 @@ export function FamilyTreeBuilder({
     });
   }
 
+  function exportTreeDebugJson() {
+    runMutation(async () => {
+      const res = await fetch("/api/family-tree/export");
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(data.error || "Could not export tree debug JSON.");
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get("Content-Disposition");
+      const match = cd?.match(/filename="([^"]+)"/);
+      const filename = match?.[1] ?? "family-tree-debug.json";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  }
+
   function focusAddPerson() {
     const el = document.getElementById("family-tree-add-by-name");
     el?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -747,6 +769,16 @@ export function FamilyTreeBuilder({
           >
             Repair tree display
           </button>
+          {isOwner ? (
+            <button
+              type="button"
+              className="ui-btn ui-btn-ghost ui-btn-sm"
+              disabled={pending}
+              onClick={exportTreeDebugJson}
+            >
+              Export tree debug JSON
+            </button>
+          ) : null}
           <button
             type="button"
             className="ui-btn ui-btn-secondary ui-btn-sm"

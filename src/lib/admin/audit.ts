@@ -34,6 +34,9 @@ export const ADMIN_AUDIT_ACTIONS = [
   "email.announcement_send",
   "feedback.email_ack",
   "feedback.email_reply",
+  "family_tree.repair",
+  "family_tree.repair_dry_run",
+  "family_tree.export_debug",
 ] as const;
 
 export type AdminAuditAction =

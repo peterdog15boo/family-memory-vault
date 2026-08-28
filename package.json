@@ -26,6 +26,7 @@
     "analyze:videos": "node --use-system-ca --import tsx scripts/analyze-videos.ts",
     "regroup:faces": "node --use-system-ca --import tsx scripts/regroup-faces.ts",
     "admin:promote": "node --use-system-ca --import tsx scripts/promote-admin.ts",
+    "export:family-tree": "node --use-system-ca --import tsx scripts/export-family-tree.ts",
     "marketing:placeholders": "node --use-system-ca --import tsx scripts/generate-marketing-placeholders.ts"
   },
   "dependencies": {

@@ -141,8 +141,32 @@ export function AdminUserActions({
       .catch((err) => setError(err instanceof Error ? err.message : "Failed"));
   }
 
+  function onExportFamilyTree() {
+    setError(null);
+    const href = `/api/admin/family-tree/export?userId=${encodeURIComponent(userId)}`;
+    window.location.assign(href);
+  }
+
   return (
     <div className="space-y-6">
+      <section className="rounded-lg border border-ink/10 bg-canvas-deep/30 p-4">
+        <h2 className="font-display text-lg text-ink">Family Tree debug</h2>
+        <p className="mt-1 text-xs text-ink-muted">
+          Download nodes, relationships, layout coordinates, and inferred
+          family links as JSON (no emails or media URLs).
+        </p>
+        <div className="mt-3">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={onExportFamilyTree}
+            className="rounded-md border border-ink/15 px-3 py-1.5 text-sm font-medium text-ink hover:bg-ink/5 disabled:opacity-50"
+          >
+            Export tree debug JSON
+          </button>
+        </div>
+      </section>
+
       <section className="rounded-lg border border-ink/10 bg-canvas-deep/30 p-4">
         <h2 className="font-display text-lg text-ink">Change plan</h2>
         <p className="mt-1 text-xs text-ink-muted">

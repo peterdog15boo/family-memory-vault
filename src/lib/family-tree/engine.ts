@@ -24,6 +24,7 @@ import {
   shouldAskCousinSide,
   type CousinSide,
 } from "@/lib/family-tree/cousin-side";
+import { preferCousinSubjectId } from "@/lib/family-tree/cousin-lineage";
 import { preferredExistingCoParentId } from "@/lib/family-tree/genealogy-iq";
 import type { GenealogyIqNotice } from "@/lib/family-tree/genealogy-iq";
 import { clearReviewFlag } from "@/lib/family-tree/repair";
@@ -443,6 +444,7 @@ export async function runGenealogyCommand(
           toNodeId: command.cousinNodeId,
           type: "cousin_of",
           cousinSide: command.side ?? "unknown",
+          cousinSubjectId: command.personId,
         });
         return snapshot(
           userId,
@@ -456,36 +458,73 @@ export async function runGenealogyCommand(
         userId,
         label: command.label?.trim() || "Cousin",
       });
-      const result = await createFamilyTreeRelationshipWithScaffold({
-        userId,
-        fromNodeId: command.personId,
-        toNodeId: created.node.id,
-        type: "cousin_of",
-        cousinSide: command.side ?? "unknown",
-      });
-      return snapshot(
-        userId,
-        [...created.notices, ...result.notices],
-        result.scaffold,
-        created.node.id,
-      );
+      try {
+        const result = await createFamilyTreeRelationshipWithScaffold({
+          userId,
+          fromNodeId: command.personId,
+          toNodeId: created.node.id,
+          type: "cousin_of",
+          cousinSide: command.side ?? "unknown",
+          cousinSubjectId: command.personId,
+        });
+        // Full undo removes the new cousin person + primary edge + placeholders.
+        const scaffold = result.scaffold
+          ? {
+              ...result.scaffold,
+              undoNodeIds: [
+                ...new Set([
+                  ...result.scaffold.undoNodeIds,
+                  created.node.id,
+                ]),
+              ],
+              undoRelationshipIds: [
+                ...new Set([
+                  result.relationship.id,
+                  ...result.scaffold.undoRelationshipIds,
+                ]),
+              ],
+            }
+          : {
+              message: null,
+              createdNodeIds: [created.node.id],
+              createdRelationshipIds: [result.relationship.id],
+              undoNodeIds: [created.node.id],
+              undoRelationshipIds: [result.relationship.id],
+            };
+        return snapshot(
+          userId,
+          [...created.notices, ...result.notices],
+          scaffold,
+          created.node.id,
+        );
+      } catch (error) {
+        await deleteFamilyTreeNode(userId, created.node.id).catch(
+          () => undefined,
+        );
+        throw error;
+      }
     }
 
     case "connect": {
       if (command.relationType === "cousin_of") {
         const tree = await getFamilyTreeGraph(userId);
-        // Side is always about the subject ("X is the cousin of…"), never
-        // the spouse's lineage. Prefer fromNodeId; fall back to toNodeId.
-        const fromParents = parentIdsOf(tree, command.fromNodeId);
-        const toParents = parentIdsOf(tree, command.toNodeId);
-        const askAbout =
-          shouldAskCousinSide(fromParents, command.cousinSide)
-            ? command.fromNodeId
-            : shouldAskCousinSide(toParents, command.cousinSide)
-              ? command.toNodeId
-              : null;
-        if (askAbout) {
-          const person = tree.nodes.find((n) => n.id === askAbout);
+        const lineageGraph = {
+          nodes: tree.nodes.map((n) => ({ id: n.id, label: n.label })),
+          relationships: tree.relationships.map((r) => ({
+            fromNodeId: r.fromNodeId,
+            toNodeId: r.toNodeId,
+            type: r.type,
+          })),
+        };
+        // Ask maternal/paternal about the bloodline subject (Kat), even when
+        // the connect form listed the orphan cousin first.
+        const subjectId = preferCousinSubjectId(
+          lineageGraph,
+          command.fromNodeId,
+          command.toNodeId,
+        );
+        if (shouldAskCousinSide(parentIdsOf(tree, subjectId), command.cousinSide)) {
+          const person = tree.nodes.find((n) => n.id === subjectId);
           return {
             ok: false,
             needsInput: {
@@ -493,7 +532,7 @@ export async function runGenealogyCommand(
               message: cousinSidePromptMessage(
                 person?.label ?? "this relative",
               ),
-              personId: askAbout,
+              personId: subjectId,
             },
             tree,
             notices: [],
@@ -507,7 +546,6 @@ export async function runGenealogyCommand(
         fromNodeId: command.fromNodeId,
         toNodeId: command.toNodeId,
         type: command.relationType,
-        // Side only scaffolds the subject's (from) parent bridge.
         cousinSide: command.cousinSide,
         linkSpousesAsCoParents:
           command.relationType === "parent_of"

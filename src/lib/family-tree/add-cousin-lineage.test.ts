@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   analyzeCousinLineage,
   cousinsLinkedOnSubjectLineage,
+  preferCousinSubjectId,
 } from "@/lib/family-tree/cousin-lineage";
 import { computeFamilyTreeLayout, TREE_LAYOUT } from "@/lib/family-tree/layout";
 import { planFamilyTreeRepair } from "@/lib/family-tree/repair";
@@ -243,5 +244,81 @@ describe("addCousin(Kat, Scott) structural placement", () => {
           o.cousinId === "scott",
       ),
     ).toBe(true);
+  });
+
+  it("connect Who=Scott To=Kathy still scaffolds on Kathy’s bloodline via preferCousinSubjectId", () => {
+    const subjectId = preferCousinSubjectId(base, "scott", "kathy");
+    expect(subjectId).toBe("kathy");
+
+    const plan = planFamilyTreeScaffold(base, {
+      fromNodeId: "scott",
+      toNodeId: "kathy",
+      type: "cousin_of",
+      cousinSide: "maternal",
+      cousinSubjectId: subjectId,
+    });
+    const graph = applyPlan(base, plan);
+    assertScottOnKathySide(graph);
+  });
+
+  it("after addCousin writes, Scott matches Kat generation, has parents, and sits on Kat’s flank", () => {
+    const plan = planFamilyTreeScaffold(base, {
+      fromNodeId: "kathy",
+      toNodeId: "scott",
+      type: "cousin_of",
+      cousinSide: "maternal",
+      cousinSubjectId: "kathy",
+    });
+    const graph = applyPlan(base, plan);
+    const withCousin: ScaffoldGraph = {
+      ...graph,
+      relationships: [
+        ...graph.relationships,
+        { fromNodeId: "kathy", toNodeId: "scott", type: "cousin_of" },
+      ],
+    };
+
+    expect(
+      withCousin.relationships.some(
+        (e) =>
+          e.type === "cousin_of" &&
+          ((e.fromNodeId === "kathy" && e.toNodeId === "scott") ||
+            (e.fromNodeId === "scott" && e.toNodeId === "kathy")),
+      ),
+    ).toBe(true);
+
+    const scottParents = withCousin.relationships
+      .filter((e) => e.type === "parent_of" && e.toNodeId === "scott")
+      .map((e) => e.fromNodeId);
+    expect(scottParents.length).toBeGreaterThanOrEqual(1);
+
+    const ranks = assignGenerationRanks(
+      withCousin.nodes.map((n) => n.id),
+      withCousin.relationships
+        .filter((e) => e.type === "parent_of")
+        .map((e) => ({
+          fromNodeId: e.fromNodeId,
+          toNodeId: e.toNodeId,
+        })),
+      {
+        partnerPairs: withCousin.relationships
+          .filter((e) => e.type === "partner_of")
+          .map((e) => [e.fromNodeId, e.toNodeId] as const),
+        siblingPairs: withCousin.relationships
+          .filter((e) => e.type === "sibling_of")
+          .map((e) => [e.fromNodeId, e.toNodeId] as const),
+        cousinPairs: [["kathy", "scott"]],
+      },
+    );
+    expect(ranks.scott).toBe(ranks.kathy);
+
+    const layout = layoutOf(withCousin);
+    const by = Object.fromEntries(
+      layout.nodes.map((n) => [n.id, n]),
+    ) as Record<string, Laid>;
+    expect(by.scott.y).toBe(by.kathy.y);
+    expect(Math.abs(mid(by.scott) - mid(by.kathy))).toBeLessThan(
+      Math.abs(mid(by.scott) - mid(by.jeff)),
+    );
   });
 });

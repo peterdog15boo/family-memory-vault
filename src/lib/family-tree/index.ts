@@ -42,6 +42,7 @@ import {
   type GenealogyIqNotice,
 } from "@/lib/family-tree/genealogy-iq";
 import type { CousinSide } from "@/lib/family-tree/cousin-side";
+import { preferCousinSubjectId } from "@/lib/family-tree/cousin-lineage";
 import {
   FAMILY_TREE_CIRCULAR_RELATIONSHIP_MESSAGE,
   validateFamilyTreeRelationship,
@@ -354,6 +355,11 @@ export type CreateFamilyTreeRelationshipInput = {
   linkCoParentsAsSpouses?: boolean;
   /** Which parent's side bridges a cousin_of scaffold. */
   cousinSide?: CousinSide;
+  /**
+   * Force the cousin lineage subject (addCousin person). When omitted,
+   * preferCousinSubjectId picks the bloodline peer.
+   */
+  cousinSubjectId?: string;
 };
 
 export type FamilyTreeRelationshipScaffoldResult = {
@@ -362,7 +368,11 @@ export type FamilyTreeRelationshipScaffoldResult = {
     message: string | null;
     createdNodeIds: string[];
     createdRelationshipIds: string[];
-    /** Ids to remove on undo (scaffold nodes + the primary relationship). */
+    /**
+     * Ids to remove on undo. For cousin/niece/in-law scaffolds this is the
+     * auto-created placeholder parents — not the primary peer edge (undoing
+     * that edge left people like Scott as relationship orphans).
+     */
     undoNodeIds: string[];
     undoRelationshipIds: string[];
   };
@@ -465,10 +475,29 @@ export async function createFamilyTreeRelationshipWithScaffold(
         toNodeId: endpoints.toNodeId,
         type: input.type,
         cousinSide: input.cousinSide,
-        // Subject is always the caller’s fromNodeId (addCousin person / connect “X is…”),
-        // never the lexicographically sorted endpoint.
+        // Prefer the bloodline subject (e.g. Kat over orphan Scott), not
+        // lexicographic storage order or whichever connect dropdown was “Who?”.
         cousinSubjectId:
-          input.type === "cousin_of" ? input.fromNodeId : undefined,
+          input.type === "cousin_of"
+            ? input.cousinSubjectId === input.fromNodeId ||
+              input.cousinSubjectId === input.toNodeId
+              ? input.cousinSubjectId
+              : preferCousinSubjectId(
+                  {
+                    nodes: graph.nodes.map((n) => ({
+                      id: n.id,
+                      label: n.label,
+                    })),
+                    relationships: graph.relationships.map((r) => ({
+                      fromNodeId: r.fromNodeId,
+                      toNodeId: r.toNodeId,
+                      type: r.type,
+                    })),
+                  },
+                  input.fromNodeId,
+                  input.toNodeId,
+                )
+            : undefined,
       },
     );
 
@@ -511,17 +540,29 @@ export async function createFamilyTreeRelationshipWithScaffold(
       if (isScaffoldTempKey(fromId) || isScaffoldTempKey(toId)) {
         continue;
       }
-      const bridge = await createFamilyTreeRelationshipWithScaffold({
-        userId: input.userId,
-        fromNodeId: fromId,
-        toNodeId: toId,
-        type: planned.type,
-        scaffold: false,
-        // Scaffold plans already list every parent/spouse link; don't auto-expand.
-        linkSpousesAsCoParents: false,
-        linkCoParentsAsSpouses: false,
-      });
-      createdRelationshipIds.push(bridge.relationship.id);
+      try {
+        const bridge = await createFamilyTreeRelationshipWithScaffold({
+          userId: input.userId,
+          fromNodeId: fromId,
+          toNodeId: toId,
+          type: planned.type,
+          scaffold: false,
+          // Scaffold plans already list every parent/spouse link; don't auto-expand.
+          linkSpousesAsCoParents: false,
+          linkCoParentsAsSpouses: false,
+        });
+        createdRelationshipIds.push(bridge.relationship.id);
+      } catch (error) {
+        // Partial prior scaffolds (orphan cousin with Mom/Dad already) must not
+        // block writing the remaining bridges or the primary cousin_of edge.
+        if (
+          error instanceof FamilyTreeError &&
+          (error.code === "conflict" || error.code === "validation")
+        ) {
+          continue;
+        }
+        throw error;
+      }
     }
   } else {
     const check = validateFamilyTreeRelationship(existingEdges, {
@@ -567,6 +608,14 @@ export async function createFamilyTreeRelationshipWithScaffold(
 
   await assertPreservedFamilyTreeNodes(input.userId, preservedNodeIds);
 
+  // Extended types: undo only auto-placeholders. Keeping the primary edge
+  // prevents orphan peers (Scott with no cousin_of) when users tap Undo.
+  const undoPrimaryEdge =
+    input.type === "parent_of" ||
+    input.type === "partner_of" ||
+    input.type === "sibling_of" ||
+    input.type === "other_relative_of";
+
   return {
     relationship,
     scaffold: {
@@ -574,11 +623,9 @@ export async function createFamilyTreeRelationshipWithScaffold(
       createdNodeIds,
       createdRelationshipIds: [...createdRelationshipIds, ...autoLinkedIds],
       undoNodeIds: createdNodeIds,
-      undoRelationshipIds: [
-        relationship.id,
-        ...createdRelationshipIds,
-        ...autoLinkedIds,
-      ],
+      undoRelationshipIds: undoPrimaryEdge
+        ? [relationship.id, ...createdRelationshipIds, ...autoLinkedIds]
+        : [...createdRelationshipIds, ...autoLinkedIds],
     },
     notices,
   };
