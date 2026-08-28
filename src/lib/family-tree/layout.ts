@@ -528,6 +528,9 @@ export function computeFamilyTreeLayout(
    * Flank units ordered outer → inner toward the focus spouse.
    * Left flank: blood sits on the RIGHT of each couple (closer to focus).
    * Right flank: blood sits on the LEFT of each couple (closer to focus).
+   *
+   * Includes structural cousins: children of a parent’s sibling (e.g. David
+   * under Betty, Helene’s sister) even without an explicit cousin_of edge.
    */
   function buildFlankUnits(
     anchorId: string,
@@ -563,11 +566,32 @@ export function computeFamilyTreeLayout(
       }
     }
 
-    // Cousins outer, then blood siblings (married sibling couples stay atomic).
+    /** Kids of parent-siblings (aunts/uncles) on this generation. */
+    function auntUncleCousins(): string[] {
+      const found = new Set<string>();
+      for (const parent of parentsByChild.get(anchorId) ?? []) {
+        for (const auntUncle of siblingAdj.get(parent) ?? []) {
+          const household = new Set<string>([auntUncle]);
+          const spouse = partnerOf.get(auntUncle);
+          if (spouse) household.add(spouse);
+          for (const adult of household) {
+            for (const kid of childrenByParent.get(adult) ?? []) {
+              if (!idSet.has(kid) || used.has(kid) || kid === anchorId) continue;
+              if (focusPartner && kid === focusPartner) continue;
+              found.add(kid);
+            }
+          }
+        }
+      }
+      return [...found].sort((a, b) => a.localeCompare(b));
+    }
+
+    // Outer: explicit cousins, then aunt/uncle kids, then blood siblings.
     const cousins = [...(cousinAdj.get(anchorId) ?? [])]
       .filter((id) => idSet.has(id) && !used.has(id))
       .sort((a, b) => a.localeCompare(b));
     for (const c of cousins) takeBlood(c);
+    for (const c of auntUncleCousins()) takeBlood(c);
 
     const sibs = [...(siblingAdj.get(anchorId) ?? [])]
       .filter((id) => idSet.has(id) && !used.has(id))
@@ -592,6 +616,22 @@ export function computeFamilyTreeLayout(
     }
   }
 
+  /** True if unit is (or partners) a sibling of a focus parent's household. */
+  function unitAttachesBesideFocusParent(
+    unit: LayoutUnit,
+    focusSpouseId: string,
+  ): boolean {
+    const focusParents = parentsByChild.get(focusSpouseId) ?? [];
+    for (const parent of focusParents) {
+      for (const id of unit.ids) {
+        if (siblingAdj.get(parent)?.has(id)) return true;
+        const spouse = partnerOf.get(id);
+        if (spouse && siblingAdj.get(parent)?.has(spouse)) return true;
+      }
+    }
+    return false;
+  }
+
   function sideForParentUnit(
     unit: LayoutUnit,
     leftMemberIds: Set<string>,
@@ -614,6 +654,11 @@ export function computeFamilyTreeLayout(
       return "right";
     }
 
+    // Aunt/uncle couple attached to a focus parent inherits that parent's side
+    // (Betty+Ralph beside Helene → right), even before their kids are placed.
+    if (unitAttachesBesideFocusParent(unit, focusLeftId)) return "left";
+    if (unitAttachesBesideFocusParent(unit, focusRightId)) return "right";
+
     let leftScore = 0;
     let rightScore = 0;
     for (const mid of leftMemberIds) {
@@ -633,6 +678,27 @@ export function computeFamilyTreeLayout(
     if (leftScore > rightScore) return "left";
     if (rightScore > leftScore) return "right";
     return "unknown";
+  }
+
+  /** Side for a leftover focus-gen person via their parents' attachment. */
+  function sideForFocusPerson(
+    personId: string,
+    focusLeftId: string,
+    focusRightId: string,
+  ): "left" | "right" | "unknown" {
+    const parents = parentsByChild.get(personId) ?? [];
+    if (parents.length === 0) return "unknown";
+    const fakeUnit: LayoutUnit = {
+      ids: parents.length >= 2 ? [parents[0]!, parents[1]!] : [parents[0]!],
+      isCouple: parents.length >= 2,
+    };
+    return sideForParentUnit(
+      fakeUnit,
+      new Set(),
+      new Set(),
+      focusLeftId,
+      focusRightId,
+    );
   }
 
   const unitsByGen: LayoutUnit[][] = Array.from(
@@ -716,31 +782,46 @@ export function computeFamilyTreeLayout(
       ...leftFlank.flatMap((u) => [...u.ids]),
       ...rightFlank.flatMap((u) => [...u.ids]),
     ]);
-    const leftovers: LayoutUnit[] = [];
+    const leftLeftovers: LayoutUnit[] = [];
+    const rightLeftovers: LayoutUnit[] = [];
     for (const id of gens[focusGen] ?? []) {
       if (claimed.has(id)) continue;
       const p = partnerOf.get(id);
+      let unit: LayoutUnit;
       if (
         p &&
         !claimed.has(p) &&
         (gens[focusGen] ?? []).includes(p) &&
         partnerOf.get(p) === id
       ) {
-        leftovers.push({ ids: [id, p], isCouple: true });
+        unit = { ids: [id, p], isCouple: true };
         claimed.add(id);
         claimed.add(p);
       } else {
-        leftovers.push({ ids: [id], isCouple: false });
+        unit = { ids: [id], isCouple: false };
         claimed.add(id);
+      }
+      // Inherit side from parents / aunt-uncle attachment — never dump a
+      // right-side cousin (David Foltz) into the left leftovers pack.
+      const side = sideForFocusPerson(unit.ids[0]!, leftId, rightId);
+      const partnerSide =
+        unit.ids[1] != null
+          ? sideForFocusPerson(unit.ids[1], leftId, rightId)
+          : "unknown";
+      if (side === "right" || partnerSide === "right") {
+        rightLeftovers.push(unit);
+      } else {
+        leftLeftovers.push(unit);
       }
     }
 
-    // Pack left→right: leftovers | cousins…siblings | focus | right flank
+    // Pack left→right: left leftovers | left flank | focus | right flank | right leftovers
     const focusRow: LayoutUnit[] = [
-      ...leftovers,
+      ...leftLeftovers,
       ...leftFlank,
       focusUnit,
       ...[...rightFlank].reverse(),
+      ...rightLeftovers,
     ];
     const yFocus = focusGen * (TREE_LAYOUT.nodeHeight + TREE_LAYOUT.vGap);
     packRowFixedGap(focusRow, yFocus, unitGap);
@@ -750,11 +831,12 @@ export function computeFamilyTreeLayout(
     const leftMemberIds = new Set<string>([
       leftId,
       ...leftFlank.flatMap((u) => [...u.ids]),
-      ...leftovers.flatMap((u) => [...u.ids]),
+      ...leftLeftovers.flatMap((u) => [...u.ids]),
     ]);
     const rightMemberIds = new Set<string>([
       rightId,
       ...rightFlank.flatMap((u) => [...u.ids]),
+      ...rightLeftovers.flatMap((u) => [...u.ids]),
     ]);
 
     const focusBounds = unitBounds(focusUnit)!;
@@ -788,32 +870,64 @@ export function computeFamilyTreeLayout(
         .sort((a, b) => (a.target ?? 0) - (b.target ?? 0));
       const unknownUnits = tagged.filter((t) => t.side === "unknown");
 
-      // Left of focus: pack from the focus edge outward (inner → outer).
-      let cursorRight = focusBounds.left - unitGap;
-      for (let i = leftUnits.length - 1; i >= 0; i--) {
-        const { unit, target } = leftUnits[i]!;
-        const w = unitWidth(unit);
-        let leftX = cursorRight - w;
-        if (target != null) {
-          leftX = Math.min(target - w / 2, cursorRight - w);
-        }
-        placeUnitAt(unit, leftX, y);
-        const bounds = unitBounds(unit)!;
-        cursorRight = bounds.left - unitGap;
+      function isFocusParentUnit(
+        unit: LayoutUnit,
+        spouseId: string,
+      ): boolean {
+        return unit.ids.some((id) =>
+          (parentsByChild.get(spouseId) ?? []).includes(id),
+        );
       }
 
-      // Right of focus: pack from the focus edge outward.
-      let cursorLeft = focusBounds.right + unitGap;
-      for (const { unit, target } of rightUnits) {
-        const w = unitWidth(unit);
-        let leftX = cursorLeft;
-        if (target != null) {
-          leftX = Math.max(target - w / 2, cursorLeft);
+      /**
+       * Dock parent-row siblings immediately beside the focus-parent couple
+       * they attach to (Betty+Ralph right of Paul+Helene), never first-empty-x.
+       */
+      function placeSideAncestorUnits(
+        units: Tagged[],
+        side: "left" | "right",
+        focusSpouseId: string,
+      ) {
+        const core = units.filter((t) =>
+          isFocusParentUnit(t.unit, focusSpouseId),
+        );
+        const collateral = units.filter(
+          (t) => !isFocusParentUnit(t.unit, focusSpouseId),
+        );
+
+        if (side === "left") {
+          let cursorRight = focusBounds.left - unitGap;
+          // Core parents first (inner), then collateral further out.
+          const ordered = [...collateral, ...core];
+          for (let i = ordered.length - 1; i >= 0; i--) {
+            const { unit, target } = ordered[i]!;
+            const w = unitWidth(unit);
+            let leftX = cursorRight - w;
+            if (target != null && isFocusParentUnit(unit, focusSpouseId)) {
+              leftX = Math.min(target - w / 2, cursorRight - w);
+            }
+            placeUnitAt(unit, leftX, y);
+            const bounds = unitBounds(unit)!;
+            cursorRight = bounds.left - unitGap;
+          }
+        } else {
+          let cursorLeft = focusBounds.right + unitGap;
+          const ordered = [...core, ...collateral];
+          for (const { unit, target } of ordered) {
+            const w = unitWidth(unit);
+            let leftX = cursorLeft;
+            if (target != null && isFocusParentUnit(unit, focusSpouseId)) {
+              leftX = Math.max(target - w / 2, cursorLeft);
+            }
+            placeUnitAt(unit, leftX, y);
+            const bounds = unitBounds(unit)!;
+            cursorLeft = bounds.right + unitGap;
+          }
         }
-        placeUnitAt(unit, leftX, y);
-        const bounds = unitBounds(unit)!;
-        cursorLeft = bounds.right + unitGap;
       }
+
+      placeSideAncestorUnits(leftUnits, "left", leftId);
+      placeSideAncestorUnits(rightUnits, "right", rightId);
 
       for (const t of unknownUnits) {
         const w = unitWidth(t.unit);
@@ -876,6 +990,87 @@ export function computeFamilyTreeLayout(
       unitsByGen[g] = allUnits;
       gens[g] = allUnits.flatMap((u) => [...u.ids]);
     }
+
+    // After parent rows settle, seat aunt/uncle cousins under their own
+    // parents (David under Betty+Ralph). Do NOT move blood siblings of the
+    // focus spouse (Donna stays beside Kat).
+    function isAuntUncleCousin(personId: string, anchorId: string): boolean {
+      for (const parent of parentsByChild.get(anchorId) ?? []) {
+        for (const auntUncle of siblingAdj.get(parent) ?? []) {
+          const household = [auntUncle, partnerOf.get(auntUncle)].filter(
+            (x): x is string => Boolean(x),
+          );
+          for (const adult of household) {
+            if ((childrenByParent.get(adult) ?? []).includes(personId)) {
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    }
+
+    function seatFlankUnderParents(
+      memberIds: Set<string>,
+      anchorId: string,
+      side: "left" | "right",
+    ) {
+      const handled = new Set<string>();
+      for (const id of memberIds) {
+        if (id === leftId || id === rightId || handled.has(id)) continue;
+        if (!isAuntUncleCousin(id, anchorId)) continue;
+        const pos = positions.get(id);
+        if (!pos) continue;
+        const parentMid = midXOfNodes(parentsByChild.get(id) ?? []);
+        if (parentMid == null) continue;
+        if (side === "left" && parentMid >= focusBounds.mid) continue;
+        if (side === "right" && parentMid <= focusBounds.mid) continue;
+
+        const partner = partnerOf.get(id);
+        const partnerOnRow =
+          partner != null &&
+          memberIds.has(partner) &&
+          partner !== leftId &&
+          partner !== rightId &&
+          !handled.has(partner);
+
+        if (partnerOnRow && partner) {
+          const pPos = positions.get(partner);
+          if (!pPos) continue;
+          const leftPerson = pos.x <= pPos.x ? id : partner;
+          const rightPerson = leftPerson === id ? partner : id;
+          const unit: LayoutUnit = {
+            ids: [leftPerson, rightPerson],
+            isCouple: true,
+          };
+          const w = unitWidth(unit);
+          let leftX = parentMid - w / 2;
+          if (side === "left") {
+            leftX = Math.min(leftX, focusBounds.left - unitGap - w);
+          } else {
+            leftX = Math.max(leftX, focusBounds.right + unitGap);
+          }
+          placeUnitAt(unit, leftX, pos.y);
+          handled.add(id);
+          handled.add(partner);
+        } else {
+          let leftX = parentMid - TREE_LAYOUT.nodeWidth / 2;
+          if (side === "left") {
+            leftX = Math.min(
+              leftX,
+              focusBounds.left - unitGap - TREE_LAYOUT.nodeWidth,
+            );
+          } else {
+            leftX = Math.max(leftX, focusBounds.right + unitGap);
+          }
+          positions.set(id, { x: leftX, y: pos.y });
+          handled.add(id);
+        }
+      }
+    }
+    seatFlankUnderParents(leftMemberIds, leftId, "left");
+    seatFlankUnderParents(rightMemberIds, rightId, "right");
+    resolveUnitOverlaps(unitsByGen[focusGen]!);
 
     // Descendants: center under parents (Noah under Kat+Jeff).
     for (let g = focusGen + 1; g <= maxGen; g++) {
