@@ -10,9 +10,17 @@ export {
 } from "@/lib/will-planner/constants";
 export { buildSimpleDocx } from "@/lib/will-planner/docx";
 export {
+  willFormFirstPagePreview,
+  willTextFromDocumentNotes,
+  WILL_FORM_PREVIEW_NOTE,
+} from "@/lib/will-planner/preview";
+export {
   generateWillDraftMarkdown,
   generateWillDraftPlainText,
+  willDraftPageFooter,
   WILL_ATTORNEY_NEXT_STEPS,
+  WILL_DRAFT_COVER_WARNING,
+  WILL_DRAFT_PAGE_HEADER,
 } from "@/lib/will-planner/generate";
 export { buildSimpleTextPdf } from "@/lib/will-planner/pdf";
 export {
@@ -58,6 +66,17 @@ export {
   type WillSignedScan,
   type WillSigningChecklistState,
 } from "@/lib/will-planner/signing-checklist";
+export {
+  buildWillPlannerDocumentTitle,
+  parseWillDraftIdFromTags,
+  WILL_DRAFT_ID_TAG_PREFIX,
+  WILL_PLANNER_DOCUMENT_TAG,
+  willDraftIdTag,
+} from "@/lib/will-planner/document-meta";
+export {
+  willAnswersContentChanged,
+  willAnswersContentFingerprint,
+} from "@/lib/will-planner/answers-diff";
 export {
   nextWillStepId,
   prevWillStepId,

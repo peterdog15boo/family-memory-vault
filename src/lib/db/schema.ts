@@ -2810,6 +2810,11 @@ export const willDrafts = pgTable(
       uploadedAt: string;
       note: string;
     } | null>(),
+    /**
+     * Private Documents row for the generated attorney PDF (Wills / Estate).
+     * Upserted on generate / re-generate.
+     */
+    plannerDocumentId: text("planner_document_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

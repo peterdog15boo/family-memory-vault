@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import {
   Check,
   ChevronLeft,
@@ -32,10 +39,13 @@ import {
 } from "@/lib/will-planner";
 import { cn } from "@/lib/utils";
 
+export type WillPlannerView = "hub" | "interview" | "ready";
+
 type WillPlannerWorkspaceProps = {
   initialDisclaimerAccepted: boolean;
   initialDraft: SerializedWillDraft | null;
   initialDrafts: SerializedWillDraftSummary[];
+  initialView?: WillPlannerView;
 };
 
 async function readError(res: Response): Promise<string> {
@@ -51,6 +61,7 @@ export function WillPlannerWorkspace({
   initialDisclaimerAccepted,
   initialDraft,
   initialDrafts,
+  initialView = "hub",
 }: WillPlannerWorkspaceProps) {
   const [disclaimerAccepted, setDisclaimerAccepted] = useState(
     initialDisclaimerAccepted,
@@ -67,10 +78,16 @@ export function WillPlannerWorkspace({
   const [error, setError] = useState<string | null>(null);
   const [saveNote, setSaveNote] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const [showReadyView, setShowReadyView] = useState(
-    initialDraft?.status === "draft_ready",
-  );
+  const [view, setView] = useState<WillPlannerView>(() => {
+    if (!initialDraft) return "hub";
+    if (initialView === "ready" && initialDraft.generatedMarkdown) return "ready";
+    if (initialView === "interview") return "interview";
+    return "hub";
+  });
   const [showSigningPanel, setShowSigningPanel] = useState(false);
+  const dirtyRef = useRef(false);
+  const answersRef = useRef(answers);
+  answersRef.current = answers;
 
   function refreshDraftsFromActive(next: SerializedWillDraft) {
     setDrafts((prev) => {
@@ -94,10 +111,10 @@ export function WillPlannerWorkspace({
   const step = getWillStep(stepId) ?? WILL_STEPS[0]!;
   const progress = willProgressPercent(stepId, answers);
   const isReview = stepId === "review";
-  const hasReadyDraft =
-    draft?.status === "draft_ready" && Boolean(draft.generatedMarkdown);
+  const hasReadyDraft = Boolean(draft?.generatedMarkdown);
   const residueCheck = validateResiduePercents(answers);
   const signingStateLabel = willExecutionStateLabel(answers.stateCode);
+  const readOnlyArchived = draft?.status === "archived";
 
   const persist = useCallback(
     async (
@@ -116,14 +133,34 @@ export function WillPlannerWorkspace({
       });
       if (!res.ok) throw new Error(await readError(res));
       const data = (await res.json()) as { draft: SerializedWillDraft };
+      dirtyRef.current = false;
       setDraft(data.draft);
       setAnswers(data.draft.answers);
+      refreshDraftsFromActive(data.draft);
       setSaveNote("Saved");
       window.setTimeout(() => setSaveNote(null), 1600);
       return data.draft;
     },
     [],
   );
+
+  useEffect(() => {
+    if (!draft || readOnlyArchived || view !== "interview") return;
+    if (!dirtyRef.current) return;
+    const draftId = draft.id;
+    const timer = window.setTimeout(() => {
+      if (!dirtyRef.current) return;
+      void persist(answersRef.current, stepId, draftId).catch(() => {
+        setSaveNote("Save failed");
+      });
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [answers, draft, persist, readOnlyArchived, stepId, view]);
+
+  function onAnswersChange(next: WillAnswers) {
+    dirtyRef.current = true;
+    setAnswers(next);
+  }
 
   function acceptDisclaimer() {
     setError(null);
@@ -143,6 +180,8 @@ export function WillPlannerWorkspace({
         setDraft(data.draft);
         setAnswers(data.draft.answers);
         setStepId(resolveCurrentStepId(data.draft.answers));
+        refreshDraftsFromActive(data.draft);
+        setView("interview");
       } catch (e) {
         setError(e instanceof Error ? e.message : "Could not start");
       }
@@ -159,6 +198,8 @@ export function WillPlannerWorkspace({
         setDraft(data.draft);
         setAnswers(data.draft.answers);
         setStepId(resolveCurrentStepId(data.draft.answers));
+        refreshDraftsFromActive(data.draft);
+        setView("interview");
       } catch (e) {
         setError(e instanceof Error ? e.message : "Could not start");
       }
@@ -166,7 +207,7 @@ export function WillPlannerWorkspace({
   }
 
   function goNext() {
-    if (!draft) return;
+    if (!draft || readOnlyArchived) return;
     setShowSigningPanel(false);
     setError(null);
     const next = nextWillStepId(stepId, answers) ?? "review";
@@ -181,7 +222,7 @@ export function WillPlannerWorkspace({
   }
 
   function goBack() {
-    if (!draft) return;
+    if (!draft || readOnlyArchived) return;
     const prev = prevWillStepId(stepId, answers);
     if (!prev) return;
     setShowSigningPanel(false);
@@ -197,7 +238,7 @@ export function WillPlannerWorkspace({
   }
 
   function jumpTo(id: WillStepId) {
-    if (!draft || !visibleIds.includes(id)) return;
+    if (!draft || !visibleIds.includes(id) || readOnlyArchived) return;
     setShowSigningPanel(false);
     setError(null);
     startTransition(async () => {
@@ -211,7 +252,7 @@ export function WillPlannerWorkspace({
   }
 
   function buildDraft() {
-    if (!draft) return;
+    if (!draft || readOnlyArchived) return;
     if (!residueCheck.ok) {
       setError(residueCheck.error);
       return;
@@ -230,7 +271,7 @@ export function WillPlannerWorkspace({
         setDraft(data.draft);
         setAnswers(data.draft.answers);
         refreshDraftsFromActive(data.draft);
-        setShowReadyView(true);
+        setView("ready");
       } catch (e) {
         setError(e instanceof Error ? e.message : "Could not build draft");
       }
@@ -254,15 +295,22 @@ export function WillPlannerWorkspace({
           body: JSON.stringify({ confirm: true }),
         });
         if (!res.ok) throw new Error(await readError(res));
-        const data = (await res.json()) as { draft: SerializedWillDraft };
+        const data = (await res.json()) as {
+          draft: SerializedWillDraft;
+          archivedId?: string | null;
+        };
         setDraft(data.draft);
         setAnswers(data.draft.answers);
         setStepId("packs");
-        setShowReadyView(false);
-        refreshDraftsFromActive(data.draft);
-        // Keep archived rows: refetch list summaries via local archive stamp
+        setView("interview");
         setDrafts((prev) => {
-          const withoutNew = prev.filter((d) => d.id !== data.draft.id);
+          const archivedId = data.archivedId;
+          const stamped = prev.map((d) =>
+            archivedId && d.id === archivedId
+              ? { ...d, status: "archived" as const }
+              : d,
+          );
+          const withoutNew = stamped.filter((d) => d.id !== data.draft.id);
           return [
             {
               id: data.draft.id,
@@ -280,6 +328,13 @@ export function WillPlannerWorkspace({
         setError(e instanceof Error ? e.message : "Could not start over");
       }
     });
+  }
+
+  function openInterview(atStep?: WillStepId) {
+    setView("interview");
+    setShowSigningPanel(false);
+    if (atStep) setStepId(atStep);
+    else setStepId(resolveCurrentStepId(answers));
   }
 
   if (!disclaimerAccepted) {
@@ -329,20 +384,20 @@ export function WillPlannerWorkspace({
     );
   }
 
-  if (draft && showReadyView && hasReadyDraft) {
+  if (draft && view === "ready" && hasReadyDraft) {
     return (
       <div className="space-y-6">
-        <WillDraftsList drafts={drafts} />
+        <WillDraftsList drafts={drafts} activeDraftId={draft.id} />
         <WillDraftReady
           draft={draft}
-          onBackToInterview={() => {
-            setShowReadyView(false);
-            setStepId("review");
-          }}
+          onBackToInterview={() => openInterview("review")}
           onDraftChange={(next) => {
             setDraft(next);
             refreshDraftsFromActive(next);
           }}
+          onOpenHub={() => setView("hub")}
+          onRegenerate={buildDraft}
+          regenerating={pending}
         />
       </div>
     );
@@ -358,8 +413,8 @@ export function WillPlannerWorkspace({
             Will planner
           </h2>
           <p className="mt-2 text-sm text-[color:var(--legacy-muted)]">
-            Answer a few topics at a time. We save after every step so a refresh
-            won’t lose your work.
+            Answer a few topics at a time. We save as you go so a refresh won’t
+            lose your work.
           </p>
           {error ? (
             <p className="mt-3 text-sm text-red-700" role="alert">
@@ -384,9 +439,116 @@ export function WillPlannerWorkspace({
     );
   }
 
+  if (view === "hub") {
+    return (
+      <div className="space-y-6">
+        <WillDraftsList drafts={drafts} activeDraftId={draft.id} />
+        <WillDisclaimerBanner compact />
+        <div className="rounded-2xl border border-[color:var(--legacy-line)] bg-[color:var(--legacy-panel)] p-5 sm:p-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--legacy-muted)]">
+            {draft.status === "draft_ready"
+              ? "Draft ready"
+              : draft.status === "archived"
+                ? "Archived draft"
+                : "In progress"}
+            {draft.stateCode ? ` · ${draft.stateCode}` : ""}
+          </p>
+          <h2 className="font-display mt-2 text-2xl text-[color:var(--legacy-ink)]">
+            Will planner
+          </h2>
+          <p className="mt-2 text-sm text-[color:var(--legacy-muted)]">
+            Your answers are saved on this device and account. Leave anytime —
+            come back to continue where you left off.
+          </p>
+          {saveNote ? (
+            <p className="mt-2 text-xs text-[color:var(--legacy-muted)]">
+              {saveNote}
+            </p>
+          ) : null}
+          {error ? (
+            <p className="mt-3 text-sm text-red-700" role="alert">
+              {error}
+            </p>
+          ) : null}
+
+          <div className="mt-5 flex flex-wrap gap-2">
+            {!readOnlyArchived ? (
+              <button
+                type="button"
+                className="ui-btn ui-btn-primary"
+                onClick={() => openInterview()}
+              >
+                Continue draft
+              </button>
+            ) : null}
+            {!readOnlyArchived ? (
+              <button
+                type="button"
+                className="ui-btn ui-btn-secondary"
+                onClick={() => openInterview()}
+              >
+                Edit answers
+              </button>
+            ) : null}
+            {hasReadyDraft ? (
+              <button
+                type="button"
+                className="ui-btn ui-btn-secondary"
+                onClick={() => setView("ready")}
+              >
+                View ready draft
+              </button>
+            ) : null}
+            {!readOnlyArchived ? (
+              <button
+                type="button"
+                className="ui-btn ui-btn-secondary inline-flex items-center gap-2"
+                disabled={pending || !residueCheck.ok}
+                onClick={buildDraft}
+              >
+                {pending ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                ) : (
+                  <FileText className="size-4" aria-hidden />
+                )}
+                {hasReadyDraft ? "Re-generate" : "Build attorney draft"}
+              </button>
+            ) : null}
+            {!readOnlyArchived ? (
+              <button
+                type="button"
+                className="ui-btn ui-btn-ghost inline-flex items-center gap-1.5"
+                disabled={pending}
+                onClick={startOver}
+              >
+                <RotateCcw className="size-3.5" aria-hidden />
+                Start over
+              </button>
+            ) : null}
+          </div>
+          {!residueCheck.ok && !readOnlyArchived ? (
+            <p className="mt-3 text-sm text-amber-900">
+              Fix residue percents before re-generating: {residueCheck.error}
+            </p>
+          ) : null}
+          {draft.plannerDocumentId ? (
+            <p className="mt-4 text-sm">
+              <a
+                href={`/documents/${draft.plannerDocumentId}`}
+                className="text-[color:var(--legacy-accent)] underline-offset-2 hover:underline"
+              >
+                Open PDF in Wills / Estate
+              </a>
+            </p>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <WillDraftsList drafts={drafts} />
+      <WillDraftsList drafts={drafts} activeDraftId={draft.id} />
       <WillDisclaimerBanner compact />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -410,15 +572,26 @@ export function WillPlannerWorkspace({
             />
           </div>
         </div>
-        <button
-          type="button"
-          onClick={startOver}
-          disabled={pending}
-          className="ui-btn ui-btn-ghost inline-flex items-center gap-1.5 text-sm"
-        >
-          <RotateCcw className="size-3.5" aria-hidden />
-          Start over
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setView("hub")}
+            className="ui-btn ui-btn-ghost text-sm"
+          >
+            Home
+          </button>
+          {!readOnlyArchived ? (
+            <button
+              type="button"
+              onClick={startOver}
+              disabled={pending}
+              className="ui-btn ui-btn-ghost inline-flex items-center gap-1.5 text-sm"
+            >
+              <RotateCcw className="size-3.5" aria-hidden />
+              Start over
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
@@ -432,7 +605,7 @@ export function WillPlannerWorkspace({
                 key={s.id}
                 type="button"
                 onClick={() => jumpTo(s.id)}
-                disabled={pending}
+                disabled={pending || readOnlyArchived}
                 className={cn(
                   "flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition",
                   active
@@ -470,90 +643,94 @@ export function WillPlannerWorkspace({
             variant="full"
           />
         ) : (
-        <div className="rounded-2xl border border-[color:var(--legacy-line)] bg-[color:var(--legacy-panel)] p-5 sm:p-6">
-          <h2 className="font-display text-xl text-[color:var(--legacy-ink)]">
-            {step.title}
-          </h2>
-          <p className="mt-1 text-sm text-[color:var(--legacy-muted)]">
-            {step.description}
-          </p>
+          <div className="rounded-2xl border border-[color:var(--legacy-line)] bg-[color:var(--legacy-panel)] p-5 sm:p-6">
+            <h2 className="font-display text-xl text-[color:var(--legacy-ink)]">
+              {step.title}
+            </h2>
+            <p className="mt-1 text-sm text-[color:var(--legacy-muted)]">
+              {step.description}
+            </p>
 
-          {!isReview ? (
-            <div className="mt-6">
-              <WillPlannerFields
-                step={step}
-                answers={answers}
-                onChange={setAnswers}
-              />
-            </div>
-          ) : (
-            <div className="mt-6 space-y-4">
-              <p className="text-sm text-[color:var(--legacy-muted)]">
-                When you’re ready, build a plain-language attorney draft from
-                your answers. You can still jump back to edit any section.
-              </p>
-              {!residueCheck.ok ? (
-                <p className="text-sm text-red-700" role="alert">
-                  {residueCheck.error}
+            {!isReview ? (
+              <div className="mt-6">
+                <WillPlannerFields
+                  step={step}
+                  answers={answers}
+                  onChange={onAnswersChange}
+                />
+              </div>
+            ) : (
+              <div className="mt-6 space-y-4">
+                <p className="text-sm text-[color:var(--legacy-muted)]">
+                  When you’re ready, build a plain-language attorney draft from
+                  your answers. You can still jump back to edit any section.
                 </p>
-              ) : null}
-              <button
-                type="button"
-                disabled={pending || !residueCheck.ok}
-                onClick={buildDraft}
-                className="ui-btn ui-btn-primary inline-flex items-center gap-2"
-              >
-                {pending ? (
-                  <Loader2 className="size-4 animate-spin" aria-hidden />
-                ) : (
-                  <FileText className="size-4" aria-hidden />
-                )}
-                Build attorney draft
-              </button>
-              {hasReadyDraft ? (
+                {!residueCheck.ok ? (
+                  <p className="text-sm text-red-700" role="alert">
+                    {residueCheck.error}
+                  </p>
+                ) : null}
+                {!readOnlyArchived ? (
+                  <button
+                    type="button"
+                    disabled={pending || !residueCheck.ok}
+                    onClick={buildDraft}
+                    className="ui-btn ui-btn-primary inline-flex items-center gap-2"
+                  >
+                    {pending ? (
+                      <Loader2 className="size-4 animate-spin" aria-hidden />
+                    ) : (
+                      <FileText className="size-4" aria-hidden />
+                    )}
+                    {hasReadyDraft
+                      ? "Re-generate attorney draft"
+                      : "Build attorney draft"}
+                  </button>
+                ) : null}
+                {hasReadyDraft ? (
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-secondary inline-flex items-center gap-2"
+                    onClick={() => setView("ready")}
+                  >
+                    View ready draft
+                  </button>
+                ) : null}
+              </div>
+            )}
+
+            {error ? (
+              <p className="mt-4 text-sm text-red-700" role="alert">
+                {error}
+              </p>
+            ) : null}
+
+            {!isReview && !readOnlyArchived ? (
+              <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
                 <button
                   type="button"
-                  className="ui-btn ui-btn-secondary inline-flex items-center gap-2"
-                  onClick={() => setShowReadyView(true)}
+                  onClick={goBack}
+                  disabled={pending || !prevWillStepId(stepId, answers)}
+                  className="ui-btn ui-btn-ghost inline-flex items-center gap-1.5"
                 >
-                  View ready draft
+                  <ChevronLeft className="size-4" aria-hidden />
+                  Back
                 </button>
-              ) : null}
-            </div>
-          )}
-
-          {error ? (
-            <p className="mt-4 text-sm text-red-700" role="alert">
-              {error}
-            </p>
-          ) : null}
-
-          {!isReview ? (
-            <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={goBack}
-                disabled={pending || !prevWillStepId(stepId, answers)}
-                className="ui-btn ui-btn-ghost inline-flex items-center gap-1.5"
-              >
-                <ChevronLeft className="size-4" aria-hidden />
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={goNext}
-                disabled={pending}
-                className="ui-btn ui-btn-primary inline-flex items-center gap-1.5"
-              >
-                {pending ? (
-                  <Loader2 className="size-4 animate-spin" aria-hidden />
-                ) : null}
-                Save & continue
-                <ChevronRight className="size-4" aria-hidden />
-              </button>
-            </div>
-          ) : null}
-        </div>
+                <button
+                  type="button"
+                  onClick={goNext}
+                  disabled={pending}
+                  className="ui-btn ui-btn-primary inline-flex items-center gap-1.5"
+                >
+                  {pending ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden />
+                  ) : null}
+                  Save & continue
+                  <ChevronRight className="size-4" aria-hidden />
+                </button>
+              </div>
+            ) : null}
+          </div>
         )}
       </div>
     </div>

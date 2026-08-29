@@ -28,6 +28,8 @@ import { formatBytes } from "@/lib/billing/quotas";
 import { useCopy, useFormat } from "@/components/i18n/LocaleProvider";
 import { cn } from "@/lib/utils";
 import { DocumentViewerDialog } from "@/components/documents/DocumentViewerDialog";
+import { WillPlannerDocumentPanel } from "@/components/will-planner/WillPlannerDocumentPanel";
+import { parseWillDraftIdFromTags } from "@/lib/will-planner";
 
 type DocumentDetailViewProps = {
   document: SerializedPrivateDocument;
@@ -44,6 +46,10 @@ export function DocumentDetailView({
   const copy = useCopy();
   const format = useFormat();
   const [doc, setDoc] = useState(initial);
+  const willDraftId = useMemo(
+    () => parseWillDraftIdFromTags(doc.tags),
+    [doc.tags],
+  );
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(initial.title);
   const [description, setDescription] = useState(initial.description ?? "");
@@ -244,9 +250,29 @@ export function DocumentDetailView({
           })}
           {doc.importantFlag ? " · Important" : ""}
         </p>
+        {willDraftId ? (
+          <p className="mt-3">
+            <Link
+              href={`/legacy/will?draft=${encodeURIComponent(willDraftId)}&view=ready`}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-[color:var(--doc-ink)] underline-offset-2 hover:underline"
+            >
+              Open in Will Planner
+              <ExternalLink className="size-3.5" aria-hidden />
+            </Link>
+          </p>
+        ) : null}
       </header>
 
-      {previewUrl ? (
+      {willDraftId ? (
+        <WillPlannerDocumentPanel
+          willDraftId={willDraftId}
+          documentId={doc.id}
+          notes={doc.notes}
+          onDownload={() => void downloadDocument()}
+        />
+      ) : null}
+
+      {previewUrl && !willDraftId ? (
         <div className="documents-vault-panel documents-vault-in mt-6 overflow-hidden rounded-2xl">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -278,7 +304,14 @@ export function DocumentDetailView({
                   Notes
                 </dt>
                 <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-[color:var(--doc-ink)]">
-                  {doc.notes?.trim() || (
+                  {willDraftId ? (
+                    <span className="text-[color:var(--doc-muted)]">
+                      Will form text is shown in the preview above. Open Will
+                      Planner to edit answers or re-generate.
+                    </span>
+                  ) : doc.notes?.trim() ? (
+                    doc.notes
+                  ) : (
                     <span className="text-[color:var(--doc-muted)]">
                       No notes
                     </span>

@@ -19,12 +19,14 @@ import {
   type WillSignedScan,
   type WillSigningChecklistState,
 } from "@/lib/will-planner/signing-checklist";
+import { willAnswersContentChanged } from "@/lib/will-planner/answers-diff";
 import { resolveCurrentStepId } from "@/lib/will-planner/skip";
 import type {
   SerializedWillDraft,
   SerializedWillDraftSummary,
 } from "@/lib/will-planner/types";
 import { WillGenerateValidationError } from "@/lib/will-planner/validate";
+import { upsertWillPlannerDocument } from "@/lib/will-planner/document-export";
 
 export type {
   SerializedWillDraft,
@@ -71,6 +73,7 @@ export function serializeWillDraft(row: WillDraft): SerializedWillDraft {
     disclaimerVersion: row.disclaimerVersion,
     signingChecklist: normalizeSigningChecklistState(row.signingChecklist),
     signedScan: serializeSignedScan(row.signedScan),
+    plannerDocumentId: row.plannerDocumentId ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -259,13 +262,21 @@ export async function updateWillDraftAnswers(input: {
   }
 
   const now = new Date();
+  const previousAnswers = (existing.answers ?? {}) as WillAnswers;
+  const contentChanged = willAnswersContentChanged(previousAnswers, merged);
+  // Keep draft_ready when the user only moves between steps after generate.
+  // If answers change, demote to in_progress but keep generatedMarkdown until re-generate.
+  const nextStatus =
+    existing.status === "draft_ready" && !contentChanged
+      ? "draft_ready"
+      : "in_progress";
+
   const [row] = await db
     .update(willDrafts)
     .set({
       answers: merged,
       stateCode: merged.stateCode?.trim() || null,
-      status: "in_progress",
-      // Keep prior generated text until they regenerate, but mark not ready
+      status: nextStatus,
       updatedAt: now,
     })
     .where(
@@ -330,6 +341,30 @@ export async function generateAndSaveWillDraft(input: {
     .returning();
 
   if (!row) throw new Error("Failed to generate will draft");
+
+  try {
+    const { documentId } = await upsertWillPlannerDocument({
+      userId: input.userId,
+      draft: row,
+    });
+    if (documentId && documentId !== row.plannerDocumentId) {
+      const [linked] = await db
+        .update(willDrafts)
+        .set({ plannerDocumentId: documentId, updatedAt: new Date() })
+        .where(
+          and(
+            eq(willDrafts.id, row.id),
+            eq(willDrafts.userId, input.userId),
+          ),
+        )
+        .returning();
+      return linked ?? row;
+    }
+  } catch (error) {
+    // Draft markdown is saved even if Private Documents / R2 upsert fails.
+    console.error("[will-planner] document upsert failed", error);
+  }
+
   return row;
 }
 

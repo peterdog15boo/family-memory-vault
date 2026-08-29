@@ -30,3 +30,15 @@ export {
   ensureWillsEstateCategory,
   removeWillSignedScan,
 } from "@/lib/will-planner/signed-scan";
+export {
+  buildWillPlannerDocumentTitle,
+  parseWillDraftIdFromTags,
+  upsertWillPlannerDocument,
+  WILL_DRAFT_ID_TAG_PREFIX,
+  WILL_PLANNER_DOCUMENT_TAG,
+  willDraftIdTag,
+} from "@/lib/will-planner/document-export";
+export {
+  willAnswersContentChanged,
+  willAnswersContentFingerprint,
+} from "@/lib/will-planner/answers-diff";

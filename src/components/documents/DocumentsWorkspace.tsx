@@ -650,6 +650,11 @@ export function DocumentsWorkspace({
                                 />
                               ) : null}
                             </span>
+                            {doc.tags.includes("will-planner-draft") ? (
+                              <span className="mt-0.5 block text-xs text-[color:var(--doc-muted)]">
+                                Will form draft — open to preview first page
+                              </span>
+                            ) : null}
                             <span className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-[color:var(--doc-muted)]">
                               <span>{categoryName}</span>
                               <span aria-hidden>·</span>

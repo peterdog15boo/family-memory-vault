@@ -7,6 +7,8 @@ import {
   generateWillDraftPlainText,
   getActiveWillDraft,
   WILL_DISCLAIMER_TEXT,
+  WILL_DRAFT_PAGE_HEADER,
+  willDraftPageFooter,
 } from "@/lib/will-planner/server";
 import type { WillAnswers } from "@/lib/will-planner";
 import {
@@ -18,7 +20,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * GET /api/legacy/will/download?format=pdf|docx|txt
- * Owner-only. Includes required disclaimer on page 1 / body.
+ * Owner-only. Header/footer + cover sheet from generator.
  */
 export async function GET(request: Request) {
   const authResult = await requireLegacyPlusApiUser();
@@ -43,11 +45,14 @@ export async function GET(request: Request) {
 
   try {
     const draft = await getActiveWillDraft(userId);
-    if (!draft || draft.status !== "draft_ready" || !draft.generatedMarkdown) {
-      return apiError("No ready draft to download. Build the attorney draft first.", {
-        status: 404,
-        code: "not_found",
-      });
+    if (!draft || !draft.generatedMarkdown) {
+      return apiError(
+        "No ready draft to download. Build the attorney draft first.",
+        {
+          status: 404,
+          code: "not_found",
+        },
+      );
     }
 
     const answers = (draft.answers ?? {}) as WillAnswers;
@@ -59,15 +64,19 @@ export async function GET(request: Request) {
         .replace(/[^\w]+/g, "-")
         .replace(/^-|-$/g, "")
         .slice(0, 40) || "will-draft";
+    const instrumentTitle = `LAST WILL AND TESTAMENT OF ${(answers.fullLegalName ?? "TESTATOR").toUpperCase()} — DRAFT`;
+    const footer = willDraftPageFooter(answers.stateCode);
 
     if (format === "txt") {
       const text = [
+        WILL_DRAFT_PAGE_HEADER,
+        "",
         plain,
         "",
         "---",
         WILL_DISCLAIMER_TEXT,
         "",
-        "Email / share footer: " + WILL_DISCLAIMER_TEXT,
+        footer,
       ].join("\n");
 
       return new NextResponse(text, {
@@ -81,11 +90,9 @@ export async function GET(request: Request) {
     }
 
     if (format === "docx") {
-      const docx = buildSimpleDocx(
-        "Estate Planning Interview Draft — Family Memory Vault",
-        plain,
-        { disclaimer: WILL_DISCLAIMER_TEXT },
-      );
+      const docx = buildSimpleDocx(instrumentTitle, plain, {
+        disclaimer: `${WILL_DRAFT_PAGE_HEADER}\n${footer}`,
+      });
       return new NextResponse(Buffer.from(docx), {
         status: 200,
         headers: {
@@ -97,11 +104,11 @@ export async function GET(request: Request) {
       });
     }
 
-    const pdf = buildSimpleTextPdf(
-      "Estate Planning Interview Draft — Family Memory Vault",
-      plain,
-      { footerDisclaimer: WILL_DISCLAIMER_TEXT },
-    );
+    const pdf = buildSimpleTextPdf(instrumentTitle, plain, {
+      pageHeader: WILL_DRAFT_PAGE_HEADER,
+      pageFooter: footer,
+      stateCode: answers.stateCode,
+    });
 
     return new NextResponse(Buffer.from(pdf), {
       status: 200,

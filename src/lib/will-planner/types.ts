@@ -23,6 +23,7 @@ export type SerializedWillDraft = {
   disclaimerVersion: string;
   signingChecklist: WillSigningChecklistState;
   signedScan: WillSignedScan | null;
+  plannerDocumentId: string | null;
   createdAt: string;
   updatedAt: string;
 };

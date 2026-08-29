@@ -5,15 +5,26 @@ import { WillPlannerWorkspace } from "@/components/will-planner/WillPlannerWorks
 import { AppPageIntro } from "@/components/ui/AppPageIntro";
 import {
   getActiveWillDraft,
+  getOwnedWillDraft,
   hasAcceptedWillDisclaimer,
   listWillDraftsForOwner,
   serializeWillDraft,
   serializeWillDraftSummary,
 } from "@/lib/will-planner/server";
+import type { WillPlannerView } from "@/components/will-planner/WillPlannerWorkspace";
 import { canUseLegacyPlusFeatures } from "@/lib/plans/gates";
 import { ensureAppUser } from "@/lib/users";
 
-export default async function WillPlannerPage() {
+type WillPlannerPageProps = {
+  searchParams: Promise<{
+    draft?: string;
+    view?: string;
+  }>;
+};
+
+export default async function WillPlannerPage({
+  searchParams,
+}: WillPlannerPageProps) {
   const { userId, isAuthenticated } = await auth();
   if (!isAuthenticated || !userId) redirect("/");
 
@@ -23,11 +34,32 @@ export default async function WillPlannerPage() {
     return <LegacyPlusLockedPage featureLabel="Will Planner" gate={gate} />;
   }
 
-  const [draft, disclaimerAccepted, drafts] = await Promise.all([
+  const params = await searchParams;
+  const requestedId = params.draft?.trim() || null;
+  const viewParam = params.view?.trim();
+
+  const [active, disclaimerAccepted, drafts] = await Promise.all([
     getActiveWillDraft(userId),
     hasAcceptedWillDisclaimer(userId),
     listWillDraftsForOwner(userId),
   ]);
+
+  let draft = active;
+  if (requestedId) {
+    const owned = await getOwnedWillDraft(userId, requestedId);
+    if (owned) draft = owned;
+  }
+
+  let initialView: WillPlannerView = "hub";
+  if (viewParam === "interview" || viewParam === "ready" || viewParam === "hub") {
+    initialView = viewParam;
+  } else if (draft?.status === "draft_ready" && draft.generatedMarkdown) {
+    initialView = "ready";
+  } else if (draft) {
+    initialView = "hub";
+  } else {
+    initialView = "hub";
+  }
 
   return (
     <>
@@ -42,6 +74,7 @@ export default async function WillPlannerPage() {
           initialDisclaimerAccepted={disclaimerAccepted}
           initialDraft={draft ? serializeWillDraft(draft) : null}
           initialDrafts={drafts.map(serializeWillDraftSummary)}
+          initialView={initialView}
         />
       </div>
     </>

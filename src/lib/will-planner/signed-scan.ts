@@ -6,31 +6,21 @@ import { nanoid } from "nanoid";
 import {
   createPrivateDocument,
   deletePrivateDocumentWithStorage,
-  ensureDefaultDocumentCategories,
   generatePrivateDocumentThumbnail,
   promotePrivateDocumentTempToPermanent,
 } from "@/lib/documents";
 import { deletePrivateDocumentObjects } from "@/lib/documents/storage";
-import type { DocumentCategory, PrivateDocument } from "@/lib/db/schema";
+import type { PrivateDocument } from "@/lib/db/schema";
 import { isPrivateDocumentStorageKey } from "@/lib/r2";
 import {
-  WILL_ESTATE_CATEGORY,
   WILL_SIGNED_SCAN_NOTE,
   isWillSignedScanContentType,
   type WillSignedScan,
 } from "@/lib/will-planner/signing-checklist";
 import { setWillSignedScan } from "@/lib/will-planner/drafts";
+import { ensureWillsEstateCategory } from "@/lib/will-planner/wills-category";
 
-export async function ensureWillsEstateCategory(
-  userId: string,
-): Promise<DocumentCategory> {
-  const categories = await ensureDefaultDocumentCategories(userId);
-  const found = categories.find((c) => c.slug === WILL_ESTATE_CATEGORY.slug);
-  if (!found) {
-    throw new Error("Wills / Estate category missing after ensure");
-  }
-  return found;
-}
+export { ensureWillsEstateCategory } from "@/lib/will-planner/wills-category";
 
 export async function completeWillSignedScanUpload(input: {
   userId: string;
@@ -79,7 +69,7 @@ export async function completeWillSignedScanUpload(input: {
       id: documentId,
       userId: input.userId,
       categoryId: category.id,
-      title: "Signed will (scan)",
+      title: "Signed will scan",
       description:
         "User-supplied scan of a signed will. FMV does not verify signatures. The paper original remains the legal document.",
       notes: WILL_SIGNED_SCAN_NOTE,
@@ -88,7 +78,7 @@ export async function completeWillSignedScanUpload(input: {
       sizeBytes: promoted.sizeBytes,
       storageKey: promoted.toKey,
       thumbnailKey: thumb.thumbnailKey,
-      tags: ["will", "signed-scan", "estate"],
+      tags: ["will", "signed-scan", "estate", "signed-will-scan"],
       importantFlag: true,
     });
 

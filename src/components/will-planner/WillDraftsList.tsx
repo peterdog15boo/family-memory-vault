@@ -1,6 +1,10 @@
 "use client";
 
-import { US_STATE_OPTIONS, type SerializedWillDraftSummary } from "@/lib/will-planner";
+import Link from "next/link";
+import {
+  US_STATE_OPTIONS,
+  type SerializedWillDraftSummary,
+} from "@/lib/will-planner";
 
 function statusLabel(status: SerializedWillDraftSummary["status"]): string {
   switch (status) {
@@ -33,8 +37,10 @@ function formatWhen(iso: string): string {
 
 export function WillDraftsList({
   drafts,
+  activeDraftId,
 }: {
   drafts: SerializedWillDraftSummary[];
+  activeDraftId?: string | null;
 }) {
   if (drafts.length === 0) return null;
 
@@ -60,16 +66,30 @@ export function WillDraftsList({
             </tr>
           </thead>
           <tbody>
-            {drafts.map((d) => (
-              <tr
-                key={d.id}
-                className="border-b border-[color:var(--legacy-line)]/70 text-[color:var(--legacy-ink)] last:border-0"
-              >
-                <td className="py-2.5 pr-3">{statusLabel(d.status)}</td>
-                <td className="py-2.5 pr-3">{stateLabel(d.stateCode)}</td>
-                <td className="py-2.5">{formatWhen(d.updatedAt)}</td>
-              </tr>
-            ))}
+            {drafts.map((d) => {
+              const href =
+                d.status === "draft_ready"
+                  ? `/legacy/will?draft=${encodeURIComponent(d.id)}&view=ready`
+                  : `/legacy/will?draft=${encodeURIComponent(d.id)}&view=hub`;
+              return (
+                <tr
+                  key={d.id}
+                  className="border-b border-[color:var(--legacy-line)]/70 text-[color:var(--legacy-ink)] last:border-0"
+                >
+                  <td className="py-2.5 pr-3">
+                    <Link
+                      href={href}
+                      className="underline-offset-2 hover:underline"
+                    >
+                      {statusLabel(d.status)}
+                      {activeDraftId === d.id ? " · open" : ""}
+                    </Link>
+                  </td>
+                  <td className="py-2.5 pr-3">{stateLabel(d.stateCode)}</td>
+                  <td className="py-2.5">{formatWhen(d.updatedAt)}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
