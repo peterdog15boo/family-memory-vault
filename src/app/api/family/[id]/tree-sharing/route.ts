@@ -17,10 +17,11 @@ type RouteContext = { params: Promise<{ id: string }> };
 
 const bodySchema = z.object({
   shared: z.boolean(),
+  membersCanEdit: z.boolean().optional(),
 });
 
 /**
- * PATCH /api/family/[id]/tree-sharing — owner toggles Family Tree share.
+ * PATCH /api/family/[id]/tree-sharing — creator toggles share + membersCanEdit.
  */
 export async function PATCH(request: Request, context: RouteContext) {
   const authResult = await requireFamilyApiUser();
@@ -73,6 +74,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     await setFamilyTreeSharing({
       familyId,
       shared: parsed.data.shared,
+      membersCanEdit: parsed.data.membersCanEdit,
     });
 
     const [updated] = await db

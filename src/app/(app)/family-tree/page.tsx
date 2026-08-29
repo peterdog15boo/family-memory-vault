@@ -44,11 +44,10 @@ export default async function FamilyTreePage({ searchParams }: PageProps) {
     typeof params.familyId === "string" ? params.familyId.trim() : null;
 
   const access = await resolveFamilyTreeAccess(userId, preferredFamilyId);
-  if (!access?.canView) {
-    // Explicit family they cannot open — send them to a tree they can.
+  if (!access) {
     if (preferredFamilyId) {
       const fallback = await resolveFamilyTreeAccess(userId);
-      if (fallback?.canView) {
+      if (fallback) {
         redirect(
           `/family-tree?familyId=${encodeURIComponent(fallback.familyId)}`,
         );
@@ -60,15 +59,13 @@ export default async function FamilyTreePage({ searchParams }: PageProps) {
 
   const scope = scopeFromAccess(access);
   const peopleOwnerId = access.peopleOwnerId;
+  const loadGraph = access.hasTree && access.canView;
 
-  // Load graph only when the family already has a tree registry row.
   const [peopleCount, graph, availablePeople, peopleWithCovers] =
     await Promise.all([
       countUserPeople(peopleOwnerId),
-      access.hasTree
-        ? getFamilyTreeGraph(scope)
-        : Promise.resolve(null),
-      access.hasTree && access.canEdit
+      loadGraph ? getFamilyTreeGraph(scope) : Promise.resolve(null),
+      loadGraph && access.canEdit
         ? listPeopleAvailableForTree(scope)
         : Promise.resolve([]),
       listPeopleWithCovers(peopleOwnerId),
@@ -92,8 +89,10 @@ export default async function FamilyTreePage({ searchParams }: PageProps) {
       availablePeople={availablePeople}
       peopleCovers={peopleCovers}
       canEdit={access.canEdit}
+      canView={access.canView}
       isOwner={access.isOwner}
-      treeSharedWithFamily={access.treeSharedWithFamily}
+      treeSharedWithFamily={access.shareWithMembers}
+      membersCanEdit={access.membersCanEdit}
       familyId={access.familyId}
       familyName={access.familyName}
       hasTree={access.hasTree}

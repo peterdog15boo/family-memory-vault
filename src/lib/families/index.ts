@@ -430,10 +430,14 @@ export async function acceptInvite(
   }
 
   const [familyRow] = await db
-    .select({ treeSharedWithFamily: families.treeSharedWithFamily })
+    .select({ id: families.id })
     .from(families)
     .where(eq(families.id, invite.familyId))
     .limit(1);
+
+  if (!familyRow) {
+    throw new FamilyError("That family no longer exists.");
+  }
 
   const now = new Date();
   const [updated] = await db
@@ -444,10 +448,7 @@ export async function acceptInvite(
       acceptedAt: now,
       inviteToken: null,
       updatedAt: now,
-      // Inherit view when the tree is already shared (contribute stays opt-in).
-      ...(familyRow?.treeSharedWithFamily
-        ? { canViewTree: true }
-        : {}),
+      // Invite ≠ tree share — view/edit come from family-level toggles only.
     })
     .where(eq(familyMembers.id, invite.id))
     .returning();

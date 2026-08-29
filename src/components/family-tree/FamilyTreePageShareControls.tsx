@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Loader2, Network } from "lucide-react";
 import { FamilyTreeSharingSettings } from "@/components/family/FamilyTreeSharingSettings";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,7 @@ type Props = {
   familyName: string;
   isOwner: boolean;
   treeSharedWithFamily: boolean;
+  membersCanEdit: boolean;
   className?: string;
 };
 
@@ -22,52 +23,83 @@ export function FamilyTreePageShareControls({
   familyName,
   isOwner,
   treeSharedWithFamily,
+  membersCanEdit,
   className,
 }: Props) {
   const router = useRouter();
   const [shared, setShared] = useState(treeSharedWithFamily);
+  const [edit, setEdit] = useState(membersCanEdit);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    setShared(treeSharedWithFamily);
+    setEdit(membersCanEdit);
+  }, [treeSharedWithFamily, membersCanEdit]);
+
   if (!isOwner) return null;
+
+  function save(nextShared: boolean, nextEdit: boolean) {
+    setError(null);
+    startTransition(async () => {
+      try {
+        const res = await fetch(`/api/family/${familyId}/tree-sharing`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            shared: nextShared,
+            membersCanEdit: nextShared ? nextEdit : false,
+          }),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          family?: {
+            treeSharedWithFamily?: boolean;
+            shareWithMembers?: boolean;
+            membersCanEdit?: boolean;
+          };
+        };
+        if (!res.ok) {
+          throw new Error(data.error || "Could not update sharing.");
+        }
+        setShared(
+          Boolean(
+            data.family?.shareWithMembers ??
+              data.family?.treeSharedWithFamily ??
+              nextShared,
+          ),
+        );
+        setEdit(Boolean(data.family?.membersCanEdit ?? nextEdit));
+        router.refresh();
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Could not update sharing.",
+        );
+      }
+    });
+  }
 
   return (
     <div className={cn("space-y-2", className)}>
       <FamilyTreeSharingSettings
         familyId={familyId}
         shared={shared}
+        membersCanEdit={edit}
         canManage
         pending={pending}
         onSharedChange={(next) => {
-          setError(null);
-          startTransition(async () => {
-            try {
-              const res = await fetch(`/api/family/${familyId}/tree-sharing`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ shared: next }),
-              });
-              const data = (await res.json().catch(() => ({}))) as {
-                error?: string;
-                family?: { treeSharedWithFamily?: boolean };
-              };
-              if (!res.ok) {
-                throw new Error(data.error || "Could not update sharing.");
-              }
-              setShared(
-                Boolean(data.family?.treeSharedWithFamily ?? next),
-              );
-              router.refresh();
-            } catch (err) {
-              setError(
-                err instanceof Error ? err.message : "Could not update sharing.",
-              );
-            }
-          });
+          setShared(next);
+          if (!next) setEdit(false);
+          save(next, next ? edit : false);
+        }}
+        onMembersCanEditChange={(next) => {
+          setEdit(next);
+          save(shared, next);
         }}
       />
       <p className="text-xs text-ink-muted">
-        Inviting someone to the {familyName} family is what grants tree access.
+        You can share this family’s tree and choose whether members may edit it.
+        Sharing is separate from inviting people to {familyName}.
       </p>
       {error ? (
         <p className="text-xs text-danger" role="alert">
@@ -104,8 +136,8 @@ export function CreateFamilyTreeButton({ familyId, familyName }: CreateProps) {
         Create a tree for {familyName}.
       </p>
       <p className="mx-auto mt-2 max-w-md text-sm text-ink-muted">
-        This tree belongs to the {familyName} family. Members you invite to the
-        family can view it once you share.
+        This tree belongs to the {familyName} family. You can share it and choose
+        whether members may edit it after it’s created.
       </p>
       <button
         type="button"

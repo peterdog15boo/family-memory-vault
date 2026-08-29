@@ -6,9 +6,8 @@ const familyA = {
   familyName: "Roberts",
   peopleOwnerId: "owner-a",
   treeSharedWithFamily: true,
-  canViewTree: true,
-  canContributeTree: false,
-  role: "member",
+  membersCanEditTree: false,
+  role: "member" as const,
   hasTree: true,
 };
 
@@ -17,9 +16,8 @@ const familyB = {
   familyName: "Smith",
   peopleOwnerId: "owner-b",
   treeSharedWithFamily: true,
-  canViewTree: true,
-  canContributeTree: false,
-  role: "member",
+  membersCanEditTree: false,
+  role: "member" as const,
   hasTree: true,
 };
 
@@ -35,43 +33,61 @@ describe("familyTreeAccessFromMembership", () => {
     expect(access.familyName).toBe("Roberts");
   });
 
-  it("lets shared members view but not edit by default", () => {
+  it("lets shared members view but not edit when membersCanEdit is off", () => {
     const access = familyTreeAccessFromMembership(familyA, "member-a");
     expect(access.canView).toBe(true);
     expect(access.canEdit).toBe(false);
+    expect(access.shareWithMembers).toBe(true);
+    expect(access.membersCanEdit).toBe(false);
   });
 
-  it("allows contribute when the owner toggles canContributeTree", () => {
+  it("allows member edit when share and membersCanEdit are both on", () => {
     const access = familyTreeAccessFromMembership(
-      { ...familyA, canContributeTree: true },
+      { ...familyA, membersCanEditTree: true },
       "member-a",
     );
     expect(access.canView).toBe(true);
     expect(access.canEdit).toBe(true);
   });
 
-  it("blocks non-members of family B from that tree (no membership row)", () => {
-    // Viewer is only evaluated against rows they belong to — family B's
-    // membership for a family-A-only user simply does not exist.
-    const asMemberOfA = familyTreeAccessFromMembership(familyA, "member-a");
-    expect(asMemberOfA.familyId).toBe("fam-a");
-    expect(asMemberOfA.canView).toBe(true);
-
-    const strangerOnB = familyTreeAccessFromMembership(familyB, "member-a");
-    // Same function with B's row would only apply if they were invited to B.
-    // Stranger is not creator and would need share flags on a real membership;
-    // if somehow evaluated with B's owner id mismatch and share off:
-    const blocked = familyTreeAccessFromMembership(
+  it("share off hides the tree from members even if they are invited", () => {
+    const access = familyTreeAccessFromMembership(
       {
-        ...familyB,
+        ...familyA,
         treeSharedWithFamily: false,
-        canViewTree: false,
-        canContributeTree: false,
+        membersCanEditTree: true,
+        canViewTree: true,
+        canContributeTree: true,
       },
       "member-a",
     );
-    expect(blocked.canView).toBe(false);
-    expect(blocked.canEdit).toBe(false);
+    expect(access.canView).toBe(false);
+    expect(access.canEdit).toBe(false);
+  });
+
+  it("membersCanEdit alone does not grant edit without share", () => {
+    const access = familyTreeAccessFromMembership(
+      {
+        ...familyA,
+        treeSharedWithFamily: false,
+        membersCanEditTree: true,
+      },
+      "member-a",
+    );
+    expect(access.canEdit).toBe(false);
+  });
+
+  it("viewers cannot edit even when membersCanEdit is on", () => {
+    const access = familyTreeAccessFromMembership(
+      {
+        ...familyA,
+        membersCanEditTree: true,
+        role: "viewer",
+      },
+      "member-a",
+    );
+    expect(access.canView).toBe(true);
+    expect(access.canEdit).toBe(false);
   });
 
   it("isolates two families as separate tree options", () => {
@@ -95,16 +111,17 @@ describe("familyTreeAccessFromMembership", () => {
     expect(b.canEdit).toBe(true);
   });
 
-  it("share toggle off hides the tree from members", () => {
+  it("creator always sees and edits when share is off", () => {
     const access = familyTreeAccessFromMembership(
       {
         ...familyA,
         treeSharedWithFamily: false,
-        canViewTree: true,
+        membersCanEditTree: false,
+        role: "owner",
       },
-      "member-a",
+      "owner-a",
     );
-    expect(access.canView).toBe(false);
-    expect(access.canEdit).toBe(false);
+    expect(access.canView).toBe(true);
+    expect(access.canEdit).toBe(true);
   });
 });

@@ -1,27 +1,32 @@
 "use client";
 
 import Link from "next/link";
-import { Loader2, Network } from "lucide-react";
+import { Loader2, Lock, Network } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Props = {
   familyId: string;
   shared: boolean;
+  membersCanEdit: boolean;
   canManage: boolean;
   pending?: boolean;
   onSharedChange?: (shared: boolean) => void;
+  onMembersCanEditChange?: (membersCanEdit: boolean) => void;
   className?: string;
 };
 
 /**
- * Owner control: share Family Tree with invited members (view by default).
+ * Owner controls: shareWithMembers + membersCanEdit (one source of truth).
+ * Invite ≠ tree share — these toggles are explicit.
  */
 export function FamilyTreeSharingSettings({
   familyId,
   shared,
+  membersCanEdit,
   canManage,
   pending = false,
   onSharedChange,
+  onMembersCanEditChange,
   className,
 }: Props) {
   if (!canManage) {
@@ -44,8 +49,10 @@ export function FamilyTreeSharingSettings({
             className="font-semibold text-accent-deep underline-offset-2 hover:underline"
           >
             Family Tree
-          </Link>{" "}
-          to view it. Contribution is controlled by the family owner.
+          </Link>
+          {membersCanEdit
+            ? " — you can view and edit."
+            : " — view only until the creator allows editing."}
         </p>
       </div>
     );
@@ -59,43 +66,79 @@ export function FamilyTreeSharingSettings({
         className,
       )}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="inline-flex items-center gap-2 text-sm font-semibold text-ink">
-            <Network className="size-4 text-accent-deep" aria-hidden />
-            Family Tree sharing
-          </p>
-          <p className="mt-1 max-w-prose text-xs leading-relaxed text-ink-muted">
-            Share your tree with invited family. New members get{" "}
-            <strong className="font-medium text-ink">view only</strong> until you
-            allow someone to contribute. Kids can stay view-only.
-          </p>
-        </div>
-        <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-ink">
+      <div className="min-w-0">
+        <p className="inline-flex items-center gap-2 text-sm font-semibold text-ink">
+          <Network className="size-4 text-accent-deep" aria-hidden />
+          Family Tree sharing
+        </p>
+        <p className="mt-1 max-w-prose text-xs leading-relaxed text-ink-muted">
+          You can share this family’s tree and choose whether members may edit
+          it. Inviting someone to the family does not share the tree until you
+          turn sharing on.
+        </p>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        <label className="flex cursor-pointer items-start gap-3 text-sm text-ink">
           <input
             type="checkbox"
-            className="size-4 rounded border-ink/30"
+            className="mt-0.5 size-4 rounded border-ink/30"
             checked={shared}
             disabled={pending}
             onChange={(e) => onSharedChange?.(e.target.checked)}
           />
-          {pending ? (
-            <Loader2 className="size-3.5 animate-spin" aria-hidden />
-          ) : null}
-          Share with family
+          <span className="min-w-0">
+            <span className="font-medium">Share tree with this family</span>
+            <span className="mt-0.5 block text-xs text-ink-muted">
+              Members see the same tree you saved — not a copy.
+            </span>
+          </span>
+        </label>
+
+        <label
+          className={cn(
+            "flex items-start gap-3 text-sm text-ink",
+            shared ? "cursor-pointer" : "cursor-not-allowed opacity-60",
+          )}
+        >
+          <input
+            type="checkbox"
+            className="mt-0.5 size-4 rounded border-ink/30"
+            checked={shared && membersCanEdit}
+            disabled={pending || !shared}
+            onChange={(e) => onMembersCanEditChange?.(e.target.checked)}
+          />
+          <span className="min-w-0">
+            <span className="inline-flex items-center gap-1.5 font-medium">
+              Allow members to edit
+              {!shared ? (
+                <Lock className="size-3 text-ink-muted" aria-hidden />
+              ) : null}
+            </span>
+            <span className="mt-0.5 block text-xs text-ink-muted">
+              Only available when sharing is on. You always keep ownership.
+            </span>
+          </span>
         </label>
       </div>
+
+      {pending ? (
+        <p className="mt-3 inline-flex items-center gap-1 text-xs text-ink-muted">
+          <Loader2 className="size-3 animate-spin" aria-hidden />
+          Saving…
+        </p>
+      ) : null}
+
       {shared ? (
         <p className="mt-3 text-xs text-ink-muted">
-          Use the per-member toggles below for view / contribute. Manage the tree
-          in{" "}
+          Manage the tree in{" "}
           <Link
             href={`/family-tree?familyId=${encodeURIComponent(familyId)}`}
             className="font-semibold text-accent-deep underline-offset-2 hover:underline"
           >
             Family Tree
           </Link>
-          . <span className="sr-only">Family {familyId}</span>
+          .
         </p>
       ) : null}
     </div>

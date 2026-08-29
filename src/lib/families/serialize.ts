@@ -9,6 +9,10 @@ export type SerializedFamily = {
   name: string;
   createdByUserId: string;
   treeSharedWithFamily: boolean;
+  /** Alias of treeSharedWithFamily — share tree with this family. */
+  shareWithMembers: boolean;
+  /** Members may persist edits when share is also on. */
+  membersCanEdit: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -46,11 +50,14 @@ export type SerializedFamilyWithMembership = SerializedFamily & {
 };
 
 export function serializeFamily(family: Family): SerializedFamily {
+  const shareWithMembers = Boolean(family.treeSharedWithFamily);
   return {
     id: family.id,
     name: family.name,
     createdByUserId: family.createdByUserId,
-    treeSharedWithFamily: Boolean(family.treeSharedWithFamily),
+    treeSharedWithFamily: shareWithMembers,
+    shareWithMembers,
+    membersCanEdit: Boolean(family.membersCanEditTree),
     createdAt: family.createdAt.toISOString(),
     updatedAt: family.updatedAt.toISOString(),
   };

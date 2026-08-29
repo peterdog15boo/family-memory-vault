@@ -1,9 +1,12 @@
 /**
- * Family Tree ACL — trees belong to a familyId; membership grants access.
- * Inviting someone to the family is what grants tree access (no second invite system).
+ * Family Tree ACL — one tree per familyId; creator owns it.
+ *
+ * shareWithMembers (treeSharedWithFamily): members may view the same tree.
+ * membersCanEdit (membersCanEditTree): members may persist edits (only if share is on).
+ * Invite ≠ tree share — the creator must flip share on.
  */
 
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { families, familyMembers, familyTrees } from "@/lib/db/schema";
 import { canUseFamilyTree } from "@/lib/plans/gates";
@@ -14,10 +17,15 @@ export type FamilyTreeFamilyOption = {
   familyName: string;
   peopleOwnerId: string;
   hasTree: boolean;
+  /** Creator always; members only when shareWithMembers is on. */
   canView: boolean;
+  /** Creator always; members when share + membersCanEdit. */
   canEdit: boolean;
   isFamilyCreator: boolean;
+  /** @deprecated Prefer shareWithMembers — kept for API compatibility. */
   treeSharedWithFamily: boolean;
+  shareWithMembers: boolean;
+  membersCanEdit: boolean;
   role: string;
 };
 
@@ -33,9 +41,15 @@ export type FamilyTreeAccessContext = {
   canEdit: boolean;
   /** True when viewer created the family (manages share toggles). */
   isOwner: boolean;
+  /** @deprecated Prefer shareWithMembers. */
   treeSharedWithFamily: boolean;
+  shareWithMembers: boolean;
+  membersCanEdit: boolean;
   hasTree: boolean;
-  /** Other families the viewer can open (for the picker). */
+  /**
+   * Families the viewer belongs to (for the picker) — includes unshared
+   * trees so members can see “not shared yet.”
+   */
   families: FamilyTreeFamilyOption[];
 };
 
@@ -44,8 +58,7 @@ type MembershipRow = {
   familyName: string;
   peopleOwnerId: string;
   treeSharedWithFamily: boolean;
-  canViewTree: boolean;
-  canContributeTree: boolean;
+  membersCanEditTree: boolean;
   role: string;
   hasTree: boolean;
 };
@@ -61,8 +74,7 @@ async function listFamilyTreeMemberships(
         familyName: families.name,
         peopleOwnerId: families.createdByUserId,
         treeSharedWithFamily: families.treeSharedWithFamily,
-        canViewTree: familyMembers.canViewTree,
-        canContributeTree: familyMembers.canContributeTree,
+        membersCanEditTree: families.membersCanEditTree,
         role: familyMembers.role,
         treeFamilyId: familyTrees.familyId,
       })
@@ -82,13 +94,11 @@ async function listFamilyTreeMemberships(
       familyName: r.familyName,
       peopleOwnerId: r.peopleOwnerId,
       treeSharedWithFamily: r.treeSharedWithFamily,
-      canViewTree: r.canViewTree,
-      canContributeTree: r.canContributeTree,
+      membersCanEditTree: Boolean(r.membersCanEditTree),
       role: r.role,
       hasTree: Boolean(r.treeFamilyId),
     }));
   } catch (error) {
-    // Pre-migration / missing family_trees: still allow Family nav from membership.
     console.warn(
       "[family-tree.access] listFamilyTreeMemberships failed; falling back",
       error,
@@ -99,8 +109,6 @@ async function listFamilyTreeMemberships(
         familyName: families.name,
         peopleOwnerId: families.createdByUserId,
         treeSharedWithFamily: families.treeSharedWithFamily,
-        canViewTree: familyMembers.canViewTree,
-        canContributeTree: familyMembers.canContributeTree,
         role: familyMembers.role,
       })
       .from(familyMembers)
@@ -118,8 +126,7 @@ async function listFamilyTreeMemberships(
       familyName: r.familyName,
       peopleOwnerId: r.peopleOwnerId,
       treeSharedWithFamily: r.treeSharedWithFamily,
-      canViewTree: r.canViewTree,
-      canContributeTree: r.canContributeTree,
+      membersCanEditTree: false,
       role: r.role,
       hasTree: false,
     }));
@@ -133,23 +140,26 @@ export function familyTreeAccessFromMembership(
     familyName: string;
     peopleOwnerId: string;
     treeSharedWithFamily: boolean;
-    canViewTree: boolean;
-    canContributeTree: boolean;
+    membersCanEditTree?: boolean;
+    /** @deprecated Ignored — family-level share is the source of truth. */
+    canViewTree?: boolean;
+    /** @deprecated Ignored — use membersCanEditTree. */
+    canContributeTree?: boolean;
     role: string;
     hasTree: boolean;
   },
   viewerUserId: string,
 ): FamilyTreeFamilyOption {
   const isFamilyCreator = m.peopleOwnerId === viewerUserId;
-  // Default: members view when share is on; edit only with contribute toggle.
-  const canView =
-    isFamilyCreator ||
-    (m.treeSharedWithFamily &&
-      (m.canViewTree || m.canContributeTree || m.role === "owner"));
+  const shareWithMembers = Boolean(m.treeSharedWithFamily);
+  const membersCanEdit = Boolean(m.membersCanEditTree);
+  // Creator always; members when the creator shares the tree with the family.
+  const canView = isFamilyCreator || shareWithMembers;
+  // Creator always; members only when share AND membersCanEdit are on.
   const canEdit =
     isFamilyCreator ||
-    (m.treeSharedWithFamily &&
-      m.canContributeTree &&
+    (shareWithMembers &&
+      membersCanEdit &&
       (m.role === "owner" || m.role === "member"));
 
   return {
@@ -160,7 +170,9 @@ export function familyTreeAccessFromMembership(
     canView,
     canEdit,
     isFamilyCreator,
-    treeSharedWithFamily: m.treeSharedWithFamily,
+    treeSharedWithFamily: shareWithMembers,
+    shareWithMembers,
+    membersCanEdit,
     role: m.role,
   };
 }
@@ -173,20 +185,18 @@ function optionFromMembership(
 }
 
 /**
- * List families the viewer may open on Family Tree (view access).
+ * Families the viewer belongs to (picker). Includes unshared trees.
  */
 export async function listFamilyTreeOptions(
   viewerUserId: string,
 ): Promise<FamilyTreeFamilyOption[]> {
   const memberships = await listFamilyTreeMemberships(viewerUserId);
-  return memberships
-    .map((m) => optionFromMembership(m, viewerUserId))
-    .filter((o) => o.canView);
+  return memberships.map((m) => optionFromMembership(m, viewerUserId));
 }
 
 /**
  * Resolve which family tree the viewer should open.
- * Prefer `preferredFamilyId` when the viewer can access it.
+ * Prefer `preferredFamilyId` when the viewer is a member (even if share is off).
  */
 export async function resolveFamilyTreeAccess(
   viewerUserId: string,
@@ -199,12 +209,11 @@ export async function resolveFamilyTreeAccess(
     preferredFamilyId &&
     options.find((o) => o.familyId === preferredFamilyId);
 
-  // Explicit familyId that the viewer cannot open → deny (do not fall back).
+  // Explicit familyId that the viewer is not a member of → deny.
   if (preferredFamilyId && !preferred) {
     return null;
   }
 
-  // Prefer a family where the viewer is creator and has plan access.
   const gate = await canUseFamilyTree(viewerUserId).catch(() => ({
     allowed: false as const,
   }));
@@ -212,8 +221,12 @@ export async function resolveFamilyTreeAccess(
     ? options.find((o) => o.isFamilyCreator)
     : undefined;
 
-  const active = preferred || ownedWithPlan || options[0]!;
-  if (!active?.canView) return null;
+  // Prefer a viewable tree when no explicit familyId; else first membership.
+  const active =
+    preferred ||
+    ownedWithPlan ||
+    options.find((o) => o.canView) ||
+    options[0]!;
 
   return {
     viewerUserId,
@@ -224,7 +237,9 @@ export async function resolveFamilyTreeAccess(
     canView: active.canView,
     canEdit: active.canEdit,
     isOwner: active.isFamilyCreator,
-    treeSharedWithFamily: active.treeSharedWithFamily,
+    treeSharedWithFamily: active.shareWithMembers,
+    shareWithMembers: active.shareWithMembers,
+    membersCanEdit: active.membersCanEdit,
     hasTree: active.hasTree,
     families: options,
   };
@@ -235,7 +250,6 @@ export async function canAccessFamilyTreeNav(
 ): Promise<boolean> {
   const options = await listFamilyTreeOptions(viewerUserId);
   if (options.length > 0) return true;
-  // Plan holders with no family yet still see nav → empty “create a family” path.
   const gate = await canUseFamilyTree(viewerUserId).catch(() => ({
     allowed: false as const,
   }));
@@ -243,7 +257,7 @@ export async function canAccessFamilyTreeNav(
 }
 
 /**
- * View a family's tree — creator always; members when share + canViewTree.
+ * View a family's tree — creator always; members when shareWithMembers is on.
  */
 export async function canViewFamilyTree(
   viewerUserId: string,
@@ -254,7 +268,7 @@ export async function canViewFamilyTree(
 }
 
 /**
- * Edit a family's tree — creator always; members need contribute + member/owner role.
+ * Edit a family's tree — creator always; members need share + membersCanEdit.
  */
 export async function canEditFamilyTree(
   viewerUserId: string,
@@ -298,7 +312,8 @@ export function scopeFromAccess(
 }
 
 /**
- * Ensure a family_trees row exists (idempotent). Enables share + member view.
+ * Ensure a family_trees row exists (idempotent).
+ * Does NOT turn share on — invite ≠ tree share.
  */
 export async function ensureFamilyTree(input: {
   familyId: string;
@@ -312,71 +327,40 @@ export async function ensureFamilyTree(input: {
       createdByUserId: input.createdByUserId,
     })
     .onConflictDoNothing({ target: familyTrees.familyId });
-
-  await db
-    .update(families)
-    .set({
-      treeSharedWithFamily: true,
-      updatedAt: new Date(),
-    })
-    .where(eq(families.id, input.familyId));
-
-  await db
-    .update(familyMembers)
-    .set({
-      canViewTree: true,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(familyMembers.familyId, input.familyId),
-        inArray(familyMembers.status, ["active", "pending"]),
-      ),
-    );
 }
 
 /**
- * Turn Family Tree sharing on/off for a family. Creator-only (caller must check).
+ * Owner toggles for Family Tree sharing.
+ * Turning share off also clears membersCanEdit.
  */
 export async function setFamilyTreeSharing(input: {
   familyId: string;
   shared: boolean;
+  membersCanEdit?: boolean;
 }): Promise<void> {
   const db = getDb();
+  const membersCanEdit = input.shared
+    ? (input.membersCanEdit ?? undefined)
+    : false;
+
   await db
     .update(families)
     .set({
       treeSharedWithFamily: input.shared,
+      ...(membersCanEdit !== undefined
+        ? { membersCanEditTree: membersCanEdit }
+        : {}),
+      // Share off forces edit off.
+      ...(!input.shared ? { membersCanEditTree: false } : {}),
       updatedAt: new Date(),
     })
     .where(eq(families.id, input.familyId));
-
-  if (input.shared) {
-    await db
-      .update(familyMembers)
-      .set({
-        canViewTree: true,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(familyMembers.familyId, input.familyId),
-          inArray(familyMembers.status, ["active", "pending"]),
-        ),
-      );
-  } else {
-    await db
-      .update(familyMembers)
-      .set({
-        canContributeTree: false,
-        updatedAt: new Date(),
-      })
-      .where(eq(familyMembers.familyId, input.familyId));
-  }
 }
 
 /**
- * Per-member Family Tree toggles. Contribute implies view.
+ * @deprecated Per-member ACL is no longer the source of truth.
+ * Family-level shareWithMembers / membersCanEdit replace these flags.
+ * Kept so older settings UI callers don't crash during rollout.
  */
 export async function setMemberTreeAccess(input: {
   familyId: string;

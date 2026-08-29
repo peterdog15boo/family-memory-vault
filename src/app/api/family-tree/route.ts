@@ -37,6 +37,8 @@ export async function GET(request: Request) {
         isOwner: access.isOwner,
         familyId: access.familyId,
         treeSharedWithFamily: access.treeSharedWithFamily,
+        shareWithMembers: access.shareWithMembers,
+        membersCanEdit: access.membersCanEdit,
       },
     });
   } catch (error) {

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Network } from "lucide-react";
+import { Lock, Network } from "lucide-react";
 import { FamilyTreeBuilder } from "@/components/family-tree/FamilyTreeBuilder";
 import { FamilyTreeFamilyPicker } from "@/components/family-tree/FamilyTreeFamilyPicker";
 import {
@@ -21,8 +21,10 @@ type FamilyTreeWorkspaceProps = {
   availablePeople: SerializedFamilyTreePerson[];
   peopleCovers: FamilyTreePersonCover[];
   canEdit: boolean;
+  canView: boolean;
   isOwner: boolean;
   treeSharedWithFamily: boolean;
+  membersCanEdit: boolean;
   familyId: string;
   familyName: string;
   hasTree: boolean;
@@ -38,14 +40,17 @@ export async function FamilyTreeWorkspace({
   availablePeople,
   peopleCovers,
   canEdit,
+  canView,
   isOwner,
   treeSharedWithFamily,
+  membersCanEdit,
   familyId,
   familyName,
   hasTree,
   families,
 }: FamilyTreeWorkspaceProps) {
   const t = await getTranslations();
+  const notSharedYet = hasTree && !canView && !isOwner;
 
   return (
     <>
@@ -67,9 +72,11 @@ export async function FamilyTreeWorkspace({
           </>
         }
         description={
-          canEdit
-            ? t("pages.familyTreeDescription")
-            : "You’re viewing a shared family tree. Ask the family owner if you need edit access."
+          notSharedYet
+            ? `The ${familyName} tree isn’t shared yet.`
+            : canEdit
+              ? t("pages.familyTreeDescription")
+              : "You’re viewing a shared family tree. Ask the family creator if you need edit access."
         }
       />
 
@@ -100,19 +107,34 @@ export async function FamilyTreeWorkspace({
           ) : null}
         </p>
 
-        {hasTree ? (
+        {hasTree && isOwner ? (
           <FamilyTreePageShareControls
             familyId={familyId}
             familyName={familyName}
             isOwner={isOwner}
             treeSharedWithFamily={treeSharedWithFamily}
+            membersCanEdit={membersCanEdit}
           />
         ) : null}
 
-        {!canEdit && hasTree ? (
-          <p className="rounded-xl border border-accent/20 bg-accent/5 px-4 py-3 text-sm text-ink">
-            View only — you can explore the tree, but editing is turned off for
-            your account.
+        {notSharedYet ? (
+          <div className="rounded-xl border border-ink/10 bg-canvas/90 px-5 py-8 text-center">
+            <Lock className="mx-auto size-8 text-ink-muted" aria-hidden />
+            <p className="mt-3 text-lg font-semibold text-ink">
+              The {familyName} tree isn’t shared yet.
+            </p>
+            <p className="mx-auto mt-2 max-w-md text-sm text-ink-muted">
+              The family creator can share this tree from Family Tree or Family
+              settings. Inviting you to the family does not share the tree by
+              itself.
+            </p>
+          </div>
+        ) : null}
+
+        {canView && !canEdit && hasTree ? (
+          <p className="inline-flex items-center gap-2 rounded-xl border border-accent/20 bg-accent/5 px-4 py-3 text-sm text-ink">
+            <Lock className="size-3.5 shrink-0 text-accent-deep" aria-hidden />
+            View only — you can explore the tree, but edits won’t be saved.
           </p>
         ) : null}
 
@@ -128,7 +150,7 @@ export async function FamilyTreeWorkspace({
               open Family Tree and create one.
             </p>
           )
-        ) : tree ? (
+        ) : canView && tree ? (
           <>
             <FamilyTreeBuilder
               initialTree={tree}

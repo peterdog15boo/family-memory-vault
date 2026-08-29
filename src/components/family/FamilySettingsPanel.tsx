@@ -379,6 +379,7 @@ export function FamilySettingsPanel({
               <FamilyTreeSharingSettings
                 familyId={family.id}
                 shared={Boolean(family.treeSharedWithFamily)}
+                membersCanEdit={Boolean(family.membersCanEdit)}
                 canManage
                 pending={pending && busyKey === `tree-share-${family.id}`}
                 onSharedChange={(shared) => {
@@ -388,12 +389,21 @@ export function FamilySettingsPanel({
                       {
                         method: "PATCH",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ shared }),
+                        body: JSON.stringify({
+                          shared,
+                          membersCanEdit: shared
+                            ? Boolean(family.membersCanEdit)
+                            : false,
+                        }),
                       },
                     );
                     const data = (await response.json().catch(() => ({}))) as {
                       error?: string;
-                      family?: { treeSharedWithFamily?: boolean };
+                      family?: {
+                        treeSharedWithFamily?: boolean;
+                        shareWithMembers?: boolean;
+                        membersCanEdit?: boolean;
+                      };
                     };
                     if (!response.ok) {
                       throw new Error(
@@ -406,24 +416,74 @@ export function FamilySettingsPanel({
                           ? {
                               ...f,
                               treeSharedWithFamily: Boolean(
-                                data.family?.treeSharedWithFamily ?? shared,
+                                data.family?.shareWithMembers ??
+                                  data.family?.treeSharedWithFamily ??
+                                  shared,
+                              ),
+                              shareWithMembers: Boolean(
+                                data.family?.shareWithMembers ??
+                                  data.family?.treeSharedWithFamily ??
+                                  shared,
+                              ),
+                              membersCanEdit: Boolean(
+                                data.family?.membersCanEdit ??
+                                  (shared ? family.membersCanEdit : false),
                               ),
                             }
                           : f,
                       ),
                     );
-                    setMembersByFamilyId((prev) => ({
-                      ...prev,
-                      [family.id]: (prev[family.id] ?? []).map((m) =>
-                        shared
-                          ? { ...m, canViewTree: true }
-                          : { ...m, canContributeTree: false },
-                      ),
-                    }));
                     setNotice(
                       shared
-                        ? "Family Tree is shared — members can view. Turn on contribute per person below."
+                        ? "Family Tree is shared with this family."
                         : "Family Tree sharing is off.",
+                    );
+                  });
+                }}
+                onMembersCanEditChange={(membersCanEdit) => {
+                  runAction(`tree-share-${family.id}`, async () => {
+                    const response = await fetch(
+                      `/api/family/${family.id}/tree-sharing`,
+                      {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          shared: true,
+                          membersCanEdit,
+                        }),
+                      },
+                    );
+                    const data = (await response.json().catch(() => ({}))) as {
+                      error?: string;
+                      family?: {
+                        treeSharedWithFamily?: boolean;
+                        shareWithMembers?: boolean;
+                        membersCanEdit?: boolean;
+                      };
+                    };
+                    if (!response.ok) {
+                      throw new Error(
+                        data.error || "Could not update Family Tree sharing.",
+                      );
+                    }
+                    setFamilies((prev) =>
+                      prev.map((f) =>
+                        f.id === family.id
+                          ? {
+                              ...f,
+                              treeSharedWithFamily: true,
+                              shareWithMembers: true,
+                              membersCanEdit: Boolean(
+                                data.family?.membersCanEdit ?? membersCanEdit,
+                              ),
+                            }
+                          : f,
+                      ),
+                    );
+                    setNotice(
+                      membersCanEdit
+                        ? "Family members can edit this tree."
+                        : "Family members can view but not edit.",
                     );
                   });
                 }}
@@ -432,6 +492,7 @@ export function FamilySettingsPanel({
               <FamilyTreeSharingSettings
                 familyId={family.id}
                 shared={Boolean(family.treeSharedWithFamily)}
+                membersCanEdit={Boolean(family.membersCanEdit)}
                 canManage={false}
               />
             )}
@@ -894,6 +955,9 @@ function InviteForm({
         {t("family.inviteLead")}
       </p>
       <p className="mt-2 text-xs leading-relaxed text-ink-muted">
+        You can share this family’s tree and choose whether members may edit it.
+      </p>
+      <p className="mt-2 text-xs leading-relaxed text-ink-muted">
         {t("family.inviteChatNotice")}
       </p>
       <div className="mt-3 flex flex-col gap-2 sm:flex-row">
@@ -984,12 +1048,13 @@ function MemberRow({
   const roleBusy = pending && busyKey === `role-${member.id}`;
   const removeBusy = pending && busyKey === `remove-${member.id}`;
   const treeBusy = pending && busyKey === `tree-${member.id}`;
-  const showTreeAcl =
-    treeShared &&
-    isOwner &&
-    !isSelf &&
-    Boolean(onChangeTreeAccess) &&
-    member.role !== "owner";
+  // Family-level shareWithMembers / membersCanEdit replace per-member ACL.
+  const showTreeAcl = false;
+  void treeShared;
+  void onChangeTreeAccess;
+  void treeBusy;
+  void isOwner;
+  void isSelf;
 
   return (
     <li className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">

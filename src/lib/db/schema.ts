@@ -1125,11 +1125,19 @@ export const families = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     /**
- * When true, active members with canViewTree may open this family's Family Tree.
- * Default on once a tree exists for the family; contribution still needs canContributeTree.
- */
+     * shareWithMembers — when true, active family members may open this
+     * family's Family Tree (same nodes the creator owns). Default off;
+     * inviting someone to the family does not turn this on.
+     */
     treeSharedWithFamily: boolean("tree_shared_with_family")
-      .default(true)
+      .default(false)
+      .notNull(),
+    /**
+     * membersCanEdit — when true (and share is on), active members may
+     * persist tree edits. Default off. Creator always edits.
+     */
+    membersCanEditTree: boolean("members_can_edit_tree")
+      .default(false)
       .notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
