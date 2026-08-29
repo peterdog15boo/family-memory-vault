@@ -8,6 +8,13 @@ import {
 } from "@/lib/ai/help";
 
 describe("product help retrieval", () => {
+  it("ranks will planner for estate planning draft questions", () => {
+    expect(
+      retrieveHelpEntries("What is the Will Planner? Is it a real will?")[0]
+        ?.id,
+    ).toBe("will_planner");
+  });
+
   it("ranks invite family for invite questions", () => {
     const entries = retrieveHelpEntries(
       "How do I invite family members to join?",

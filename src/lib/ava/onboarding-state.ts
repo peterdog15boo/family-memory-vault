@@ -52,6 +52,8 @@ export function normalizeOnboardingState(
         progress.inviteAfterFirstMoviePrompted === true,
       documentsIntroSeen: progress.documentsIntroSeen === true,
       documentsSkipped: progress.documentsSkipped === true,
+      willPlannerIntroSeen: progress.willPlannerIntroSeen === true,
+      willPlannerSkipped: progress.willPlannerSkipped === true,
       completionCelebrated: progress.completionCelebrated === true,
     },
   };

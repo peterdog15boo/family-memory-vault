@@ -51,6 +51,7 @@ import {
 } from "@/lib/i18n";
 import { canUseLegacyPlusFeatures } from "@/lib/plans/gates";
 import { isBetaPlanModeActive } from "@/lib/plans/legacy-plus-guidance";
+import { userHasActiveWillDraft } from "@/lib/will-planner/server";
 
 export type {
   AvaAutoOpenReason,
@@ -480,6 +481,13 @@ function buildSteps(
     postMemoryUnlocked &&
     (peopleDone || movieDone || askAiDone || inviteDone || memoryDone);
 
+  const willDone =
+    Boolean(hp.willPlannerIntroSeen) ||
+    Boolean(hp.willPlannerSkipped) ||
+    Boolean(signals.hasActiveWillDraft);
+  /** One-shot tip after Documents is unlocked; never nags once seen/skipped/draft exists. */
+  const willUnlocked = docsUnlocked;
+
   const movieHref = signals.latestMemoryId
     ? `/memories/${signals.latestMemoryId}?createMovie=1`
     : "/memories/new?intent=movie";
@@ -682,6 +690,32 @@ function buildSteps(
           : "available",
     }),
     step({
+      id: "will_planner",
+      title: t("ava.steps.willPlannerTitle"),
+      description: hasLegacyPlus
+        ? t("ava.steps.willPlannerDescription")
+        : betaMode
+          ? t("ava.steps.willPlannerDescriptionUpgradeBeta")
+          : t("ava.steps.willPlannerDescriptionUpgrade"),
+      href: hasLegacyPlus ? "/legacy/will" : "/billing",
+      ctaLabel: hasLegacyPlus
+        ? t("ava.steps.willPlannerCta")
+        : betaMode
+          ? t("ava.steps.willPlannerCtaUpgradeBeta")
+          : t("ava.steps.willPlannerCtaUpgrade"),
+      optional: true,
+      upgradeNote: hasLegacyPlus
+        ? null
+        : betaMode
+          ? t("ava.steps.willPlannerUpgradeNoteBeta")
+          : t("ava.steps.willPlannerUpgradeNote"),
+      status: !willUnlocked
+        ? "locked"
+        : willDone
+          ? "done"
+          : "available",
+    }),
+    step({
       id: "complete",
       title: t("ava.steps.completeTitle"),
       description: t("ava.steps.completeDescription"),
@@ -724,6 +758,7 @@ function pickActiveStep(
     "ask_ai",
     "invite",
     "documents_legacy",
+    "will_planner",
     "complete",
   ];
   for (const id of priority) {
@@ -765,6 +800,7 @@ export async function getAvaProgress(userId: string): Promise<AvaProgress> {
     assistantConversationCount,
     latestMemoryId,
     legacyPlusGate,
+    hasActiveWillDraft,
   ] = await Promise.all([
     countAnyMedia(userId),
     countPendingModeration(userId),
@@ -779,6 +815,7 @@ export async function getAvaProgress(userId: string): Promise<AvaProgress> {
     canUseLegacyPlusFeatures(userId).catch(() => ({
       allowed: false as const,
     })),
+    userHasActiveWillDraft(userId).catch(() => false),
   ]);
 
   const signals: AvaSignals = {
@@ -794,6 +831,7 @@ export async function getAvaProgress(userId: string): Promise<AvaProgress> {
     displayName: liveDisplayName,
     imageUrl: liveImageUrl,
     latestMemoryId,
+    hasActiveWillDraft,
   };
 
   // Quiet-tip detection from raw flags (before auto-complete stamps).
@@ -1315,6 +1353,13 @@ export async function acknowledgeAvaStep(
     });
     return;
   }
+  if (stepId === "will_planner") {
+    await patchAvaState(userId, {
+      helperProgress: { willPlannerIntroSeen: true },
+      helperDismissedAt: now,
+    });
+    return;
+  }
   if (stepId === "complete") {
     await patchAvaState(userId, {
       helperCompletedAt: now,
@@ -1357,6 +1402,10 @@ export async function skipAvaStep(
     case "documents_legacy":
       progress.documentsIntroSeen = true;
       progress.documentsSkipped = true;
+      break;
+    case "will_planner":
+      progress.willPlannerIntroSeen = true;
+      progress.willPlannerSkipped = true;
       break;
     default:
       throw new Error("This step can’t be skipped.");

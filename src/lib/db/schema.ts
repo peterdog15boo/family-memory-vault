@@ -232,6 +232,9 @@ export type AvaHelperProgress = {
   inviteAfterFirstMoviePrompted?: boolean;
   documentsIntroSeen?: boolean;
   documentsSkipped?: boolean;
+  /** One-shot Will Planner tip (seen or soft-skipped). */
+  willPlannerIntroSeen?: boolean;
+  willPlannerSkipped?: boolean;
   completionCelebrated?: boolean;
 };
 
@@ -2720,6 +2723,108 @@ export const termsAcceptances = pgTable(
 );
 
 /**
+ * Will Planner disclaimer clickwrap (audit trail).
+ * Required before the interview starts — versioned like ToS / beta NDA.
+ */
+export const willDisclaimerAcceptances = pgTable(
+  "will_disclaimer_acceptances",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    disclaimerVersion: text("disclaimer_version").notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("will_disclaimer_acceptances_user_id_idx").on(table.userId),
+    index("will_disclaimer_acceptances_version_idx").on(
+      table.disclaimerVersion,
+    ),
+    uniqueIndex("will_disclaimer_acceptances_user_version_uidx").on(
+      table.userId,
+      table.disclaimerVersion,
+    ),
+  ],
+);
+
+export const WILL_DRAFT_STATUSES = [
+  "in_progress",
+  "draft_ready",
+  "archived",
+] as const;
+export type WillDraftStatus = (typeof WILL_DRAFT_STATUSES)[number];
+
+export const willDraftStatusEnum = pgEnum(
+  "will_draft_status",
+  WILL_DRAFT_STATUSES,
+);
+
+/**
+ * Owner-only Will Planner interview drafts.
+ * Never family-shared; excluded from Ask AI / Photos / movie pipelines.
+ * One active (in_progress | draft_ready) draft per user — enforced in app code.
+ */
+export const willDrafts = pgTable(
+  "will_drafts",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Optional family context only — drafts are never shared with members. */
+    familyId: text("family_id").references(() => families.id, {
+      onDelete: "set null",
+    }),
+    status: willDraftStatusEnum("status").notNull().default("in_progress"),
+    stateCode: text("state_code"),
+    answers: jsonb("answers").$type<Record<string, unknown>>().default({}).notNull(),
+    generatedMarkdown: text("generated_markdown"),
+    generatedAt: timestamp("generated_at", { withTimezone: true }),
+    disclaimerVersion: text("disclaimer_version").notNull(),
+    /**
+     * Owner-only “Make this a real will” task checks.
+     * Shape: { checks: Record<taskId, boolean> } — never auto-filled from generate.
+     */
+    signingChecklist: jsonb("signing_checklist")
+      .$type<{ checks?: Record<string, boolean> }>()
+      .default({})
+      .notNull(),
+    /**
+     * Optional scan of the signed original archived in Private Documents.
+     * FMV does not verify signatures.
+     */
+    signedScan: jsonb("signed_scan").$type<{
+      documentId: string;
+      storageKey: string;
+      originalFilename: string;
+      contentType: string;
+      sizeBytes: number;
+      uploadedAt: string;
+      note: string;
+    } | null>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("will_drafts_user_id_idx").on(table.userId),
+    index("will_drafts_user_status_idx").on(table.userId, table.status),
+    index("will_drafts_family_id_idx").on(table.familyId),
+  ],
+);
+
+/**
  * In-app beta feedback submissions (bugs + feature requests).
  * Status workflow: new → triaged → in-progress → resolved.
  */
@@ -2951,6 +3056,8 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   movies: many(movies),
   betaNdaAcceptances: many(betaNdaAcceptances),
   termsAcceptances: many(termsAcceptances),
+  willDisclaimerAcceptances: many(willDisclaimerAcceptances),
+  willDrafts: many(willDrafts),
   betaFeedback: many(feedbackSubmissions),
   feedbackSubmissions: many(feedbackSubmissions),
   people: many(people),
@@ -3025,6 +3132,27 @@ export const termsAcceptancesRelations = relations(
     }),
   }),
 );
+
+export const willDisclaimerAcceptancesRelations = relations(
+  willDisclaimerAcceptances,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [willDisclaimerAcceptances.userId],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const willDraftsRelations = relations(willDrafts, ({ one }) => ({
+  user: one(users, {
+    fields: [willDrafts.userId],
+    references: [users.id],
+  }),
+  family: one(families, {
+    fields: [willDrafts.familyId],
+    references: [families.id],
+  }),
+}));
 
 export const betaFeedbackRelations = relations(feedbackSubmissions, ({ one }) => ({
   user: one(users, {
@@ -3664,6 +3792,12 @@ export type BetaNdaAcceptance = typeof betaNdaAcceptances.$inferSelect;
 export type NewBetaNdaAcceptance = typeof betaNdaAcceptances.$inferInsert;
 export type TermsAcceptance = typeof termsAcceptances.$inferSelect;
 export type NewTermsAcceptance = typeof termsAcceptances.$inferInsert;
+export type WillDisclaimerAcceptance =
+  typeof willDisclaimerAcceptances.$inferSelect;
+export type NewWillDisclaimerAcceptance =
+  typeof willDisclaimerAcceptances.$inferInsert;
+export type WillDraft = typeof willDrafts.$inferSelect;
+export type NewWillDraft = typeof willDrafts.$inferInsert;
 export type BetaFeedback = typeof feedbackSubmissions.$inferSelect;
 export type NewBetaFeedback = typeof feedbackSubmissions.$inferInsert;
 export type FeedbackSubmission = typeof feedbackSubmissions.$inferSelect;

@@ -42,6 +42,7 @@ describe("private documents foundation", () => {
       "contracts",
       "real-estate",
       "investments",
+      "wills-estate",
       "legal",
       "medical",
       "business",

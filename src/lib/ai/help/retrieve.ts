@@ -149,7 +149,10 @@ async function buildPlanContext(
     }
 
     const needsLegacyPlus = entries.some(
-      (e) => e.id === "private_documents" || e.id === "digital_legacy",
+      (e) =>
+        e.id === "private_documents" ||
+        e.id === "digital_legacy" ||
+        e.id === "will_planner",
     );
     if (needsLegacyPlus) {
       const unlocked = Boolean(

@@ -560,6 +560,7 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
       "ask_ai",
       "invite",
       "documents_legacy",
+      "will_planner",
     ]);
     if (stepId && skippable.has(stepId)) {
       runAction({ action: "skip_step", stepId }, { closeAfter: true });
@@ -851,7 +852,8 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
                             }
                             if (
                               active.id === "people" ||
-                              active.id === "documents_legacy"
+                              active.id === "documents_legacy" ||
+                              active.id === "will_planner"
                             ) {
                               void postAva({
                                 action: "acknowledge",

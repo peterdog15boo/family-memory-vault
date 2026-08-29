@@ -124,6 +124,8 @@ export const RATE_LIMITS = {
   memoryBoxOrder: { limit: 8, windowMs: 60_000 },
   betaNdaAccept: { limit: 10, windowMs: 60_000 },
   termsAccept: { limit: 10, windowMs: 60_000 },
+  willPlannerMutate: { limit: 40, windowMs: 60_000 },
+  willPlannerDownload: { limit: 30, windowMs: 60_000 },
   feedbackSubmit: { limit: 5, windowMs: 60_000 },
   pushSubscribe: { limit: 20, windowMs: 60_000 },
   familyChatSend: { limit: 30, windowMs: 60_000 },

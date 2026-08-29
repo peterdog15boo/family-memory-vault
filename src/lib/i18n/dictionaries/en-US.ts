@@ -692,6 +692,7 @@ export const enUS = {
     documentViewConfirm:
       "View this private document in the vault? Access is logged for your security.",
     navOverview: "Overview",
+    navWillPlanner: "Will planner",
     navMessage: "Message to Loved Ones",
     navContacts: "Key Contacts",
     navBusiness: "Business Continuity",
@@ -2053,6 +2054,20 @@ export const enUS = {
         "You’ll need to upgrade to Legacy+ to use these. I won’t pretend they’re available on your current plan.",
       documentsUpgradeNoteBeta:
         "You’ll need Legacy+ to use these. Open Billing to switch plans free during beta — no payment is collected.",
+      willPlannerTitle: "Will planner",
+      willPlannerDescription:
+        "Build a plain-language attorney draft when you’re ready — it’s planning only, not a legal will.",
+      willPlannerDescriptionUpgrade:
+        "Will planner is on Legacy+. Upgrade when you want a guided attorney draft.",
+      willPlannerDescriptionUpgradeBeta:
+        "Will planner is part of Legacy+. You can switch plans free during beta.",
+      willPlannerCta: "Start will planner",
+      willPlannerCtaUpgrade: "Open Billing",
+      willPlannerCtaUpgradeBeta: "Switch to Legacy+ (free in beta)",
+      willPlannerUpgradeNote:
+        "Will planner needs Legacy+. I won’t nag — this is just a quiet heads-up.",
+      willPlannerUpgradeNoteBeta:
+        "Will planner needs Legacy+. Open Billing to switch free during beta.",
       completeTitle: "You’re all set",
       completeDescription: "I’ll stay nearby if you need a nudge.",
       completeCta: "Thanks, Ava",

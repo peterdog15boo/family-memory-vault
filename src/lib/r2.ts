@@ -57,6 +57,13 @@ export const R2_PREFIXES = {
    */
   privateLegacyVideos: "private-legacy-videos/",
   privateLegacyVideosTemp: "private-legacy-videos-temp/",
+  /**
+   * Owner-only Will Planner exports (never gallery / family share).
+   * Permanent: private-legacy-wills/{userId}/{draftId}/…
+   * Staging:   private-legacy-wills-temp/{userId}/…
+   */
+  privateLegacyWills: "private-legacy-wills/",
+  privateLegacyWillsTemp: "private-legacy-wills-temp/",
   /** Beta feedback screenshots (admin-only evidence; never gallery-served). */
   betaFeedback: "beta-feedback/",
 } as const;
@@ -336,9 +343,21 @@ export function isLegacyVideoStorageKey(key: string): boolean {
   );
 }
 
+/** Gallery/media helpers must never touch Will Planner export objects. */
+export function isWillDraftStorageKey(key: string): boolean {
+  return (
+    key.startsWith(R2_PREFIXES.privateLegacyWills) ||
+    key.startsWith(R2_PREFIXES.privateLegacyWillsTemp)
+  );
+}
+
 /** True for any owner-only private vault object prefix. */
 export function isPrivateVaultStorageKey(key: string): boolean {
-  return isPrivateDocumentStorageKey(key) || isLegacyVideoStorageKey(key);
+  return (
+    isPrivateDocumentStorageKey(key) ||
+    isLegacyVideoStorageKey(key) ||
+    isWillDraftStorageKey(key)
+  );
 }
 
 function assertNotPrivateDocumentKey(key: string): void {
@@ -665,6 +684,11 @@ export async function putObjectBytes(
   if (key.startsWith(R2_PREFIXES.privateLegacyVideosTemp)) {
     throw new Error(
       `Refusing putObjectBytes into private-legacy-videos-temp/ ("${key}"). Use legacy video upload helpers for client uploads.`,
+    );
+  }
+  if (key.startsWith(R2_PREFIXES.privateLegacyWillsTemp)) {
+    throw new Error(
+      `Refusing putObjectBytes into private-legacy-wills-temp/ ("${key}"). Use will planner storage helpers for exports.`,
     );
   }
 

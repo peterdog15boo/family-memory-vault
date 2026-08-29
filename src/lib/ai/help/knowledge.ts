@@ -14,6 +14,7 @@ export type HelpTopicId =
   | "people_faces"
   | "private_documents"
   | "digital_legacy"
+  | "will_planner"
   | "settings_profile"
   | "theme_switching"
   | "billing_upgrade"
@@ -313,6 +314,48 @@ export const HELP_KNOWLEDGE: readonly HelpKnowledgeEntry[] = [
       "Digital Legacy, emergency access setup, and Connected Accounts are part of Legacy+.",
       "Secure notes may contain sensitive details — treat them like a locked drawer.",
       "Ask AI can help explain Legacy+, but it can’t unlock features your plan doesn’t include.",
+    ],
+  },
+  {
+    id: "will_planner",
+    topic: "Will Planner",
+    keywords: [
+      "will planner",
+      "will",
+      "attorney draft",
+      "estate planning",
+      "executor",
+      "residuary",
+      "last will",
+      "testament",
+      "planning draft",
+      "make this a real will",
+      "signing checklist",
+      "signed will",
+      "wills estate",
+    ],
+    summary:
+      "Will Planner is a Legacy+ guided interview that builds a plain-language planning draft for an attorney to review. It is not a will, trust, or legal advice, and it is not valid until a licensed attorney prepares and you properly execute formal documents.",
+    steps: [
+      "Open Will Planner from Digital Legacy (/legacy/will) when you’re on Legacy+.",
+      "Accept the planning-draft disclaimer, then answer short topics (you can skip optional situation packs).",
+      "Build the attorney draft, download PDF or Word, and take it to a licensed attorney in your state.",
+      "Use the “Make this a real will” checklist to track attorney, signing, and storage steps — checking boxes does not make the draft valid.",
+      "Optionally upload a scan of the signed original into Private Documents → Wills / Estate. The paper original remains the legal document.",
+      "Keep passwords, crypto keys, and business how-to in Digital Legacy / Private Documents — never in the draft.",
+    ],
+    relatedRoutes: [
+      { label: "Will Planner", href: "/legacy/will" },
+      { label: "Digital Legacy", href: "/documents/legacy" },
+      { label: "Private Documents", href: "/documents" },
+    ],
+    planAware: true,
+    notes: [
+      "Ask AI may explain what the planner is and that it is not a legal will.",
+      "Ask AI may explain the “Make this a real will” checklist (attorney, witnesses, storing the original, uploading a scan). Checking boxes or uploading a scan does not make the draft valid.",
+      "Ask AI must not invent custom legal clauses, statutes, or “sign here to make it official” / “Mark as legal will” language.",
+      "Will drafts are owner-only. Ask AI must never quote or read another user’s draft (or anyone else’s).",
+      "Drafts are never shared with family chat or the family tree.",
     ],
   },
   {

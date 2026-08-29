@@ -18,6 +18,7 @@ export function LegacyShell({ children }: LegacyShellProps) {
   const t = useTranslations();
   const legacyNav = [
     { href: "/documents/legacy", label: t("legacy.navOverview") },
+    { href: "/legacy/will", label: t("legacy.navWillPlanner") },
     { href: "/documents/legacy/message", label: t("legacy.navMessage") },
     { href: "/documents/legacy/contacts", label: t("legacy.navContacts") },
     { href: "/documents/legacy/business", label: t("legacy.navBusiness") },

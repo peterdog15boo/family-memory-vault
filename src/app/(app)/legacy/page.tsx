@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { LegacyPlusLockedPage } from "@/components/billing/LegacyPlusLockedPage";
 import { LegacyPlanningBoard } from "@/components/legacy/LegacyPlanningBoard";
 import { AppPageIntro } from "@/components/ui/AppPageIntro";
@@ -48,6 +49,22 @@ export default async function LegacyPlanningPage() {
       />
 
       <div className="app-page mx-auto max-w-3xl pb-16">
+        <div className="mb-8 rounded-2xl border border-[color:var(--legacy-line)] bg-[color:var(--legacy-panel)] p-5 sm:p-6">
+          <h2 className="font-display text-lg text-[color:var(--legacy-ink)]">
+            Will planner
+          </h2>
+          <p className="mt-1 text-sm text-[color:var(--legacy-muted)]">
+            Build a plain-language attorney draft from a guided interview. This
+            is a planning draft only — not a will.
+          </p>
+          <Link
+            href="/legacy/will"
+            className="ui-btn ui-btn-primary mt-4 inline-flex"
+          >
+            Start will planner
+          </Link>
+        </div>
+
         <LegacyPlanningBoard
           initialBoard={serializePlanningBoard(score, items)}
           documentOptions={documents.map(serializeLegacyDocumentOption)}

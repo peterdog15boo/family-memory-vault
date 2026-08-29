@@ -52,6 +52,12 @@ export const DEFAULT_DOCUMENT_CATEGORY_DEFS = [
     sortOrder: 50,
   },
   {
+    name: "Wills / Estate",
+    slug: "wills-estate",
+    description: "Wills, estate planning drafts, and related signed originals",
+    sortOrder: 55,
+  },
+  {
     name: "Legal",
     slug: "legal",
     description: "Court, estate, and legal correspondence",

@@ -27,6 +27,7 @@ function emptySignals(partial: Partial<AvaSignals> = {}): AvaSignals {
     displayName: null,
     imageUrl: null,
     latestMemoryId: null,
+    hasActiveWillDraft: false,
     ...partial,
   };
 }
@@ -196,6 +197,53 @@ describe("live profile identity", () => {
     expect(docs?.href).toBe("/billing");
     expect(docs?.upgradeNote).toMatch(/Legacy\+/);
     expect(docs?.ctaLabel).toMatch(/Legacy\+/);
+  });
+
+  it("offers will planner once for Legacy+ without a draft", () => {
+    const state = confirmedNameState({
+      helperProgress: {
+        welcomeSeen: true,
+        documentsIntroSeen: true,
+      },
+    });
+    const signals = emptySignals({
+      displayName: "Jeff",
+      imageUrl: "https://img.clerk.com/avatar.png",
+      mediaCount: 2,
+      cleanPhotoCount: 2,
+      cleanUsableMediaCount: 2,
+      memoryCount: 1,
+      peopleCount: 1,
+      hasActiveWillDraft: false,
+    });
+    const steps = avaBuildSteps(state, signals, undefined, {
+      legacyPlus: true,
+    });
+    const will = steps.find((s) => s.id === "will_planner");
+    expect(will?.status).toBe("available");
+    expect(will?.href).toBe("/legacy/will");
+    expect(will?.ctaLabel).toMatch(/will planner/i);
+  });
+
+  it("marks will planner done when a draft already exists", () => {
+    const state = confirmedNameState({
+      helperProgress: { welcomeSeen: true },
+    });
+    const steps = avaBuildSteps(
+      state,
+      emptySignals({
+        displayName: "Jeff",
+        imageUrl: "https://img.clerk.com/avatar.png",
+        mediaCount: 2,
+        cleanPhotoCount: 2,
+        memoryCount: 1,
+        peopleCount: 1,
+        hasActiveWillDraft: true,
+      }),
+      undefined,
+      { legacyPlus: true },
+    );
+    expect(steps.find((s) => s.id === "will_planner")?.status).toBe("done");
   });
 
   it("locks create_movie until 5 clean/ready library media exist", () => {

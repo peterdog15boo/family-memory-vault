@@ -17,6 +17,11 @@ export const LEGACY_NAV: LegacyNavItem[] = [
     description: "Your progress and a gentle guide to this space",
   },
   {
+    href: "/legacy/will",
+    label: "Will planner",
+    description: "Guided interview that builds an attorney planning draft",
+  },
+  {
     href: "/documents/legacy/message",
     label: "Message to Loved Ones",
     description: "A personal letter and wishes for those you care about",

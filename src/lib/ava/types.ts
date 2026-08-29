@@ -16,6 +16,7 @@ export type AvaStepId =
   | "ask_ai"
   | "invite"
   | "documents_legacy"
+  | "will_planner"
   | "complete";
 
 export type AvaStepStatus = "locked" | "available" | "active" | "done";
@@ -54,6 +55,8 @@ export type AvaSignals = {
   imageUrl: string | null;
   /** Most recent Memory id (for movie create deep link). */
   latestMemoryId: string | null;
+  /** Active Will Planner draft exists (owner-only). */
+  hasActiveWillDraft: boolean;
 };
 
 export type AvaAutoOpenReason =
