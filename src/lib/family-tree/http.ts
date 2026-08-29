@@ -36,6 +36,27 @@ export function familyIdFromRequestUrl(request: Request): string | null {
 export async function requireFamilyTreeApiUser(
   preferredFamilyId?: string | null,
 ): Promise<FamilyTreeApiAuth | { ok: false; response: NextResponse }> {
+  const auth = await requireFamilyTreeMembershipAccess(preferredFamilyId);
+  if (!auth.ok) return auth;
+  if (!auth.access.canView) {
+    return {
+      ok: false,
+      response: apiError("Family Tree is not available for your account.", {
+        status: 403,
+        code: "forbidden",
+      }),
+    };
+  }
+  return auth;
+}
+
+/**
+ * Require signed-in user who is a member of the preferred family (or any family).
+ * Allows share-off membership so the UI can show “not shared yet” without 403.
+ */
+export async function requireFamilyTreeMembershipAccess(
+  preferredFamilyId?: string | null,
+): Promise<FamilyTreeApiAuth | { ok: false; response: NextResponse }> {
   const authResult = await requireApiUser();
   if (!authResult.ok) return authResult;
 
@@ -43,7 +64,7 @@ export async function requireFamilyTreeApiUser(
     authResult.userId,
     preferredFamilyId,
   );
-  if (!access?.canView) {
+  if (!access) {
     const gate = await canUseFamilyTree(authResult.userId).catch(() => null);
     if (gate && !gate.allowed) {
       return { ok: false, response: planGateDeniedResponse(gate) };

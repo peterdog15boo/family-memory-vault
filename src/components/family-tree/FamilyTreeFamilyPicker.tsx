@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 export type FamilyTreePickerOption = {
@@ -12,18 +11,20 @@ export type FamilyTreePickerOption = {
 type Props = {
   families: FamilyTreePickerOption[];
   activeFamilyId: string;
+  onSelectFamily: (familyId: string) => void;
   className?: string;
 };
 
 /**
  * Switch which family's tree is open. Shown when the user belongs to 2+ families.
+ * Does not navigate — parent fetches and swaps the canvas in place.
  */
 export function FamilyTreeFamilyPicker({
   families,
   activeFamilyId,
+  onSelectFamily,
   className,
 }: Props) {
-  const router = useRouter();
   if (families.length < 2) return null;
 
   return (
@@ -38,10 +39,7 @@ export function FamilyTreeFamilyPicker({
         id="family-tree-family-picker"
         className="rounded-lg border border-ink/15 bg-canvas px-3 py-1.5 text-sm font-medium text-ink"
         value={activeFamilyId}
-        onChange={(e) => {
-          const id = e.target.value;
-          router.push(`/family-tree?familyId=${encodeURIComponent(id)}`);
-        }}
+        onChange={(e) => onSelectFamily(e.target.value)}
       >
         {families.map((f) => (
           <option key={f.familyId} value={f.familyId}>
