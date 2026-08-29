@@ -294,8 +294,58 @@ function unitSortKey(unit: LayoutUnit, ctx: LayoutIqContext): string {
 }
 
 /**
- * Multi-partner index: person → all partners on the tree (partner_of may repeat).
+ * Everyone on this generation who shares the same parent set as `anchorId`
+ * (Frank+Diane kids), plus anyone linked via sibling_of — excluding the anchor.
  */
+export function bloodSiblingsOnGeneration(input: {
+  anchorId: string;
+  idSet: ReadonlySet<string>;
+  parentsByChild: ReadonlyMap<string, readonly string[]>;
+  siblingAdj: ReadonlyMap<string, ReadonlySet<string>>;
+}): string[] {
+  const parentsKey = (id: string) =>
+    [...(input.parentsByChild.get(id) ?? [])].sort().join("+");
+  const anchorKey = parentsKey(input.anchorId);
+  const found = new Set<string>();
+
+  if (anchorKey) {
+    for (const id of input.idSet) {
+      if (id === input.anchorId) continue;
+      if (parentsKey(id) === anchorKey) found.add(id);
+    }
+  }
+
+  for (const id of input.siblingAdj.get(input.anchorId) ?? []) {
+    if (input.idSet.has(id) && id !== input.anchorId) found.add(id);
+  }
+
+  // Transitive sibling_of among the parent-matched set (sparse edges).
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const blood of [...found]) {
+      for (const id of input.siblingAdj.get(blood) ?? []) {
+        if (
+          id !== input.anchorId &&
+          input.idSet.has(id) &&
+          !found.has(id) &&
+          (!anchorKey || parentsKey(id) === anchorKey || parentsKey(id) === "")
+        ) {
+          // Only pull sibling_of peers that share the same parents when known.
+          if (anchorKey && parentsKey(id) && parentsKey(id) !== anchorKey) {
+            continue;
+          }
+          found.add(id);
+          grew = true;
+        }
+      }
+    }
+  }
+
+  return [...found].sort((a, b) => a.localeCompare(b));
+}
+
+/** Multi-partner index: person → all partners on the tree (partner_of may repeat). */
 export type PartnerIndex = ReadonlyMap<string, ReadonlySet<string>>;
 
 export function emptyPartnerIndex(): Map<string, Set<string>> {

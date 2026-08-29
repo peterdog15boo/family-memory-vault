@@ -175,14 +175,24 @@ export function SpouseParentConfirm({
                   partnerStatus === value && "family-tree-rel-choice--active",
                 )}
                 disabled={pending}
-                onClick={() => setPartnerStatus(value)}
+                onClick={() => {
+                  setPartnerStatus(value);
+                  if (value === "former") {
+                    setAlsoParentByChild((prev) => {
+                      const next: Record<string, boolean> = {};
+                      for (const id of Object.keys(prev)) next[id] = false;
+                      return next;
+                    });
+                  }
+                }}
               >
                 {label}
               </button>
             ))}
           </div>
           <p className="mt-1.5 text-xs text-ink-muted">
-            Former shows a small “former” hint on the tree (divorced / separated).
+            Former = divorced or separated. Shows a small “former” hint on the
+            tree.
           </p>
         </fieldset>
 
@@ -192,6 +202,7 @@ export function SpouseParentConfirm({
               Do they share children with {personName}?
             </p>
             <p className="mt-1 text-xs text-ink-muted">
+              Check “Also a birth parent” only for children of this union.
               Unchecked children stay on the other union only
               {addingAnother ? " (default for another partner)" : ""}.
             </p>
@@ -213,7 +224,7 @@ export function SpouseParentConfirm({
                           }))
                         }
                       />
-                      <span>{child.label}</span>
+                      <span>Also a birth parent of {child.label}</span>
                     </label>
                   </li>
                 );

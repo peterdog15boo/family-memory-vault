@@ -80,7 +80,7 @@ describe("sibling block contiguous packing", () => {
     ]);
   });
 
-  it("Frank+Diane kids stay contiguous; Scott/Todd dock to Donna only", () => {
+  it("Frank+Diane kids stay contiguous even when Scott is also cousin_of Kat", () => {
     const nodes = [
       { id: "diane", label: "Diane" },
       { id: "frank", label: "Frank" },
@@ -97,6 +97,7 @@ describe("sibling block contiguous packing", () => {
       { id: "duane-sr", label: "Duane Sr" },
       { id: "dana", label: "Dana" },
       { id: "duane-jr", label: "Duane Jr" },
+      { id: "mary", label: "Mary" },
     ];
     const kids = ["teresa", "donna", "kevan", "kathy"] as const;
     const edges = [
@@ -108,34 +109,55 @@ describe("sibling block contiguous packing", () => {
       { fromNodeId: "kevan", toNodeId: "colleen", type: "partner_of" as const },
       { fromNodeId: "teresa", toNodeId: "duane-sr", type: "partner_of" as const },
       { fromNodeId: "teresa", toNodeId: "dana", type: "partner_of" as const },
+      // Production bug: Scott is also cousin_of Kat (aunt Mary’s son).
+      { fromNodeId: "kathy", toNodeId: "scott", type: "cousin_of" as const },
+      { fromNodeId: "diane", toNodeId: "mary", type: "sibling_of" as const },
       { fromNodeId: "teresa", toNodeId: "duane-jr", type: "parent_of" as const },
       { fromNodeId: "duane-sr", toNodeId: "duane-jr", type: "parent_of" as const },
-      // Dana is NOT a parent of Duane Jr.
       ...kids.flatMap((c) => [
         { fromNodeId: "diane", toNodeId: c, type: "parent_of" as const },
         { fromNodeId: "frank", toNodeId: c, type: "parent_of" as const },
       ]),
       { fromNodeId: "paul", toNodeId: "jeff", type: "parent_of" as const },
       { fromNodeId: "helene", toNodeId: "jeff", type: "parent_of" as const },
+      // Sparse sibling_of like production (Kat↔Donna, Kat↔Kevan, Teresa↔Donna only).
       { fromNodeId: "kathy", toNodeId: "donna", type: "sibling_of" as const },
       { fromNodeId: "kathy", toNodeId: "kevan", type: "sibling_of" as const },
-      { fromNodeId: "kathy", toNodeId: "teresa", type: "sibling_of" as const },
-      { fromNodeId: "donna", toNodeId: "kevan", type: "sibling_of" as const },
       { fromNodeId: "donna", toNodeId: "teresa", type: "sibling_of" as const },
-      { fromNodeId: "kevan", toNodeId: "teresa", type: "sibling_of" as const },
     ];
 
     const layout = computeFamilyTreeLayout(nodes, edges);
     const by = Object.fromEntries(layout.nodes.map((n) => [n.id, n]));
-    const mid = (id: string) => by[id]!.x + TREE_LAYOUT.nodeWidth / 2;
 
     expect(by.teresa!.y).toBe(by.kathy!.y);
     expect(by.donna!.y).toBe(by.kathy!.y);
+    expect(by.kevan!.y).toBe(by.kathy!.y);
 
     const row = Object.values(by)
       .filter((n) => n.y === by.kathy!.y)
       .sort((a, b) => a.x - b.x)
       .map((n) => n.id);
+
+    const blood = ["teresa", "donna", "kevan", "kathy"] as const;
+    const bloodIdx = blood.map((id) => row.indexOf(id));
+    expect(bloodIdx.every((i) => i >= 0)).toBe(true);
+    // Contiguous blood spine: no non-sibling between the min and max blood index
+    // except partners of those blood siblings.
+    const lo = Math.min(...bloodIdx);
+    const hi = Math.max(...bloodIdx);
+    const between = row.slice(lo, hi + 1);
+    for (const id of between) {
+      if ((blood as readonly string[]).includes(id)) continue;
+      const owner = blood.find((b) =>
+        edges.some(
+          (e) =>
+            e.type === "partner_of" &&
+            ((e.fromNodeId === b && e.toNodeId === id) ||
+              (e.toNodeId === b && e.fromNodeId === id)),
+        ),
+      );
+      expect(owner, `${id} must belong to a blood sibling`).toBeTruthy();
+    }
 
     const ti = row.indexOf("teresa");
     const di = row.indexOf("donna");
@@ -150,16 +172,6 @@ describe("sibling block contiguous packing", () => {
       expect(betweenTD).toBe(false);
     }
 
-    // Duane Jr under Teresa+Duane Sr generation below; Dana not a parent edge.
     expect(by["duane-jr"]!.y).toBeGreaterThan(by.teresa!.y);
-    expect(
-      edges.some(
-        (e) =>
-          e.type === "parent_of" &&
-          e.fromNodeId === "dana" &&
-          e.toNodeId === "duane-jr",
-      ),
-    ).toBe(false);
-    void mid;
   });
 });

@@ -9,6 +9,7 @@ import { inferredCoParentPairs } from "@/lib/family-tree/genealogy-iq";
 import {
   addPartnerLink,
   applyInLawSoftSiblings,
+  bloodSiblingsOnGeneration,
   emptyPartnerIndex,
   familyUnitsForGeneration,
   isCoupledOnRow,
@@ -554,26 +555,45 @@ export function computeFamilyTreeLayout(
     if (focusPartner) used.add(focusPartner);
 
     const units: LayoutUnit[] = [];
+    const towardFocus = towardLeft ? "right" : "left";
 
-    function takeCousin(bloodId: string) {
-      if (used.has(bloodId) || !idSet.has(bloodId)) return;
-      const p = partnerOf.get(bloodId);
-      if (
-        p &&
-        idSet.has(p) &&
-        !used.has(p) &&
-        partnerOf.get(p) === bloodId
-      ) {
+    // Identify blood siblings + their partners up front so cousins cannot
+    // claim an in-law (Scott partnered to Donna) as an outer cousin seat.
+    const bloodIds = bloodSiblingsOnGeneration({
+      anchorId,
+      idSet,
+      parentsByChild,
+      siblingAdj,
+    }).filter((id) => !used.has(id));
+    const siblingPartnerIds = new Set<string>();
+    for (const blood of bloodIds) {
+      for (const p of partnersIndex.get(blood) ?? []) {
+        if (idSet.has(p) && !used.has(p)) siblingPartnerIds.add(p);
+      }
+    }
+
+    function takeCousin(cousinId: string) {
+      if (used.has(cousinId) || !idSet.has(cousinId)) return;
+      if (siblingPartnerIds.has(cousinId)) return;
+      const partnerIds = [...(partnersIndex.get(cousinId) ?? [])].filter(
+        (p) =>
+          idSet.has(p) &&
+          !used.has(p) &&
+          p !== anchorId &&
+          !siblingPartnerIds.has(p),
+      );
+      if (partnerIds.length > 0) {
+        const ordered = partnerIds.sort((a, b) => a.localeCompare(b));
         units.push(
           towardLeft
-            ? { ids: [p, bloodId], isCouple: true }
-            : { ids: [bloodId, p], isCouple: true },
+            ? { ids: [...ordered, cousinId], isCouple: ordered.length === 1 }
+            : { ids: [cousinId, ...ordered], isCouple: ordered.length === 1 },
         );
-        used.add(bloodId);
-        used.add(p);
+        used.add(cousinId);
+        for (const p of ordered) used.add(p);
       } else {
-        units.push({ ids: [bloodId], isCouple: false });
-        used.add(bloodId);
+        units.push({ ids: [cousinId], isCouple: false });
+        used.add(cousinId);
       }
     }
 
@@ -589,6 +609,8 @@ export function computeFamilyTreeLayout(
             for (const kid of childrenByParent.get(adult) ?? []) {
               if (!idSet.has(kid) || used.has(kid) || kid === anchorId) continue;
               if (focusPartner && kid === focusPartner) continue;
+              if (siblingPartnerIds.has(kid)) continue;
+              if (bloodIds.includes(kid)) continue;
               found.add(kid);
             }
           }
@@ -597,24 +619,20 @@ export function computeFamilyTreeLayout(
       return [...found].sort((a, b) => a.localeCompare(b));
     }
 
-    // Outer: explicit cousins, then aunt/uncle kids.
+    // Outer → inner: cousins first, then contiguous blood spine.
     const cousins = [...(cousinAdj.get(anchorId) ?? [])]
-      .filter((id) => idSet.has(id) && !used.has(id))
+      .filter((id) => idSet.has(id) && !used.has(id) && !siblingPartnerIds.has(id))
       .sort((a, b) => a.localeCompare(b));
     for (const c of cousins) takeCousin(c);
     for (const c of auntUncleCousins()) takeCousin(c);
 
-    // Blood siblings: contiguous spine; spouses dock on free ends only.
-    const sibs = [...(siblingAdj.get(anchorId) ?? [])]
-      .filter((id) => idSet.has(id) && !used.has(id))
-      .sort((a, b) => a.localeCompare(b));
-    if (sibs.length > 0) {
+    if (bloodIds.length > 0) {
       const sibUnits = siblingFlankUnits({
-        bloodIds: sibs,
+        bloodIds,
         idSet,
         partners: partnersIndex,
         exclude: used,
-        towardFocus: towardLeft ? "right" : "left",
+        towardFocus,
       });
       for (const unit of sibUnits) {
         units.push(unit);
@@ -901,6 +919,43 @@ export function computeFamilyTreeLayout(
     ]);
     const leftLeftovers: LayoutUnit[] = [];
     const rightLeftovers: LayoutUnit[] = [];
+
+    // Pack leftover blood-sibling groups as spines (not one person at a time).
+    const leftoverIds = (gens[focusGen] ?? []).filter((id) => !claimed.has(id));
+    const leftoverSet = new Set(leftoverIds);
+    const leftoverBloodClaimed = new Set<string>();
+    for (const id of leftoverIds) {
+      if (leftoverBloodClaimed.has(id) || claimed.has(id)) continue;
+      const peers = bloodSiblingsOnGeneration({
+        anchorId: id,
+        idSet: leftoverSet,
+        parentsByChild,
+        siblingAdj,
+      }).filter((p) => leftoverSet.has(p) && !claimed.has(p));
+      const bloodGroup = [id, ...peers].filter(
+        (p, i, arr) => arr.indexOf(p) === i && !claimed.has(p),
+      );
+      if (bloodGroup.length < 2) continue;
+      const sideHint = sideForFocusPerson(id, leftId, rightId);
+      const towardFocus =
+        sideHint === "right" ? ("left" as const) : ("right" as const);
+      const sibUnits = siblingFlankUnits({
+        bloodIds: bloodGroup,
+        idSet: new Set([...(gens[focusGen] ?? [])]),
+        partners: partnersIndex,
+        exclude: claimed,
+        towardFocus,
+      });
+      for (const unit of sibUnits) {
+        for (const uid of unit.ids) {
+          claimed.add(uid);
+          leftoverBloodClaimed.add(uid);
+        }
+        if (sideHint === "right") rightLeftovers.push(unit);
+        else leftLeftovers.push(unit);
+      }
+    }
+
     for (const id of gens[focusGen] ?? []) {
       if (claimed.has(id)) continue;
       const partnerIds = [...(partnersIndex.get(id) ?? [])].filter(
@@ -924,8 +979,6 @@ export function computeFamilyTreeLayout(
         unit = { ids: [id], isCouple: false };
         claimed.add(id);
       }
-      // Inherit side from parents / aunt-uncle attachment — never dump a
-      // right-side cousin (David Foltz) into the left leftovers pack.
       const side = sideForFocusPerson(unit.ids[unit.ids.length - 1]!, leftId, rightId);
       let partnerSide: "left" | "right" | "unknown" = "unknown";
       for (const pid of unit.ids.slice(0, -1)) {
