@@ -21,10 +21,13 @@ import {
 import {
   bootstrapSessionClocks,
   broadcastIdleSync,
+  clearWarningShownAt,
   inactivitySignInPath,
+  readWarningShownAt,
   subscribeIdleSync,
   writeIdleTimeoutEnabledPreference,
   writeLastActivityAt,
+  writeWarningShownAt,
 } from "@/lib/session/idle-session-sync";
 import {
   evaluateIdleState,
@@ -218,7 +221,8 @@ export type IdleSessionGuardProps = {
 };
 
 /**
- * Session idle (~2h) + hard max lifetime (12h) for authenticated shells.
+ * Session idle (15m + 2m grace if the warning was shown) + hard max lifetime (12h)
+ * for authenticated shells.
  * Free: idle always on. Paid: respects server-stored preference (default on).
  * Max lifetime always applies.
  *
@@ -429,6 +433,7 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
   );
 
   const applyWarningUi = useCallback((graceRemainingMs: number) => {
+    writeWarningShownAt();
     setCriticalSnapshot(getCriticalWorkSnapshot());
     setGraceRemainingMs(graceRemainingMs);
     setPhase("warning");
@@ -436,7 +441,7 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
 
   const scheduleNextCheckRef = useRef<() => void>(() => {});
 
-  const checkIdleState = useCallback(() => {
+  const checkIdleState = useCallback((opts?: { resume?: boolean }) => {
     if (signingOutRef.current) return;
 
     const now = Date.now();
@@ -455,6 +460,8 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
       sessionStartedAt: sessionStartedAtRef.current,
       now,
       checkIdle: policyEnabledRef.current,
+      warningShownAt: readWarningShownAt(),
+      resume: opts?.resume,
     });
 
     if (decision.action === "none") {
@@ -472,7 +479,7 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
       return;
     }
 
-    // Idle ≥ 2h or session ≥ 12h — enforce logout (timers may never have fired).
+    // Idle ≥ 15m without warning, ≥ 17m with warning, or session ≥ 12h.
     // Silent when we never showed a warning (cold return / background resume /
     // hard max lifetime).
     const silent =
@@ -492,6 +499,7 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
       lastActivityAtRef.current,
       Date.now(),
       sessionStartedAtRef.current,
+      readWarningShownAt(),
     );
     scheduleTimerRef.current = window.setTimeout(() => {
       checkIdleState();
@@ -506,6 +514,7 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
       clearScheduleTimers();
       setSignOutError(null);
       setPhase("idle");
+      clearWarningShownAt();
       setLastActivityAt(at, !opts?.fromPeer);
       if (!opts?.fromPeer) {
         broadcastIdleSync({ type: "stay", at });
@@ -520,7 +529,22 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
       if (!policyEnabledRef.current) return;
       if (phaseRef.current !== "idle") return;
       const at = opts?.at ?? Date.now();
+      if (!opts?.fromPeer) {
+        const decision = evaluateSessionExpiry({
+          lastActivityAt: lastActivityAtRef.current,
+          sessionStartedAt: sessionStartedAtRef.current,
+          now: Date.now(),
+          checkIdle: true,
+          warningShownAt: readWarningShownAt(),
+          resume: true,
+        });
+        if (decision.action === "logout") {
+          checkIdleStateRef.current({ resume: true });
+          return;
+        }
+      }
       const next = Math.max(lastActivityAtRef.current, at);
+      clearWarningShownAt();
       setLastActivityAt(next, !opts?.fromPeer);
       if (!opts?.fromPeer) {
         broadcastIdleSync({ type: "activity", at: next });
@@ -618,6 +642,7 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
       const decision = evaluateIdleState(
         lastActivityAtRef.current,
         Date.now(),
+        readWarningShownAt(),
       );
       if (decision.action === "warn") {
         setGraceRemainingMs(decision.graceRemainingMs);
@@ -688,7 +713,7 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
     if (!policy.enabled) {
       clearScheduleTimers();
       setPhase("idle");
-      checkIdleStateRef.current();
+      checkIdleStateRef.current({ resume: true });
       scheduleNextCheckRef.current();
       return () => {
         clearScheduleTimers();
@@ -701,6 +726,8 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
         sessionStartedAt: clocks.sessionStartedAt,
         now,
         checkIdle: true,
+        warningShownAt: readWarningShownAt(),
+        resume: true,
       }).action === "none" &&
       phaseRef.current !== "idle" &&
       phaseRef.current !== "signing_out"
@@ -708,7 +735,7 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
       setPhase("idle");
     }
 
-    checkIdleStateRef.current();
+    checkIdleStateRef.current({ resume: true });
     scheduleNextCheckRef.current();
 
     return () => {
@@ -749,18 +776,32 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
       onActivity();
     }
 
-    /** Resume: recompute idle from timestamps — do NOT treat as activity. */
-    function onResumeCheck() {
-      checkIdleStateRef.current();
+    function onResume() {
+      if (document.visibilityState === "hidden") return;
+      const now = Date.now();
+      const decision = evaluateSessionExpiry({
+        lastActivityAt: lastActivityAtRef.current,
+        sessionStartedAt: sessionStartedAtRef.current,
+        now,
+        checkIdle: policyEnabledRef.current,
+        warningShownAt: readWarningShownAt(),
+        resume: true,
+      });
+      if (decision.action === "logout" || decision.action === "warn") {
+        checkIdleStateRef.current({ resume: true });
+        return;
+      }
+      // Still inside the 15-minute window — focusing the tab counts as activity.
+      noteActivityRef.current();
     }
 
     function onVisibility() {
       if (document.visibilityState !== "visible") return;
-      onResumeCheck();
+      onResume();
     }
 
     function onPageShow() {
-      onResumeCheck();
+      onResume();
     }
 
     for (const eventName of IDLE_ACTIVITY_EVENTS) {
@@ -773,9 +814,9 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
       document.addEventListener(eventName, onMediaInteraction, true);
     }
     document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("focus", onResumeCheck);
+    window.addEventListener("focus", onResume);
     window.addEventListener("pageshow", onPageShow);
-    window.addEventListener("online", onResumeCheck);
+    window.addEventListener("online", onResume);
 
     return () => {
       for (const eventName of IDLE_ACTIVITY_EVENTS) {
@@ -785,9 +826,9 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
         document.removeEventListener(eventName, onMediaInteraction, true);
       }
       document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("focus", onResumeCheck);
+      window.removeEventListener("focus", onResume);
       window.removeEventListener("pageshow", onPageShow);
-      window.removeEventListener("online", onResumeCheck);
+      window.removeEventListener("online", onResume);
     };
   }, [isOwner, policy.enabled]);
 
@@ -796,7 +837,7 @@ export function IdleSessionGuard({ initialPolicy }: IdleSessionGuardProps) {
     if (!isOwner || policy.enabled) return;
 
     function onResumeCheck() {
-      checkIdleStateRef.current();
+      checkIdleStateRef.current({ resume: true });
     }
     function onVisibility() {
       if (document.visibilityState !== "visible") return;

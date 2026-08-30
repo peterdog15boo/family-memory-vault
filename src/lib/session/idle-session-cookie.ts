@@ -2,9 +2,9 @@
  * Idle activity cookie — mirrors localStorage so middleware can redirect
  * expired continuous sessions before authenticated UI paints.
  *
- * Value: `<sessionId>|<lastActivityAtMs>|<sessionStartedAtMs>|<idleEnabled 0|1>`
- * Only enforced when sessionId matches the current Clerk session (new logins
- * never inherit a prior session's clock).
+ * Value: `<sessionId>|<lastActivityAtMs>|<sessionStartedAtMs>|<idleEnabled 0|1>|<warningShownAtMs>`
+ * warningShownAtMs is 0 when no warning is showing. Only enforced when sessionId
+ * matches the current Clerk session (new logins never inherit a prior session's clock).
  */
 
 import {
@@ -22,6 +22,7 @@ export type IdleActivityCookie = {
   at: number;
   startedAt: number;
   idleEnabled: boolean;
+  warningShownAt: number | null;
 };
 
 export function serializeIdleActivityCookie(
@@ -29,8 +30,10 @@ export function serializeIdleActivityCookie(
   at: number,
   startedAt: number,
   idleEnabled = true,
+  warningShownAt: number | null = null,
 ): string {
-  return `${sessionId}|${at}|${startedAt}|${idleEnabled ? 1 : 0}`;
+  const warning = warningShownAt && warningShownAt > 0 ? warningShownAt : 0;
+  return `${sessionId}|${at}|${startedAt}|${idleEnabled ? 1 : 0}|${warning}`;
 }
 
 export function parseIdleActivityCookie(
@@ -45,7 +48,7 @@ export function parseIdleActivityCookie(
 
   // Legacy: sessionId|at
   if (parts.length === 2) {
-    return { sessionId, at, startedAt: at, idleEnabled: true };
+    return { sessionId, at, startedAt: at, idleEnabled: true, warningShownAt: null };
   }
 
   const startedAt = Number(parts[2]);
@@ -53,11 +56,16 @@ export function parseIdleActivityCookie(
 
   // Legacy: sessionId|at|startedAt
   if (parts.length === 3) {
-    return { sessionId, at, startedAt, idleEnabled: true };
+    return { sessionId, at, startedAt, idleEnabled: true, warningShownAt: null };
   }
 
   const idleEnabled = parts[3] !== "0";
-  return { sessionId, at, startedAt, idleEnabled };
+  let warningShownAt: number | null = null;
+  if (parts.length >= 5) {
+    const warning = Number(parts[4]);
+    if (Number.isFinite(warning) && warning > 0) warningShownAt = warning;
+  }
+  return { sessionId, at, startedAt, idleEnabled, warningShownAt };
 }
 
 export function isIdleActivityExpiredForSession(
@@ -69,7 +77,9 @@ export function isIdleActivityExpiredForSession(
   if (cookie.sessionId !== sessionId) return false;
   if (isSessionMaxLifetimeExpired(cookie.startedAt, now)) return true;
   if (!cookie.idleEnabled) return false;
-  return evaluateIdleState(cookie.at, now).action === "logout";
+  return evaluateIdleState(cookie.at, now, cookie.warningShownAt, {
+    resume: true,
+  }).action === "logout";
 }
 
 /** Build Set-Cookie value for the idle activity stamp (browser). */
@@ -78,9 +88,16 @@ export function idleActivityCookieWriteValue(
   at: number,
   startedAt: number,
   idleEnabled = true,
+  warningShownAt: number | null = null,
 ): string {
   const value = encodeURIComponent(
-    serializeIdleActivityCookie(sessionId, at, startedAt, idleEnabled),
+    serializeIdleActivityCookie(
+      sessionId,
+      at,
+      startedAt,
+      idleEnabled,
+      warningShownAt,
+    ),
   );
   const secure =
     typeof window !== "undefined" && window.location.protocol === "https:"
@@ -102,6 +119,7 @@ export function writeIdleActivityCookie(
   at: number,
   startedAt: number,
   idleEnabled = true,
+  warningShownAt: number | null = null,
 ): void {
   try {
     document.cookie = idleActivityCookieWriteValue(
@@ -109,6 +127,7 @@ export function writeIdleActivityCookie(
       at,
       startedAt,
       idleEnabled,
+      warningShownAt,
     );
   } catch {
     // private mode / non-browser

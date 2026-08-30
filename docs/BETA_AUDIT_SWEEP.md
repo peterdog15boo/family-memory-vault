@@ -103,6 +103,18 @@ English (and the matching locale strings we grepped) now say Photos / photo libr
 
 ---
 
+## Idle timer boot vs sign-in reset
+
+Idle is 15 minutes + 2-minute “Are you still there?” (then sign-out). One shared clock in localStorage (`lastActivityAt`, `warningShownAt`, Clerk session id) plus the `fmv_idle` cookie.
+
+**Boot (tab left open, restored, or already signed in):** keep the stored `lastActivityAt`. Do not set it to now on page load. If it is more than 15 minutes old (and no warning was already shown this idle period), silent sign-out → sign-in once. No “expired” dialog.
+
+**Sign-in / session create:** `lastActivityAt = now`. Never evaluate yesterday’s stamp on that event. Sign-out clears the stamps so the next login cannot inherit them.
+
+Command: `npx vitest run src/lib/session/idle-timeout.test.ts src/components/session/IdleSessionGuard.test.tsx src/components/session/IdleAuthClockListener.test.tsx`
+
+---
+
 ## Left for beta testers
 
 1. **`0077_people_name_aliases` is applied on the `.env.local` database.** Production/Vercel does not migrate Neon automatically — run migrate once against that `DATABASE_URL` if it is a different database.

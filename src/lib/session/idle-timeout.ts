@@ -1,17 +1,20 @@
 /**
- * Session timeout: ~2h idle + 12h hard max lifetime.
- * Warning near the end of idle; secure logout if the user does not confirm.
+ * Session timeout: 15m idle + 2m “Are you still there?” grace + 12h hard max lifetime.
+ *
+ * Grace applies only if the warning was already shown in this idle period.
+ * Background / locked / closed tabs do not pause the clock — returning after
+ * 15m without a warning is an immediate sign-out.
  *
  * Timers alone are not reliable when tabs are backgrounded or mobile pages suspend —
  * always recompute from lastActivityAt / sessionStartedAt on resume.
  */
 
-/** Idle logout after this much wall-clock time without activity. */
-export const IDLE_TOTAL_MS = 2 * 60 * 60 * 1000;
-/** “Are you still there?” window before idle logout. */
-export const IDLE_LOGOUT_GRACE_MS = 10 * 60 * 1000;
-/** Idle duration at which the warning starts. */
-export const IDLE_WARNING_MS = IDLE_TOTAL_MS - IDLE_LOGOUT_GRACE_MS;
+/** Idle duration at which the warning starts (visible tab) or silent logout (no warning). */
+export const IDLE_WARNING_MS = 15 * 60 * 1000;
+/** “Are you still there?” window after the warning was shown. */
+export const IDLE_LOGOUT_GRACE_MS = 2 * 60 * 1000;
+/** Idle logout once warning + grace have elapsed. */
+export const IDLE_TOTAL_MS = IDLE_WARNING_MS + IDLE_LOGOUT_GRACE_MS;
 /** Hard cap from session start — even if the user stays active. */
 export const SESSION_MAX_LIFETIME_MS = 12 * 60 * 60 * 1000;
 /** Persist / broadcast activity at most this often. */
@@ -62,26 +65,48 @@ export type SessionExpiryDecision =
       reason: "idle" | "max_lifetime";
     };
 
+function warningAppliesThisPeriod(
+  lastActivityAt: number,
+  warningShownAt: number | null | undefined,
+): boolean {
+  return (
+    warningShownAt != null &&
+    Number.isFinite(warningShownAt) &&
+    warningShownAt >= lastActivityAt
+  );
+}
+
 /**
  * Pure idle decision from lastActivityAt (wall-clock), not from timer firings.
- * - idle < warning → none
- * - warning ≤ idle < total → warn with residual grace
- * - idle ≥ total → logout
+ * - idle < 15m → none
+ * - idle ≥ 17m → logout
+ * - 15m ≤ idle < 17m:
+ *   - visible watcher (resume: false) → warn (then persist warningShownAt)
+ *   - resume/focus/navigation without a warning this period → logout
+ *   - resume with warning this period → warn (remaining grace)
  */
 export function evaluateIdleState(
   lastActivityAt: number,
   now = Date.now(),
+  warningShownAt: number | null = null,
+  opts?: { resume?: boolean },
 ): IdleCheckDecision {
   const idleMs = Math.max(0, now - lastActivityAt);
   if (idleMs < IDLE_WARNING_MS) {
     return { action: "none", idleMs };
   }
   if (idleMs < IDLE_TOTAL_MS) {
-    return {
-      action: "warn",
-      idleMs,
-      graceRemainingMs: IDLE_TOTAL_MS - idleMs,
-    };
+    if (
+      warningAppliesThisPeriod(lastActivityAt, warningShownAt) ||
+      !opts?.resume
+    ) {
+      return {
+        action: "warn",
+        idleMs,
+        graceRemainingMs: IDLE_TOTAL_MS - idleMs,
+      };
+    }
+    return { action: "logout", idleMs };
   }
   return { action: "logout", idleMs };
 }
@@ -103,6 +128,13 @@ export function evaluateSessionExpiry(opts: {
   now?: number;
   /** When false, only the 12h hard cap is enforced. */
   checkIdle?: boolean;
+  /** Warning timestamp for this idle period; required for the 2m grace. */
+  warningShownAt?: number | null;
+  /**
+   * True for focus / visibility / navigation resume: 15m idle without a
+   * warning this period is an immediate logout.
+   */
+  resume?: boolean;
 }): SessionExpiryDecision {
   const now = opts.now ?? Date.now();
   const idleMs = Math.max(0, now - opts.lastActivityAt);
@@ -121,7 +153,12 @@ export function evaluateSessionExpiry(opts: {
     return { action: "none", idleMs, sessionAgeMs };
   }
 
-  const idle = evaluateIdleState(opts.lastActivityAt, now);
+  const idle = evaluateIdleState(
+    opts.lastActivityAt,
+    now,
+    opts.warningShownAt ?? null,
+    { resume: opts.resume },
+  );
   if (idle.action === "logout") {
     return { action: "logout", idleMs, sessionAgeMs, reason: "idle" };
   }
@@ -141,8 +178,9 @@ export function msUntilNextIdleCheck(
   lastActivityAt: number,
   now = Date.now(),
   sessionStartedAt?: number,
+  warningShownAt: number | null = null,
 ): number {
-  const idleDecision = evaluateIdleState(lastActivityAt, now);
+  const idleDecision = evaluateIdleState(lastActivityAt, now, warningShownAt);
   let idleWait = 0;
   if (idleDecision.action === "none") {
     idleWait = Math.max(0, IDLE_WARNING_MS - idleDecision.idleMs);

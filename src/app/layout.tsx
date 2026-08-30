@@ -4,6 +4,7 @@ import { Figtree, Fraunces } from "next/font/google";
 import { FeedbackHost } from "@/components/feedback/FeedbackHost";
 import { LiveAnnouncer } from "@/components/a11y/LiveAnnouncer";
 import { RouteAnnouncer } from "@/components/a11y/RouteAnnouncer";
+import { IdleAuthClockListener } from "@/components/session/IdleAuthClockListener";
 import { LocaleProvider } from "@/components/i18n/LocaleProvider";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import {
@@ -124,6 +125,7 @@ export default async function RootLayout({
         >
           <ThemeProvider>
             <LocaleProvider initialLocale={locale}>
+              <IdleAuthClockListener />
               <LiveAnnouncer />
               <RouteAnnouncer />
               {children}

@@ -7,6 +7,7 @@ import {
   writeIdleActivityCookie,
 } from "@/lib/session/idle-session-cookie";
 import {
+  evaluateIdleState,
   evaluateSessionExpiry,
   IDLE_ACTIVITY_HEARTBEAT_MS,
 } from "@/lib/session/idle-timeout";
@@ -18,6 +19,8 @@ export const IDLE_LAST_ACTIVITY_KEY = "fmv:idle-last-activity";
 export const IDLE_SESSION_STARTED_KEY = "fmv:idle-session-started";
 /** Clerk session id bound to the current idle clock (localStorage). */
 export const IDLE_AUTH_SESSION_KEY = "fmv:idle-auth-session";
+/** Wall-clock when the “Are you still there?” dialog was shown this idle period. */
+export const IDLE_WARNING_SHOWN_KEY = "fmv:idle-warning-shown";
 /**
  * Client preference mirror for paid users who disabled idle timeout.
  * Missing / anything other than "0" → treat as enabled (free default).
@@ -92,6 +95,7 @@ function syncIdleActivityCookie(at: number): void {
     at,
     startedAt,
     readIdleTimeoutEnabledPreference(),
+    readWarningShownAt(),
   );
 }
 
@@ -110,6 +114,7 @@ export function clearLastActivityAt(): void {
   } catch {
     // ignore
   }
+  clearWarningShownAt();
   clearIdleActivityCookie();
 }
 
@@ -121,6 +126,34 @@ export function readLastActivityAt(): number | null {
     return Number.isFinite(n) ? n : null;
   } catch {
     return null;
+  }
+}
+
+export function readWarningShownAt(): number | null {
+  try {
+    const raw = localStorage.getItem(IDLE_WARNING_SHOWN_KEY);
+    if (!raw) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeWarningShownAt(at = Date.now()): void {
+  try {
+    localStorage.setItem(IDLE_WARNING_SHOWN_KEY, String(at));
+  } catch {
+    // ignore
+  }
+  syncIdleActivityCookie(readLastActivityAt() ?? at);
+}
+
+export function clearWarningShownAt(): void {
+  try {
+    localStorage.removeItem(IDLE_WARNING_SHOWN_KEY);
+  } catch {
+    // ignore
   }
 }
 
@@ -177,11 +210,34 @@ export function clearIdleAuthSessionId(): void {
     // ignore
   }
   clearSessionStartedAt();
+  clearWarningShownAt();
   clearIdleActivityCookie();
+}
+
+/** Clerk sign-out: drop the idle clock so the next login does not inherit it. */
+export function clearIdleSessionState(): void {
+  clearLastActivityAt();
+  clearIdleAuthSessionId();
+}
+
+/**
+ * Brand-new Clerk session / just-logged-in: start a fresh 15-minute clock.
+ * Never evaluate yesterday's lastActivity on this event.
+ */
+export function beginFreshIdleClock(
+  sessionId: string,
+  now = Date.now(),
+): BootstrapIdleResult {
+  clearWarningShownAt();
+  writeSessionStartedAt(now);
+  writeLastActivityAt(now);
+  writeIdleAuthSessionId(sessionId);
+  return { lastActivityAt: now, sessionStartedAt: now };
 }
 
 /** Fresh activity timestamp for vault entry after ritual / legal, etc. */
 export function resetIdleActivityClock(now = Date.now()): number {
+  clearWarningShownAt();
   writeLastActivityAt(now);
   return now;
 }
@@ -214,6 +270,8 @@ export function shouldSilentExpireIdleSession(
       sessionStartedAt,
       now,
       checkIdle,
+      warningShownAt: readWarningShownAt(),
+      resume: true,
     }).action === "logout"
   );
 }
@@ -235,11 +293,12 @@ export type BootstrapIdleResult = {
 /**
  * Resolve lastActivityAt + sessionStartedAt when IdleSessionGuard / resume gate arms.
  *
- * A new Clerk session never inherits a prior idle / lifetime clock. Continuous
- * sessions keep stored timestamps so backgrounded tabs still warn / log out.
+ * A new Clerk session never inherits a prior idle clock (beginFreshIdleClock).
+ * Continuous sessions keep stored timestamps so overnight / backgrounded tabs
+ * still expire. Missing lastActivityAt (first run after deploy) starts now.
  *
- * When sessionId is not yet known, discard residual warn/logout state
- * silently so a login race cannot flash the expired dialog.
+ * When sessionId is not yet known, do not rewrite a stored stamp — that is what
+ * revived overnight tabs. Wait for Clerk, then expire or continue.
  */
 export function bootstrapIdleActivityForAuthSession(
   sessionId: string | null | undefined,
@@ -254,50 +313,36 @@ export function bootstrapSessionClocks(
 ): BootstrapIdleResult {
   if (!sessionId) {
     const stored = readLastActivityAt();
-    const started = readSessionStartedAt() ?? stored ?? now;
+    const started = readSessionStartedAt() ?? stored;
     if (stored == null) {
       writeSessionStartedAt(now);
       writeLastActivityAt(now);
       return { lastActivityAt: now, sessionStartedAt: now };
     }
-    const checkIdle = readIdleTimeoutEnabledPreference();
-    if (
-      evaluateSessionExpiry({
-        lastActivityAt: stored,
-        sessionStartedAt: started,
-        now,
-        checkIdle,
-      }).action !== "none"
-    ) {
-      writeSessionStartedAt(now);
-      writeLastActivityAt(now);
-      return { lastActivityAt: now, sessionStartedAt: now };
+    if (readSessionStartedAt() == null && started != null) {
+      writeSessionStartedAt(started);
     }
-    if (readSessionStartedAt() == null) writeSessionStartedAt(started);
-    return { lastActivityAt: stored, sessionStartedAt: started };
+    return { lastActivityAt: stored, sessionStartedAt: started ?? stored };
   }
 
   const bound = readIdleAuthSessionId();
   if (bound !== sessionId) {
-    writeSessionStartedAt(now);
-    writeLastActivityAt(now);
-    writeIdleAuthSessionId(sessionId);
-    return { lastActivityAt: now, sessionStartedAt: now };
+    return beginFreshIdleClock(sessionId, now);
   }
 
   const stored = readLastActivityAt();
   const started = readSessionStartedAt();
-  if (stored == null || started == null) {
-    const lastActivityAt = stored ?? now;
+  if (stored == null) {
     const sessionStartedAt = started ?? now;
     writeSessionStartedAt(sessionStartedAt);
-    writeLastActivityAt(lastActivityAt);
+    writeLastActivityAt(now);
     writeIdleAuthSessionId(sessionId);
-    return { lastActivityAt, sessionStartedAt };
+    return { lastActivityAt: now, sessionStartedAt };
   }
 
+  if (started == null) writeSessionStartedAt(stored);
   writeIdleAuthSessionId(sessionId);
-  return { lastActivityAt: stored, sessionStartedAt: started };
+  return { lastActivityAt: stored, sessionStartedAt: started ?? stored };
 }
 
 type IdleSyncHandler = (message: IdleSyncMessage) => void;
@@ -366,12 +411,12 @@ export function broadcastIdleSync(message: IdleSyncMessage): void {
   }
 
   if (message.type === "activity" || message.type === "stay") {
+    clearWarningShownAt();
     writeLastActivityAt(message.at);
   }
   if (message.type === "logout") {
     markInactivityLogout();
-    clearLastActivityAt();
-    clearIdleAuthSessionId();
+    clearIdleSessionState();
   }
 }
 
@@ -382,8 +427,18 @@ export function broadcastIdleSync(message: IdleSyncMessage): void {
 let lastNotifyAt = 0;
 export function notifyUserActivity(): void {
   const at = Date.now();
+  const stored = readLastActivityAt();
+  if (stored != null) {
+    const idle = evaluateIdleState(stored, at, readWarningShownAt(), {
+      resume: true,
+    });
+    if (idle.action === "logout") {
+      return;
+    }
+  }
   if (at - lastNotifyAt < IDLE_ACTIVITY_HEARTBEAT_MS) return;
   lastNotifyAt = at;
+  clearWarningShownAt();
   writeLastActivityAt(at);
   broadcastIdleSync({ type: "activity", at });
   window.dispatchEvent(

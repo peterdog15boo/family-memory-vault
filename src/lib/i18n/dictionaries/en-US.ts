@@ -252,7 +252,7 @@ export const enUS = {
     passkeyEnrollNever: "Don’t ask again on this device",
     idleTimeout: "Log me out after inactivity",
     idleTimeoutHelp:
-      "For security, we’ll ask if you’re still there after about 2 hours of inactivity. Sessions also end after 12 hours.",
+      "For security, we’ll ask if you’re still there after 15 minutes of inactivity. Sessions also end after 12 hours.",
     openAccountSettings: "Open account settings",
     privacyOverview: "Privacy overview",
     readMorePrivacy: "Read more in our {privacy}.",

@@ -24,8 +24,11 @@ import {
   subscribeUploadActivity,
 } from "@/lib/session/upload-activity";
 import {
+  beginFreshIdleClock,
   bootstrapIdleActivityForAuthSession,
+  bootstrapSessionClocks,
   clearIdleAuthSessionId,
+  clearIdleSessionState,
   clearLastActivityAt,
   consumeInactivityLogoutFlag,
   IDLE_AUTH_SESSION_KEY,
@@ -42,6 +45,7 @@ import {
   writeIdleTimeoutEnabledPreference,
   writeLastActivityAt,
   writeSessionStartedAt,
+  writeWarningShownAt,
 } from "@/lib/session/idle-session-sync";
 import {
   IDLE_ACTIVITY_COOKIE,
@@ -52,10 +56,10 @@ import {
 } from "@/lib/session/idle-session-cookie";
 
 describe("idle timeout constants", () => {
-  it("uses ~2h idle with 10m grace and 12h max lifetime", () => {
-    expect(IDLE_TOTAL_MS).toBe(2 * 60 * 60 * 1000);
-    expect(IDLE_LOGOUT_GRACE_MS).toBe(10 * 60 * 1000);
-    expect(IDLE_WARNING_MS).toBe(IDLE_TOTAL_MS - IDLE_LOGOUT_GRACE_MS);
+  it("uses 15m idle with 2m grace and 12h max lifetime", () => {
+    expect(IDLE_WARNING_MS).toBe(15 * 60 * 1000);
+    expect(IDLE_LOGOUT_GRACE_MS).toBe(2 * 60 * 1000);
+    expect(IDLE_TOTAL_MS).toBe(IDLE_WARNING_MS + IDLE_LOGOUT_GRACE_MS);
     expect(SESSION_MAX_LIFETIME_MS).toBe(12 * 60 * 60 * 1000);
     expect(IDLE_ACTIVITY_HEARTBEAT_MS).toBe(60 * 1000);
     expect(IDLE_CRITICAL_FORCE_MS).toBe(2 * 60 * 1000);
@@ -66,6 +70,17 @@ describe("idle timeout constants", () => {
     expect(evaluateIdleState(t0, t0 + IDLE_WARNING_MS - 1).action).toBe("none");
     expect(evaluateIdleState(t0, t0 + IDLE_WARNING_MS).action).toBe("warn");
     expect(evaluateIdleState(t0, t0 + IDLE_TOTAL_MS).action).toBe("logout");
+  });
+
+  it("resume after 16m without a warning is logout, not a dialog", () => {
+    const t0 = 5_000_000;
+    const at = t0 + IDLE_WARNING_MS + 60_000;
+    expect(
+      evaluateIdleState(t0, at, null, { resume: true }).action,
+    ).toBe("logout");
+    expect(
+      evaluateIdleState(t0, at, t0 + IDLE_WARNING_MS, { resume: true }).action,
+    ).toBe("warn");
   });
 
   it("evaluateSessionExpiry enforces max lifetime even with fresh activity", () => {
@@ -225,6 +240,16 @@ describe("bootstrapIdleActivityForAuthSession", () => {
     expect(readIdleAuthSessionId()).toBe("sess_new");
   });
 
+  it("Clerk sign-in beginFreshIdleClock ignores yesterday's stamp", () => {
+    const now = 10_000_000;
+    writeLastActivityAt(now - 16 * 60 * 1000);
+    writeSessionStartedAt(now - 16 * 60 * 1000);
+    writeIdleAuthSessionId("sess_old");
+    const clocks = beginFreshIdleClock("sess_login", now);
+    expect(clocks.lastActivityAt).toBe(now);
+    expect(shouldSilentExpireIdleSession("sess_login", now)).toBe(false);
+  });
+
   it("keeps stored activity for the same continuous session", () => {
     const now = 10_000_000;
     const past = now - 60_000;
@@ -236,12 +261,22 @@ describe("bootstrapIdleActivityForAuthSession", () => {
     expect(readLastActivityAt()).toBe(past);
   });
 
-  it("discards residual warn/logout state when sessionId is not yet known", () => {
+  it("does not reset a stale stamp when sessionId is not yet known", () => {
     const now = 10_000_000;
-    writeSessionStartedAt(now - IDLE_TOTAL_MS - 1_000);
-    writeLastActivityAt(now - IDLE_TOTAL_MS - 1_000);
+    const past = now - IDLE_WARNING_MS - 60_000;
+    writeSessionStartedAt(past);
+    writeLastActivityAt(past);
 
-    expect(bootstrapIdleActivityForAuthSession(null, now)).toBe(now);
+    expect(bootstrapIdleActivityForAuthSession(null, now)).toBe(past);
+    expect(readLastActivityAt()).toBe(past);
+    expect(bootstrapSessionClocks(null, now).lastActivityAt).toBe(past);
+  });
+
+  it("missing lastActivityAt on a continuous session starts now (first deploy)", () => {
+    const now = 10_000_000;
+    writeIdleAuthSessionId("sess_same");
+    writeSessionStartedAt(now - 60_000);
+    expect(bootstrapIdleActivityForAuthSession("sess_same", now)).toBe(now);
     expect(readLastActivityAt()).toBe(now);
   });
 
@@ -292,12 +327,44 @@ describe("shouldSilentExpireIdleSession", () => {
     expect(shouldSilentExpireIdleSession(null, now)).toBe(false);
   });
 
+  it("lastActivity 16 minutes ago + existing session → silent expire", () => {
+    const now = 10_000_000;
+    writeIdleAuthSessionId("sess_same");
+    writeSessionStartedAt(now - 60_000);
+    writeLastActivityAt(now - 16 * 60 * 1000);
+    expect(shouldSilentExpireIdleSession("sess_same", now)).toBe(true);
+    writeWarningShownAt(now - 60_000);
+    expect(shouldSilentExpireIdleSession("sess_same", now)).toBe(false);
+  });
+
   it("expires on max lifetime even with recent activity", () => {
     const now = 10_000_000;
     writeIdleAuthSessionId("sess_same");
     writeSessionStartedAt(now - SESSION_MAX_LIFETIME_MS - 1);
     writeLastActivityAt(now - 1_000);
     expect(shouldSilentExpireIdleSession("sess_same", now)).toBe(true);
+  });
+
+  it("clearIdleSessionState then fresh clock is not expired", () => {
+    const now = 10_000_000;
+    writeIdleAuthSessionId("sess_same");
+    writeLastActivityAt(now - 16 * 60 * 1000);
+    writeSessionStartedAt(now - 16 * 60 * 1000);
+    clearIdleSessionState();
+    expect(readLastActivityAt()).toBeNull();
+    beginFreshIdleClock("sess_same", now);
+    expect(shouldSilentExpireIdleSession("sess_same", now)).toBe(false);
+    expect(readLastActivityAt()).toBe(now);
+  });
+
+  it("two tabs share one lastActivityAt clock", () => {
+    const now = 10_000_000;
+    writeIdleAuthSessionId("sess_same");
+    writeSessionStartedAt(now - 16 * 60 * 1000);
+    writeLastActivityAt(now - 16 * 60 * 1000);
+    expect(shouldSilentExpireIdleSession("sess_same", now)).toBe(true);
+    writeLastActivityAt(now);
+    expect(shouldSilentExpireIdleSession("sess_same", now)).toBe(false);
   });
 
   it("respects paid idle-timeout disabled preference for idle only", () => {
@@ -330,6 +397,7 @@ describe("idle activity cookie", () => {
       at: now - IDLE_TOTAL_MS - 5,
       startedAt: started,
       idleEnabled: true,
+      warningShownAt: null,
     });
     expect(isIdleActivityExpiredForSession(parsed, "sess_a", now)).toBe(true);
     expect(isIdleActivityExpiredForSession(parsed, "sess_b", now)).toBe(false);
@@ -348,6 +416,20 @@ describe("idle activity cookie", () => {
     ).toBe(true);
   });
 
+  it("expires at 16 minutes idle when no warning was shown", () => {
+    const now = 10_000_000;
+    const raw = serializeIdleActivityCookie(
+      "sess_a",
+      now - 16 * 60 * 1000,
+      now - 16 * 60 * 1000,
+      true,
+      null,
+    );
+    expect(
+      isIdleActivityExpiredForSession(parseIdleActivityCookie(raw), "sess_a", now),
+    ).toBe(true);
+  });
+
   it("reads from Cookie header", () => {
     const raw = serializeIdleActivityCookie("sess_a", 123, 100, true);
     const header = `other=1; ${IDLE_ACTIVITY_COOKIE}=${encodeURIComponent(raw)}; x=y`;
@@ -356,6 +438,7 @@ describe("idle activity cookie", () => {
       at: 123,
       startedAt: 100,
       idleEnabled: true,
+      warningShownAt: null,
     });
   });
 });

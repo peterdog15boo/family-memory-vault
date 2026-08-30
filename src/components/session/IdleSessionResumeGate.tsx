@@ -17,8 +17,9 @@ import {
 
 /**
  * Runs before authenticated shells paint. If the continuous Clerk session is
- * already past idle (~2h) or max lifetime (12h), silent sign-out → sign-in
- * (no vault, no idle warning dialog). Fresh logins reset clocks and continue.
+ * already past idle (15m, or 17m if the warning was shown) or max lifetime (12h),
+ * silent sign-out → sign-in (no vault, no idle warning dialog).
+ * Fresh logins reset clocks via IdleAuthClockListener and continue.
  */
 export function IdleSessionResumeGate({
   children,
@@ -42,6 +43,10 @@ export function IdleSessionResumeGate({
       return;
     }
 
+    // Wait for Clerk session id. Do not treat “id not ready” as a fresh login
+    // (that reset lastActivityAt and kept overnight tabs alive).
+    if (!sessionId) return;
+
     if (shouldSilentExpireIdleSession(sessionId, Date.now(), { checkIdle: enabled })) {
       if (signingOutRef.current) return;
       signingOutRef.current = true;
@@ -51,9 +56,7 @@ export function IdleSessionResumeGate({
       return;
     }
 
-    if (sessionId) {
-      bootstrapIdleActivityForAuthSession(sessionId);
-    }
+    bootstrapIdleActivityForAuthSession(sessionId);
     setReady(true);
   }, [enabled, isLoaded, isSignedIn, sessionId, signOut]);
 

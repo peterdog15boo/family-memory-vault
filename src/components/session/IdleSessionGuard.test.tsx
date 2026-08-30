@@ -20,6 +20,7 @@ import {
   IDLE_AUTH_SESSION_KEY,
   IDLE_LAST_ACTIVITY_KEY,
   IDLE_SESSION_STARTED_KEY,
+  IDLE_WARNING_SHOWN_KEY,
 } from "@/lib/session/idle-session-sync";
 
 const signOut = vi.fn(async () => undefined);
@@ -83,7 +84,7 @@ async function advance(ms: number) {
 }
 
 describe("evaluateIdleState", () => {
-  it("splits none / warn / logout on 2h idle boundaries", () => {
+  it("splits none / warn / logout on 15m idle boundaries", () => {
     const t0 = 1_000_000;
     expect(evaluateIdleState(t0, t0 + IDLE_WARNING_MS - 1).action).toBe("none");
     expect(evaluateIdleState(t0, t0 + IDLE_WARNING_MS).action).toBe("warn");
@@ -93,6 +94,15 @@ describe("evaluateIdleState", () => {
       graceRemainingMs: IDLE_LOGOUT_GRACE_MS - 30_000,
     });
     expect(evaluateIdleState(t0, t0 + IDLE_TOTAL_MS).action).toBe("logout");
+  });
+
+  it("resume at 16m without warning is logout; watcher still warns at 15m", () => {
+    const t0 = 1_000_000;
+    const at16 = t0 + 16 * 60 * 1000;
+    expect(evaluateIdleState(t0, at16).action).toBe("warn");
+    expect(evaluateIdleState(t0, at16, null, { resume: true }).action).toBe(
+      "logout",
+    );
   });
 });
 
@@ -119,7 +129,7 @@ describe("IdleSessionGuard checklist", () => {
     localStorage.clear();
   });
 
-  it("1–2: free user sees warning near 2h idle and signs out after grace", async () => {
+  it("1–2: free user sees warning at 15m idle and signs out after 2m grace", async () => {
     renderGuard(freePolicy);
     await flushMicrotasks();
 
@@ -259,6 +269,10 @@ describe("IdleSessionGuard checklist", () => {
       IDLE_LAST_ACTIVITY_KEY,
       String(now - IDLE_WARNING_MS - 60_000),
     );
+    localStorage.setItem(
+      IDLE_WARNING_SHOWN_KEY,
+      String(now - 60_000),
+    );
 
     renderGuard(freePolicy);
     await flushMicrotasks();
@@ -266,9 +280,50 @@ describe("IdleSessionGuard checklist", () => {
     expect(screen.getByRole("alertdialog")).toBeTruthy();
     expect(signOut).not.toHaveBeenCalled();
 
-    // Residual grace ≈ 9 minutes; advancing past it logs out.
     await advance(IDLE_LOGOUT_GRACE_MS);
     expect(signOut).toHaveBeenCalled();
+  });
+
+  it("resume after 16m idle without warning signs out with no dialog", async () => {
+    const now = Date.now();
+    localStorage.setItem(IDLE_AUTH_SESSION_KEY, SESSION_ID);
+    localStorage.setItem(IDLE_SESSION_STARTED_KEY, String(now - 60_000));
+    localStorage.setItem(
+      IDLE_LAST_ACTIVITY_KEY,
+      String(now - 16 * 60 * 1000),
+    );
+
+    renderGuard(freePolicy);
+    await flushMicrotasks();
+
+    expect(signOut).toHaveBeenCalledWith({
+      redirectUrl: "/sign-in?reason=inactivity",
+    });
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("two tabs: activity in one resets the shared clock; both stay in", async () => {
+    renderGuard(freePolicy);
+    await flushMicrotasks();
+
+    await advance(5 * 60 * 1000);
+
+    const peerAt = Date.now();
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent("storage", {
+          key: IDLE_LAST_ACTIVITY_KEY,
+          newValue: String(peerAt),
+        }),
+      );
+    });
+
+    await advance(11 * 60 * 1000);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(signOut).not.toHaveBeenCalled();
+
+    await advance(4 * 60 * 1000);
+    expect(screen.getByRole("alertdialog")).toBeTruthy();
   });
 
   it("visibilitychange resume recomputes idle (does not reset activity)", async () => {
