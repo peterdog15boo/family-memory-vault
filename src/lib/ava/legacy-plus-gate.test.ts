@@ -100,7 +100,7 @@ describe("Legacy+ Ava gate helpers", () => {
     });
     const progress = progressWith([will, complete], "will_planner");
 
-    expect(pickDisplayedAvaStep(progress).id).toBe("will_planner");
+    expect(pickDisplayedAvaStep(progress)?.id).toBe("will_planner");
 
     persistDismissedLegacyPlusGate("will_planner");
     expect(pickDisplayedAvaStep(progress)?.id).toBe("complete");

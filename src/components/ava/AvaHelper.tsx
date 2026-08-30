@@ -624,6 +624,7 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
 
   function switchToLegacyPlus(step: AvaStep) {
     if (!isAvaLegacyPlusGateStep(step.id)) return;
+    const gateId = step.id;
     setError(null);
     setGateSwitchError(null);
     setPending(true);
@@ -640,9 +641,9 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
         if (!res.ok) {
           throw new Error(data.error || t("ava.couldNotUpdate"));
         }
-        markLegacyPlusGateDismissed(step.id);
+        markLegacyPlusGateDismissed(gateId);
         setOpen(false);
-        router.push(featureHrefForLegacyPlusGate(step.id));
+        router.push(featureHrefForLegacyPlusGate(gateId));
         router.refresh();
       } catch (err) {
         setGateSwitchError(
