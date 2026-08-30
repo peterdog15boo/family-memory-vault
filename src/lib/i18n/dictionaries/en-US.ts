@@ -1470,6 +1470,9 @@ export const enUS = {
     locationMapSettingsCta: "Open location settings",
     locationMapNoCoords:
       "Some family members shared a place name only. Their city or region appears in the list below.",
+    locationMapUnavailable:
+      "Map unavailable in this environment",
+    locationMapUnavailableHint: "Family list still works below",
     locationMapRefreshing: "Updating map…",
     locationListAria: "Family locations list",
     locationListTitle: "Family locations",

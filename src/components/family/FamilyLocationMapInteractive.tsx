@@ -1,7 +1,7 @@
 "use client";
 
 import "leaflet/dist/leaflet.css";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Map as LeafletMap, Marker as LeafletMarker } from "leaflet";
 import { getFamilyMapTiles } from "@/lib/maps/tiles";
 import {
@@ -11,6 +11,7 @@ import {
   locationsWithCoordinates,
 } from "@/lib/maps/family-map";
 import type { FamilyMemberLocation } from "@/lib/location/types";
+import { cn } from "@/lib/utils";
 
 export type FamilyLocationMapInteractiveProps = {
   locations: FamilyMemberLocation[];
@@ -20,6 +21,8 @@ export type FamilyLocationMapInteractiveProps = {
     preciseBadge: string;
     you: string;
     mapAriaLabel: string;
+    mapUnavailableTitle: string;
+    mapUnavailableHint: string;
     distanceFor: (loc: FamilyMemberLocation) => string | null;
   };
   focusUserId?: string | null;
@@ -38,6 +41,7 @@ export function FamilyLocationMapInteractive({
   const mapRef = useRef<LeafletMap | null>(null);
   const markersRef = useRef<Map<string, LeafletMarker>>(new Map());
   const onMarkerOpenRef = useRef(onMarkerOpen);
+  const [tilesUnavailable, setTilesUnavailable] = useState(false);
   onMarkerOpenRef.current = onMarkerOpen;
 
   useEffect(() => {
@@ -47,77 +51,89 @@ export function FamilyLocationMapInteractive({
     async function init() {
       if (!containerRef.current || disposed) return;
 
-      const L = await import("leaflet");
+      try {
+        const L = await import("leaflet");
 
-      if (!containerRef.current || disposed) return;
+        if (!containerRef.current || disposed) return;
 
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-        markersRef.current.clear();
-      }
+        if (mapRef.current) {
+          mapRef.current.remove();
+          mapRef.current = null;
+          markersRef.current.clear();
+        }
 
-      const mappable = locationsWithCoordinates(locations);
-      const bounds = computeMapBounds(locations);
-      const defaultCenter: [number, number] = bounds
-        ? [
-            (bounds[0][0] + bounds[1][0]) / 2,
-            (bounds[0][1] + bounds[1][1]) / 2,
-          ]
-        : [39.8283, -98.5795];
+        const mappable = locationsWithCoordinates(locations);
+        const bounds = computeMapBounds(locations);
+        const defaultCenter: [number, number] = bounds
+          ? [
+              (bounds[0][0] + bounds[1][0]) / 2,
+              (bounds[0][1] + bounds[1][1]) / 2,
+            ]
+          : [39.8283, -98.5795];
 
-      map = L.map(containerRef.current, {
-        center: defaultCenter,
-        zoom: bounds ? 4 : 3,
-        scrollWheelZoom: true,
-        zoomControl: true,
-        attributionControl: true,
-      });
-
-      const tiles = getFamilyMapTiles();
-      L.tileLayer(tiles.url, tiles.options).addTo(map);
-
-      for (const loc of mappable) {
-        const name = getMapMemberName(loc, labels.unknownMember);
-        const levelLabel =
-          loc.level === "city" ? labels.cityBadge : labels.preciseBadge;
-        const isCity = loc.level === "city";
-
-        const icon = L.divIcon({
-          className: "family-map-marker-wrap",
-          html: `<span class="family-map-marker ${isCity ? "family-map-marker--city" : "family-map-marker--precise"}${loc.isSelf ? " family-map-marker--self" : ""}" aria-hidden="true"></span>`,
-          iconSize: [28, 28],
-          iconAnchor: [14, 28],
-          popupAnchor: [0, -30],
+        map = L.map(containerRef.current, {
+          center: defaultCenter,
+          zoom: bounds ? 4 : 3,
+          scrollWheelZoom: true,
+          zoomControl: true,
+          attributionControl: true,
         });
 
-        const marker = L.marker([loc.latitude!, loc.longitude!], { icon });
-        marker.bindPopup(
-          buildFamilyMapPopupHtml({
-            loc,
-            name,
-            levelLabel,
-            youSuffix: labels.you,
-            distanceDisplay: labels.distanceFor(loc),
-          }),
-          {
-            className: "family-map-popup-shell",
-            minWidth: 220,
-            maxWidth: 280,
-          },
-        );
-        marker.on("popupopen", () => onMarkerOpenRef.current?.(loc.userId));
-        marker.addTo(map);
-        markersRef.current.set(loc.userId, marker);
-      }
+        const tiles = getFamilyMapTiles();
+        const layer = L.tileLayer(tiles.url, tiles.options);
+        layer.on("tileerror", () => {
+          if (!disposed) {
+            setTilesUnavailable(true);
+          }
+        });
+        layer.addTo(map);
 
-      if (bounds && mappable.length > 1) {
-        map.fitBounds(bounds, { padding: [32, 32], maxZoom: 12 });
-      } else if (mappable.length === 1) {
-        map.setView([mappable[0]!.latitude!, mappable[0]!.longitude!], 10);
-      }
+        for (const loc of mappable) {
+          const name = getMapMemberName(loc, labels.unknownMember);
+          const levelLabel =
+            loc.level === "city" ? labels.cityBadge : labels.preciseBadge;
+          const isCity = loc.level === "city";
 
-      mapRef.current = map;
+          const icon = L.divIcon({
+            className: "family-map-marker-wrap",
+            html: `<span class="family-map-marker ${isCity ? "family-map-marker--city" : "family-map-marker--precise"}${loc.isSelf ? " family-map-marker--self" : ""}" aria-hidden="true"></span>`,
+            iconSize: [28, 28],
+            iconAnchor: [14, 28],
+            popupAnchor: [0, -30],
+          });
+
+          const marker = L.marker([loc.latitude!, loc.longitude!], { icon });
+          marker.bindPopup(
+            buildFamilyMapPopupHtml({
+              loc,
+              name,
+              levelLabel,
+              youSuffix: labels.you,
+              distanceDisplay: labels.distanceFor(loc),
+            }),
+            {
+              className: "family-map-popup-shell",
+              minWidth: 220,
+              maxWidth: 280,
+            },
+          );
+          marker.on("popupopen", () => onMarkerOpenRef.current?.(loc.userId));
+          marker.addTo(map);
+          markersRef.current.set(loc.userId, marker);
+        }
+
+        if (bounds && mappable.length > 1) {
+          map.fitBounds(bounds, { padding: [32, 32], maxZoom: 12 });
+        } else if (mappable.length === 1) {
+          map.setView([mappable[0]!.latitude!, mappable[0]!.longitude!], 10);
+        }
+
+        mapRef.current = map;
+      } catch {
+        if (!disposed) {
+          setTilesUnavailable(true);
+        }
+      }
     }
 
     void init();
@@ -135,7 +151,7 @@ export function FamilyLocationMapInteractive({
   }, [locations, labels]);
 
   useEffect(() => {
-    if (!focusUserId || !mapRef.current) return;
+    if (!focusUserId || !mapRef.current || tilesUnavailable) return;
     const marker = markersRef.current.get(focusUserId);
     if (!marker) return;
     const latLng = marker.getLatLng();
@@ -143,7 +159,24 @@ export function FamilyLocationMapInteractive({
       animate: true,
     });
     marker.openPopup();
-  }, [focusUserId]);
+  }, [focusUserId, tilesUnavailable]);
+
+  if (tilesUnavailable) {
+    return (
+      <div
+        className={cn(
+          "flex h-full min-h-[16rem] flex-col items-center justify-center px-5 py-8 text-center",
+          className,
+        )}
+        role="status"
+      >
+        <p className="text-sm font-medium text-ink">{labels.mapUnavailableTitle}</p>
+        <p className="mt-1 max-w-md text-sm text-ink-muted">
+          {labels.mapUnavailableHint}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div

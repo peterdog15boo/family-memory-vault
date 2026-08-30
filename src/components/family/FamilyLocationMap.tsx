@@ -14,6 +14,7 @@ import type {
   FamilyLocationsPayload,
 } from "@/lib/location/types";
 import { locationsWithCoordinates } from "@/lib/maps/family-map";
+import { isFamilyMapConfigured } from "@/lib/maps/tiles";
 import { cn } from "@/lib/utils";
 
 const FamilyLocationMapInteractive = dynamic(
@@ -45,6 +46,29 @@ function normalizeLocations(
   if (Array.isArray(value)) return value;
   if (value && Array.isArray(value.locations)) return value.locations;
   return [];
+}
+
+function FamilyMapUnavailablePanel({
+  title,
+  hint,
+  className,
+}: {
+  title: string;
+  hint: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex h-[min(52vh,22rem)] min-h-[16rem] flex-col items-center justify-center rounded-[var(--radius-xl)] border border-[color:var(--border-subtle)] bg-[color:var(--canvas-deep)]/35 px-5 py-8 text-center",
+        className,
+      )}
+    >
+      <MapPin className="size-8 text-ink-muted" aria-hidden />
+      <p className="mt-3 text-sm font-medium text-ink">{title}</p>
+      <p className="mt-1 max-w-md text-sm text-ink-muted">{hint}</p>
+    </div>
+  );
 }
 
 export function FamilyLocationMap({
@@ -132,6 +156,8 @@ export function FamilyLocationMap({
       preciseBadge: t("family.locationLevelPreciseBadge"),
       you: t("family.locationYou"),
       mapAriaLabel: t("family.locationMapAria"),
+      mapUnavailableTitle: t("family.locationMapUnavailable"),
+      mapUnavailableHint: t("family.locationMapUnavailableHint"),
       distanceFor,
     }),
     [t, distanceFor],
@@ -141,6 +167,7 @@ export function FamilyLocationMap({
     () => locationsWithCoordinates(locations),
     [locations],
   );
+  const mapConfigured = isFamilyMapConfigured();
 
   if (error && locations.length === 0) {
     return (
@@ -220,15 +247,22 @@ export function FamilyLocationMap({
       ) : null}
 
       {mappable.length > 0 ? (
-        <div className="family-map-shell overflow-hidden rounded-[var(--radius-xl)] border border-[color:var(--border-subtle)] shadow-sm">
-          <FamilyLocationMapInteractive
-            locations={locations}
-            labels={mapLabels}
-            focusUserId={focusUserId}
-            onMarkerOpen={setFocusUserId}
-            className="family-map-canvas h-[min(52vh,22rem)] min-h-[16rem] w-full touch-pan-y"
+        mapConfigured ? (
+          <div className="family-map-shell overflow-hidden rounded-[var(--radius-xl)] border border-[color:var(--border-subtle)] shadow-sm">
+            <FamilyLocationMapInteractive
+              locations={locations}
+              labels={mapLabels}
+              focusUserId={focusUserId}
+              onMarkerOpen={setFocusUserId}
+              className="family-map-canvas h-[min(52vh,22rem)] min-h-[16rem] w-full touch-pan-y"
+            />
+          </div>
+        ) : (
+          <FamilyMapUnavailablePanel
+            title={t("family.locationMapUnavailable")}
+            hint={t("family.locationMapUnavailableHint")}
           />
-        </div>
+        )
       ) : (
         <p className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-canvas/60 px-4 py-3 text-sm text-ink-muted">
           {t("family.locationMapNoCoords")}
@@ -240,7 +274,7 @@ export function FamilyLocationMap({
         viewerUserId={viewerUserId}
         viewerDistanceEnabled={viewerDistanceEnabled}
         focusUserId={focusUserId}
-        onSelect={mappable.length > 0 ? setFocusUserId : undefined}
+        onSelect={mapConfigured && mappable.length > 0 ? setFocusUserId : undefined}
       />
 
       <FamilyMapPrivacyNotice variant="family" />
