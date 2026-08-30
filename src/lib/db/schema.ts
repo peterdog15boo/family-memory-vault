@@ -811,6 +811,8 @@ export const people = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    /** Prior display names kept so Ask AI still finds this person after a rename. */
+    nameAliases: jsonb("name_aliases").$type<string[]>().default([]).notNull(),
     /** Representative face for avatars — FK is circular with faces, resolved lazily. */
     coverFaceId: text("cover_face_id").references((): AnyPgColumn => faces.id, {
       onDelete: "set null",

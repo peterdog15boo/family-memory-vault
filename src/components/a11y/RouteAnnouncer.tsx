@@ -38,6 +38,7 @@ function pathLabel(pathname: string, t: TranslateFn): string {
   const map: Record<string, string> = {
     "/": t("a11y.pages.home"),
     "/dashboard": t("a11y.pages.dashboard"),
+    "/media": t("a11y.pages.photos"),
     "/photos": t("a11y.pages.photos"),
     "/upload": t("a11y.pages.upload"),
     "/memories": t("a11y.pages.memories"),

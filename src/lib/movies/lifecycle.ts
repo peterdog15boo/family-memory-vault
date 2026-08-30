@@ -344,7 +344,7 @@ export async function createMovieJob(
     const caps = await getPlanCapabilities(input.userId);
     if (!caps.priorityRender) {
       throw new MovieError(
-        "Ultra 4K exports require Family Plus or higher. Choose 1080p, or upgrade your plan.",
+        "Ultra 4K exports require Family or Legacy+. Choose 1080p, or upgrade your plan.",
         { retryable: false, code: "plan_limit" },
       );
     }

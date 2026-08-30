@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Loader2, ScanFace, Trash2, Upload } from "lucide-react";
 import { FacePrivacyNote } from "@/components/people/FacePrivacyNote";
 import { PersonAvatar } from "@/components/people/PersonAvatar";
@@ -29,6 +29,10 @@ export function PeopleList({ people: initialPeople, className }: PeopleListProps
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    setPeople(initialPeople);
+  }, [initialPeople]);
 
   function deletePerson(personId: string) {
     setError(null);

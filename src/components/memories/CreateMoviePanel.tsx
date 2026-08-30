@@ -519,7 +519,7 @@ export function CreateMoviePanel({
     }
     if (!isSimple && qualityMode === "ultra" && !canUltra) {
       setUpgradeMessage(
-        "Ultra 4K exports require Family Plus or higher.",
+        "Ultra 4K exports require Family or Legacy+.",
       );
       return;
     }
@@ -1257,7 +1257,7 @@ export function CreateMoviePanel({
                         onClick={() => {
                           if (locked) {
                             setUpgradeMessage(
-                              "Ultra 4K exports require Family Plus or higher.",
+                              "Ultra 4K exports require Family or Legacy+.",
                             );
                             return;
                           }

@@ -17,7 +17,7 @@ export const COPY = {
       "We’ll keep them private and look them over before they show up for your family.",
     chooseFiles: "Choose files",
     safetyNote:
-      "Every upload stays private while it is scanned. Ready photos appear in Photos automatically.",
+      "Every upload stays private while it is scanned. Ready photos appear in your library automatically.",
     status: {
       queued: "Waiting to start…",
       requesting_url: "Getting ready…",

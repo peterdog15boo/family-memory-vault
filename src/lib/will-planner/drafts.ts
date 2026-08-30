@@ -27,6 +27,7 @@ import type {
 } from "@/lib/will-planner/types";
 import { WillGenerateValidationError } from "@/lib/will-planner/validate";
 import { upsertWillPlannerDocument } from "@/lib/will-planner/document-export";
+import { isR2Configured } from "@/lib/upload/constants";
 
 export type {
   SerializedWillDraft,
@@ -361,8 +362,10 @@ export async function generateAndSaveWillDraft(input: {
       return linked ?? row;
     }
   } catch (error) {
-    // Draft markdown is saved even if Private Documents / R2 upsert fails.
     console.error("[will-planner] document upsert failed", error);
+    if (isR2Configured()) {
+      throw error;
+    }
   }
 
   return row;

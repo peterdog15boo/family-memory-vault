@@ -350,6 +350,8 @@ describe("Will Planner persistence", () => {
     );
     expect(src).toContain("upsertWillPlannerDocument");
     expect(src).toContain("plannerDocumentId");
+    expect(src).toContain("isR2Configured");
+    expect(src).toMatch(/if \(isR2Configured\(\)\) \{\s*throw error;/);
   });
 
   it("generate upserts Wills/Estate private document PDF", () => {

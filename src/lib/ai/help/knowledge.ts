@@ -411,7 +411,7 @@ export const HELP_KNOWLEDGE: readonly HelpKnowledgeEntry[] = [
       "plan",
       "pricing",
       "subscription",
-      "family plus",
+      "legacy+",
       "free plan",
     ],
     summary:

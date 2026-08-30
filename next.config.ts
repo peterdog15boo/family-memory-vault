@@ -36,6 +36,14 @@ const nextConfig: NextConfig = {
   },
   // Do not advertise the Next.js stack in responses.
   poweredByHeader: false,
+  async redirects() {
+    return [
+      { source: "/photos", destination: "/media", permanent: false },
+      { source: "/photos/:path*", destination: "/media", permanent: false },
+      { source: "/gallery", destination: "/media", permanent: false },
+      { source: "/library", destination: "/media", permanent: false },
+    ];
+  },
   async headers() {
     return [
       {

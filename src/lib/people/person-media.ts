@@ -132,6 +132,60 @@ export async function listVisibleMediaLinkedToPerson(
 }
 
 /**
+ * Batch photo/face counts for People list — same visibility rule as
+ * listVisibleMediaLinkedToPerson (clean/ready, owned or family-shared).
+ */
+export async function countVisibleMediaLinkedToPeople(
+  viewerId: string,
+  peopleRows: Array<{ id: string; userId: string }>,
+): Promise<Map<string, { photoCount: number; faceCount: number }>> {
+  const counts = new Map<string, { photoCount: number; faceCount: number }>();
+  for (const person of peopleRows) {
+    counts.set(person.id, { photoCount: 0, faceCount: 0 });
+  }
+  if (peopleRows.length === 0) return counts;
+
+  const ownerByPerson = new Map(peopleRows.map((p) => [p.id, p.userId]));
+  const personIds = peopleRows.map((p) => p.id);
+  const ownerIds = [...new Set(peopleRows.map((p) => p.userId))];
+
+  const db = getDb();
+  const faceRows = await db
+    .select()
+    .from(faces)
+    .where(
+      and(inArray(faces.personId, personIds), inArray(faces.userId, ownerIds)),
+    );
+
+  const ownedFaces = faceRows.filter(
+    (face) => face.personId && ownerByPerson.get(face.personId) === face.userId,
+  );
+  const mediaIds = [...new Set(ownedFaces.map((face) => face.mediaId))];
+  const mediaRows = await loadCleanAccessibleMediaByIds(viewerId, mediaIds);
+  const accessible = new Set(mediaRows.map((row) => row.id));
+
+  const buckets = new Map<string, { media: Set<string>; faces: number }>();
+  for (const face of ownedFaces) {
+    if (!face.personId || !accessible.has(face.mediaId)) continue;
+    let bucket = buckets.get(face.personId);
+    if (!bucket) {
+      bucket = { media: new Set(), faces: 0 };
+      buckets.set(face.personId, bucket);
+    }
+    bucket.media.add(face.mediaId);
+    bucket.faces += 1;
+  }
+
+  for (const [personId, bucket] of buckets) {
+    counts.set(personId, {
+      photoCount: bucket.media.size,
+      faceCount: bucket.faces,
+    });
+  }
+  return counts;
+}
+
+/**
  * Resolve visible linked media for one or more people (Ask AI + shared callers).
  * `any` = union; `all` = media that includes every listed person.
  */

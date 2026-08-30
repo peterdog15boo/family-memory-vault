@@ -19,7 +19,7 @@ export const FIRST_FAMILY_MOVIE_WAIT_SLIDES: readonly FirstFamilyMovieWaitSlide[
       id: "ask-ai",
       eyebrow: "Ask AI",
       title: "“Show me photos of Mom at the beach”",
-      body: "Ask in plain language. Ava finds faces, places, and moments across your vault.",
+      body: "Ask in plain language. Ask AI finds faces, places, and moments across your vault.",
       imageSrc: "/app-heroes/assistant.jpg",
       imageAlt: "Ask AI assistant",
       accent: "#5b8a7a",

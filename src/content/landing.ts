@@ -229,9 +229,9 @@ export const landingContent = {
         highlighted: true,
       },
       {
-        name: "Family Plus",
-        price: "From $19.99",
-        note: "More room to grow",
+        name: "Legacy+",
+        price: "From $29.99",
+        note: "Documents, Digital Legacy, and more",
       },
     ] satisfies LandingPricingTeaserPlan[],
     cta: {

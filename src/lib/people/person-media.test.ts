@@ -3,6 +3,8 @@
  * DB-backed paths are covered via shared-access contract tests + integration.
  */
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /** Same rule as listVisibleMediaLinkedToPerson / People list joins. */
@@ -78,5 +80,18 @@ describe("canonical person-media visibility", () => {
     const askAiMediaIds = [...linkedVisibleIds];
     expect(peopleListPhotoCount).toBe(personDetailPhotoCount);
     expect(askAiMediaIds).toEqual(linkedVisibleIds);
+  });
+
+  it("People list counts come from the same visibility helper as detail", () => {
+    const list = readFileSync(
+      join(process.cwd(), "src/lib/people/index.ts"),
+      "utf8",
+    );
+    const detail = readFileSync(
+      join(process.cwd(), "src/lib/people/queries.ts"),
+      "utf8",
+    );
+    expect(list).toContain("countVisibleMediaLinkedToPeople");
+    expect(detail).toContain("listVisibleMediaLinkedToPerson");
   });
 });

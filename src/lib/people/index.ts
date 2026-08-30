@@ -6,18 +6,20 @@
  * Person records are always scoped to userId.
  */
 
-import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne, or } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import { getDb } from "@/lib/db";
 import {
   faces,
+  familyTreeNodes,
   media,
   people,
   type Face,
   type Person,
 } from "@/lib/db/schema";
 import { isSafeToServe } from "@/lib/moderation/types";
+import { mergePersonNameAlias } from "@/lib/people/name-aliases";
 import type { FaceBoundingBox, FaceEmbedding } from "@/lib/people/types";
 
 export type { Face, Person, FaceBoundingBox, FaceEmbedding };
@@ -136,6 +138,7 @@ export async function createPerson(
       id,
       userId: input.userId,
       name,
+      nameAliases: [],
       coverFaceId,
       createdAt: now,
       updatedAt: now,
@@ -168,16 +171,45 @@ export async function renamePerson(
     throw new PeopleError("Person name is too long.");
   }
 
+  const existing = await getPersonForUser(personId, userId);
+  if (!existing) {
+    throw new PeopleError("Person not found.");
+  }
+
+  const nameAliases = mergePersonNameAlias({
+    currentName: existing.name,
+    nextName: trimmed,
+    aliases: existing.nameAliases,
+  });
+  const now = new Date();
   const db = getDb();
   const [updated] = await db
     .update(people)
-    .set({ name: trimmed, updatedAt: new Date() })
+    .set({ name: trimmed, nameAliases, updatedAt: now })
     .where(and(eq(people.id, personId), eq(people.userId, userId)))
     .returning();
 
   if (!updated) {
     throw new PeopleError("Person not found.");
   }
+
+  const oldDisplay = displayPersonName(existing.name);
+  const nextDisplay = displayPersonName(trimmed);
+  if (oldDisplay !== nextDisplay && oldDisplay !== "Unnamed Person") {
+    await db
+      .update(familyTreeNodes)
+      .set({ label: nextDisplay, updatedAt: now })
+      .where(
+        and(
+          eq(familyTreeNodes.personId, personId),
+          or(
+            eq(familyTreeNodes.label, existing.name),
+            eq(familyTreeNodes.label, oldDisplay),
+          ),
+        ),
+      );
+  }
+
   return updated;
 }
 
@@ -366,46 +398,32 @@ export async function setPersonAvatarFraming(
  * List people for a user (newest first) with face/photo counts.
  *
  * Counts use the same rule as Person detail + Ask AI person search:
- * faces for this person (viewer-scoped) whose media is clean/ready and
+ * faces for this person (owner-scoped) whose media is clean/ready and
  * visible to the user (owned or family-shared). See person-media.ts.
  */
 export async function listPeopleForUser(
   userId: string,
 ): Promise<PersonWithFaceCount[]> {
   const db = getDb();
-  const { getAccessibleOwnerIds } = await import("@/lib/permissions");
-  const accessibleOwnerIds = await getAccessibleOwnerIds(userId);
-
   const rows = await db
-    .select({
-      person: people,
-      // Faces whose media joined (clean + accessible). Null media = excluded.
-      faceCount: sql<number>`cast(count(${media.id}) as int)`,
-      photoCount: sql<number>`cast(count(distinct ${media.id}) as int)`,
-    })
+    .select()
     .from(people)
-    .leftJoin(
-      faces,
-      and(eq(faces.personId, people.id), eq(faces.userId, people.userId)),
-    )
-    .leftJoin(
-      media,
-      and(
-        eq(media.id, faces.mediaId),
-        eq(media.moderationStatus, "clean"),
-        eq(media.status, "ready"),
-        inArray(media.userId, accessibleOwnerIds),
-      ),
-    )
     .where(eq(people.userId, userId))
-    .groupBy(people.id)
     .orderBy(desc(people.updatedAt));
 
-  return rows.map((row) => ({
-    ...row.person,
-    faceCount: Number(row.faceCount) || 0,
-    photoCount: Number(row.photoCount) || 0,
-  }));
+  const { countVisibleMediaLinkedToPeople } = await import(
+    "@/lib/people/person-media"
+  );
+  const counts = await countVisibleMediaLinkedToPeople(userId, rows);
+
+  return rows.map((person) => {
+    const counted = counts.get(person.id);
+    return {
+      ...person,
+      faceCount: counted?.faceCount ?? 0,
+      photoCount: counted?.photoCount ?? 0,
+    };
+  });
 }
 
 /**

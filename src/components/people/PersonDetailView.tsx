@@ -194,6 +194,7 @@ export function PersonDetailView({
         await patchPerson({ name: trimmed });
         setEditing(false);
         setNotice(t("people.nameSaved"));
+        router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : t("people.errorRename"));
       }
@@ -640,7 +641,7 @@ export function PersonDetailView({
           <div className="flex flex-wrap items-center gap-2">
             {person.photos.length > 0 ? (
               <p className="text-xs text-ink-muted">
-                {mediaLabel(t, person.photos.length)}
+                {mediaLabel(t, person.photoCount)}
                 {dateRange ? ` · ${dateRange}` : ""}
               </p>
             ) : null}

@@ -70,6 +70,34 @@ function allowsIdentityIdleReprompt(pathname: string): boolean {
 
 /** Soft re-prompt after this much idle time on main pages (ms). */
 const IDENTITY_IDLE_MS = 45_000;
+const AVA_AUTO_OPEN_STORAGE_KEY = "fmv.ava.autoOpenReasons";
+
+function readPersistedAutoOpenReasons(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.sessionStorage.getItem(AVA_AUTO_OPEN_STORAGE_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((value): value is string => typeof value === "string"));
+  } catch {
+    return new Set();
+  }
+}
+
+function persistAutoOpenReason(reason: string) {
+  if (typeof window === "undefined") return;
+  const next = readPersistedAutoOpenReasons();
+  next.add(reason);
+  try {
+    window.sessionStorage.setItem(
+      AVA_AUTO_OPEN_STORAGE_KEY,
+      JSON.stringify([...next]),
+    );
+  } catch {
+    // Ignore quota / private-mode failures — in-memory set still applies.
+  }
+}
 
 async function postAva(body: Record<string, unknown>) {
   const res = await fetch("/api/ava", {
@@ -328,6 +356,9 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
 
   useEffect(() => {
     setMounted(true);
+    for (const reason of readPersistedAutoOpenReasons()) {
+      shownAutoOpenRef.current.add(reason as AvaAutoOpenReason);
+    }
   }, []);
 
   const tryAutoOpen = useCallback(
@@ -351,8 +382,10 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
 
       if (!decision) return;
       const reason = next.autoOpenReason ?? "identity_setup";
-      if (shownAutoOpenRef.current.has(reason)) return;
+      const persisted = readPersistedAutoOpenReasons();
+      if (shownAutoOpenRef.current.has(reason) || persisted.has(reason)) return;
       shownAutoOpenRef.current.add(reason);
+      persistAutoOpenReason(reason);
       setOpen(true);
     },
     [],
@@ -437,9 +470,12 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
       clear();
       timer = window.setTimeout(() => {
         if (shownAutoOpenRef.current.has("identity_idle")) return;
+        if (readPersistedAutoOpenReasons().has("identity_idle")) return;
+        if (readPersistedAutoOpenReasons().has("identity_setup")) return;
         if (blocksAvaAutoOpen(pathname)) return;
         if (!allowsIdentityIdleReprompt(pathname)) return;
         shownAutoOpenRef.current.add("identity_idle");
+        persistAutoOpenReason("identity_idle");
         setError(null);
         if (progressRef.current?.dismissed) {
           // Clear soft-dismiss so resume lands on the missing identity step.

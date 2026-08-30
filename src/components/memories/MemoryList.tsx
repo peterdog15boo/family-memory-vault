@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useRef, useState, useTransition } from "react";
-import { Images, Loader2, Pencil, Plus, Trash2, Users } from "lucide-react";
+import { Images, Loader2, Pencil, Plus, Trash2, Users, Film, ImagePlus } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { MediaThumb } from "@/components/memories/MediaThumb";
 import { useCopy, useFormat, useTranslations } from "@/components/i18n/LocaleProvider";
@@ -250,7 +250,7 @@ export function MemoryList({
               </Link>
 
               {showActions ? (
-                <div className="mt-2 flex gap-2 px-0.5">
+                <div className="mt-2 flex flex-wrap gap-2 px-0.5">
                   <Link
                     href={`/memories/${memory.id}`}
                     className="inline-flex flex-1 items-center justify-center rounded-md border border-ink/10 bg-canvas px-3 py-1.5 text-xs font-medium text-ink transition hover:border-accent/35 hover:bg-canvas-deep"
@@ -261,10 +261,24 @@ export function MemoryList({
                     <>
                       <Link
                         href={`/memories/${memory.id}?edit=1`}
-                        className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-md border border-ink/10 bg-canvas px-3 py-1.5 text-xs font-medium text-ink transition hover:border-accent/35 hover:bg-canvas-deep"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-md border border-ink/10 bg-canvas px-3 py-1.5 text-xs font-medium text-ink transition hover:border-accent/35 hover:bg-canvas-deep"
                       >
                         <Pencil className="size-3" aria-hidden />
                         Edit
+                      </Link>
+                      <Link
+                        href={`/memories/${memory.id}?addPhotos=1`}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-md border border-ink/10 bg-canvas px-3 py-1.5 text-xs font-medium text-ink transition hover:border-accent/35 hover:bg-canvas-deep"
+                      >
+                        <ImagePlus className="size-3" aria-hidden />
+                        {t("pages.mediaAdd")}
+                      </Link>
+                      <Link
+                        href={`/memories/${memory.id}?createMovie=1`}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-md border border-ink/10 bg-canvas px-3 py-1.5 text-xs font-medium text-ink transition hover:border-accent/35 hover:bg-canvas-deep"
+                      >
+                        <Film className="size-3" aria-hidden />
+                        {t("pages.moviesMake")}
                       </Link>
                       <button
                         type="button"

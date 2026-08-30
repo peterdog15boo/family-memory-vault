@@ -47,7 +47,7 @@ export function WillDraftsList({
   return (
     <section
       className="rounded-2xl border border-[color:var(--legacy-line)] bg-[color:var(--legacy-panel)] p-4 sm:p-5"
-      aria-label="Your will drafts"
+      aria-label="Will planner drafts"
     >
       <h2 className="font-display text-base text-[color:var(--legacy-ink)]">
         Your drafts

@@ -169,6 +169,36 @@ export function FamilyLocationMap({
   );
   const mapConfigured = isFamilyMapConfigured();
 
+  if (!mapConfigured) {
+    return (
+      <section className={cn("space-y-4", className)} aria-labelledby="family-map-title">
+        <div>
+          <h3
+            id="family-map-title"
+            className="font-display text-lg tracking-tight text-ink"
+          >
+            {t("family.locationMapTitle")}
+          </h3>
+          <p className="mt-1 text-sm text-ink-muted">{t("family.locationMapLead")}</p>
+        </div>
+        <FamilyMapUnavailablePanel
+          title={t("family.locationMapUnavailable")}
+          hint={t("family.locationMapUnavailableHint")}
+        />
+        {locations.length > 0 ? (
+          <FamilyLocationMemberList
+            locations={locations}
+            viewerUserId={viewerUserId}
+            viewerDistanceEnabled={viewerDistanceEnabled}
+            focusUserId={focusUserId}
+            onSelect={undefined}
+          />
+        ) : null}
+        <FamilyMapPrivacyNotice variant="family" />
+      </section>
+    );
+  }
+
   if (error && locations.length === 0) {
     return (
       <p role="alert" className={cn("text-sm text-red-800", className)}>

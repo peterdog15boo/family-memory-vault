@@ -24,6 +24,15 @@ function baseIntent(partial: Partial<AssistantIntent>): AssistantIntent {
 }
 
 describe("resolvePeopleNames", () => {
+  it("matches a prior name alias and returns the current display name", () => {
+    const result = resolvePeopleNames(["Craig Hale"], [
+      { id: "craig", name: "Craig", aliases: ["Craig Hale"] },
+    ]);
+    expect(result.matched).toHaveLength(1);
+    expect(result.matched[0]?.id).toBe("craig");
+    expect(result.matched[0]?.name).toBe("Craig");
+  });
+
   it("matches unique first name to full person name", () => {
     const result = resolvePeopleNames(["Noah"], catalog);
     expect(result.matched).toHaveLength(1);

@@ -61,6 +61,8 @@ type MemoryDetailViewProps = {
   startEditing?: boolean;
   /** Open the create-movie panel on mount (e.g. from ?createMovie=1). */
   startCreateMovie?: boolean;
+  /** Open the add-photos sheet on mount (e.g. from ?addPhotos=1). */
+  startAddPhotos?: boolean;
 };
 
 type ViewMode = "grid" | "timeline";
@@ -76,6 +78,7 @@ export function MemoryDetailView({
   hasFamily,
   startEditing = false,
   startCreateMovie = false,
+  startAddPhotos = false,
 }: MemoryDetailViewProps) {
   const router = useRouter();
   const { userId: clerkUserId } = useAuth();
@@ -89,7 +92,9 @@ export function MemoryDetailView({
   const [description, setDescription] = useState(
     initialMemory.description ?? "",
   );
-  const [addOpen, setAddOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(
+    Boolean(canManageMedia && startAddPhotos),
+  );
   const [slideshowOpen, setSlideshowOpen] = useState(false);
   const [movieOpen, setMovieOpen] = useState(
     Boolean(canManageMedia && startCreateMovie && initialMemory.media.length > 0),

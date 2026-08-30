@@ -217,7 +217,7 @@ export const enUS = {
       "Plain-language notes about how sharing works in this vault.",
     familySharingTitle: "Family sharing.",
     familySharingBody:
-      "Family members you invite can see memories and media you choose to share. Private Documents and Digital Legacy stay owner-only unless you grant emergency access.",
+      "Family members you invite can see memories and photos you choose to share. Private Documents and Digital Legacy stay owner-only unless you grant emergency access.",
     noPublicProfilesTitle: "No public profiles.",
     noPublicProfilesBody:
       "Family Memory Vault is not a social network. There is no public presence or feed for other families to discover you.",
@@ -396,7 +396,7 @@ export const enUS = {
     limitsLine: "Photos up to {photoMax}. Videos up to {videoMax}.",
     chooseFiles: "Choose files",
     safetyNote:
-      "Every upload stays private while it is scanned. Ready photos appear in Photos automatically.",
+      "Every upload stays private while it is scanned. Ready photos appear in your library automatically.",
     safetyFirst: "Safety first: {note}",
     received:
       "Received — safety check in progress. It will appear in Photos when ready.",
@@ -434,9 +434,9 @@ export const enUS = {
     zipReading: "Reading export package…",
     zipError: "Could not import that export package.",
     zipQueued:
-      "Found {count} media file(s) from {source}. Queued for the safety pipeline.",
+      "Found {count} photo file(s) from {source}. Queued for the safety pipeline.",
     zipQueuedWithSkipped:
-      "Found {count} media file(s) from {source}. Queued for safety checks ({skipped} skipped).",
+      "Found {count} photo file(s) from {source}. Queued for safety checks ({skipped} skipped).",
     connected: "Connected",
     limited: "Limited",
     alreadyImported: "Already in your library — skipped duplicate.",
@@ -1048,7 +1048,7 @@ export const enUS = {
       "Gather photos into albums you can revisit and share with family.",
     deletedNotice: "Album deleted. Your photos are still saved.",
     safetyNote:
-      "Only clean, approved media can appear in a memory. Upload or import photos here — they’ll join the album after the safety check.",
+      "Only clean, approved photos can appear in a memory. Upload or import photos here — they’ll join the album after the safety check.",
     yourAlbums: "Your albums",
     sharedAlbums: "Shared with family",
     sharedAlbumsLead: "Albums from people in your family.",
@@ -1088,14 +1088,14 @@ export const enUS = {
     createOrJoinFamily: "Create or join a family",
     toShareThisMemory: "to share this memory.",
     shareHelp:
-      "When shared, family members can open this album and its clean photos. Quarantined or pending media never appear.",
+      "When shared, family members can open this album and its clean photos. Quarantined or pending photos never appear.",
     sharedBadge: "Shared",
     privateBadge: "Private",
     makeMoviePickTitle: "Choose a memory",
     makeMoviePickDescription:
       "Pick which album to turn into a short movie. We’ll open Simple Mode next — Expert Mode is still available.",
     makeMovieNoEligible:
-      "None of your albums have enough clean, ready photos or videos yet. Add media to an album, then try again.",
+      "None of your albums have enough clean, ready photos or videos yet. Add photos to an album, then try again.",
     makeMovieNeedMedia:
       "Add at least one clean photo or video to this memory before making a movie.",
     makeMovieMediaCount: "{count} ready photos or videos",
@@ -1203,7 +1203,7 @@ export const enUS = {
     openPersonsPhotos: "open {name}'s photos",
     toViewThem: "to view them.",
     previewsWhenReady: "Previews will appear here when thumbnails are ready.",
-    openMediaLibrary: "Open media library",
+    openMediaLibrary: "Open photo library",
     photo: "Photo",
     video: "Video",
     removeMediaAria: "Remove {kind} from results",
@@ -1251,7 +1251,7 @@ export const enUS = {
       openLegacyContacts: "Open legacy contacts",
       openBusiness: "Open business instructions",
       openLegacyOverview: "Open Digital Legacy overview",
-      viewPersonsMedia: "View {name}'s media",
+      viewPersonsMedia: "View {name}'s photos",
       viewPerson: "View {name}",
       goFamily: "Go to Family",
       upgradeBilling: "Upgrade / Billing",
@@ -1422,7 +1422,7 @@ export const enUS = {
     pendingInvitesSuffixPlural: " · {count} pending invites",
     seatsUsedSuffix: " · {used}/{max} seats",
     leaveConfirm:
-      "Leave “{name}”? You’ll lose access to shared family media and memories.",
+      "Leave “{name}”? You’ll lose access to shared family photos and memories.",
     errorLeave: "Could not leave family.",
     leftNotice: "You left the family.",
     errorSendInvite: "Could not send invite email.",
@@ -1471,8 +1471,9 @@ export const enUS = {
     locationMapNoCoords:
       "Some family members shared a place name only. Their city or region appears in the list below.",
     locationMapUnavailable:
-      "Map unavailable in this environment",
-    locationMapUnavailableHint: "Family list still works below",
+      "The family map isn’t available right now.",
+    locationMapUnavailableHint:
+      "Your family list still works below. Location sharing stays optional in Settings.",
     locationMapRefreshing: "Updating map…",
     locationListAria: "Family locations list",
     locationListTitle: "Family locations",
@@ -1595,7 +1596,7 @@ export const enUS = {
       "Pack photos, tapes, and reels. After we receive your box, digitizing takes about 5–8 weeks.",
     step3Title: "They appear in Photos",
     step3Body:
-      "When processing is complete, your digitized media shows up automatically on your Photos page — no manual upload.",
+      "When processing is complete, your digitized photos show up automatically on your Photos page — no manual upload.",
     pricingEyebrow: "One flat price",
     pricingTitle: "Everything in the box, digitized with care",
     priceWasAria: "Was 299 dollars",
@@ -1634,7 +1635,7 @@ export const enUS = {
     specialInstructionsPlaceholder:
       "Fragile albums, labeling preferences, anything we should know…",
     estimatesAck:
-      "I understand these counts are approximate, processing takes about 5–8 weeks after you receive my filled box, and digitized media will appear automatically in Photos when ready.",
+      "I understand these counts are approximate, processing takes about 5–8 weeks after you receive my filled box, and digitized photos will appear automatically in Photos when ready.",
     errorSubmit: "Could not submit your order.",
     errorConfirmMissing:
       "Order was saved, but we couldn’t open the confirmation page.",
@@ -1841,7 +1842,7 @@ export const enUS = {
     mergePeople: "Merge people",
     mergeIntoTitle: "Merge into another person",
     mergeIntoBody:
-      "Media from {name} will move to the person you choose. That person keeps their name and cover photo. This can't be undone easily.",
+      "Photos from {name} will move to the person you choose. That person keeps their name and cover photo. This can't be undone easily.",
     mergeIntoLabel: "Merge into",
     mergeSelectKeeper: "Select who to keep…",
     confirmMerge: "Confirm merge",
@@ -1865,7 +1866,7 @@ export const enUS = {
     galleryLead:
       "Clean photos and videos linked to this person. Add items manually if face recognition missed them, open one to fix labels, or remove one that doesn't belong here.",
     addPhotosVideos: "Add photos / videos",
-    emptyMediaTitle: "No media to show",
+    emptyMediaTitle: "No photos to show",
     emptyMediaBody:
       "Face detection may still be running — or add photos and videos yourself if recognition missed them.",
     currentCoverFace: "Current cover face",
@@ -1897,7 +1898,7 @@ export const enUS = {
     errorLoadFaces: "Could not load faces.",
     errorLoadFailed: "Load failed.",
     noFacesDetected:
-      "No faces detected on this item. You can still assign the whole photo or video to someone from People → Add photos / videos, or use Add to person in the media viewer.",
+      "No faces detected on this item. You can still assign the whole photo or video to someone from People → Add photos / videos, or use Add to person in the photo viewer.",
     whoIsInThis: "Who is in this?",
     changeLabelHint: "Change a label if automatic matching got it wrong.",
     errorUpdateLabel: "Could not update label.",

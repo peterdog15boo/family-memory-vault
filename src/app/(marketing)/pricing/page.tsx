@@ -11,7 +11,7 @@ import { ensureAppUser } from "@/lib/users";
 export const metadata = {
   title: "Pricing — Family Memory Vault",
   description:
-    "Free, Family, and Family Plus plans for a private, family-safe memory vault.",
+    "Free, Family, and Legacy+ plans for a private, family-safe memory vault.",
 };
 
 /**

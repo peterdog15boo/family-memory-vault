@@ -37,6 +37,8 @@ import type { AssistantDateRange, AssistantIntent } from "@/lib/assistant/types"
 export type PersonCatalogEntry = {
   id: string;
   name: string;
+  /** Prior display names — still match Ask AI queries after a rename. */
+  aliases?: string[];
 };
 
 export type PersonMatchCandidate = {
@@ -121,6 +123,7 @@ export async function resolveIntent(
     (await listPeopleForUser(userId)).map((person) => ({
       id: person.id,
       name: person.name,
+      aliases: person.nameAliases ?? [],
     }));
 
   return resolveIntentWithCatalog(intent, catalog, options);
@@ -135,7 +138,10 @@ export function resolveIntentWithCatalog(
   options: ResolveIntentOptions = {},
 ): ResolvedIntent {
   const now = options.now ?? new Date();
-  const knownPeople = catalog.map((entry) => entry.name);
+  const knownPeople = catalog.flatMap((entry) => [
+    entry.name,
+    ...(entry.aliases ?? []),
+  ]);
 
   // Drop object/scene false positives before People matching / not-found copy.
   const realPeopleQueries: string[] = [];
@@ -364,7 +370,14 @@ export function rankPersonMatches(
   const scored: PersonMatchCandidate[] = [];
 
   for (const person of catalog) {
-    const score = scoreNameMatch(normalizedQuery, normalizeName(person.name));
+    const names = [person.name, ...(person.aliases ?? [])];
+    let score = 0;
+    for (const candidate of names) {
+      score = Math.max(
+        score,
+        scoreNameMatch(normalizedQuery, normalizeName(candidate)),
+      );
+    }
     if (score >= MIN_ACCEPT_SCORE) {
       scored.push({ id: person.id, name: person.name, score });
     }
