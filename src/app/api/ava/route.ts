@@ -33,9 +33,11 @@ const stepIdSchema = z.enum([
   "ask_ai",
   "invite",
   "documents_legacy",
+  "will_planner",
   "complete",
 ]);
 
+/** Optional tips. Legacy+ gates are dismissed in the client via sessionStorage. */
 const skippableStepSchema = z.enum([
   "encourage_memory",
   "create_memory",
@@ -44,6 +46,7 @@ const skippableStepSchema = z.enum([
   "ask_ai",
   "invite",
   "documents_legacy",
+  "will_planner",
 ]);
 
 const bodySchema = z.discriminatedUnion("action", [

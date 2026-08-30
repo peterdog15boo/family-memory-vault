@@ -34,6 +34,15 @@ import {
   validateAvaScreenName,
 } from "@/lib/ava/setup";
 import type { AvaAutoOpenReason, AvaProgress, AvaStep } from "@/lib/ava/types";
+import {
+  featureHrefForLegacyPlusGate,
+  isAvaLegacyPlusGateStep,
+  isAvaSkipViaApiStep,
+  persistDismissedLegacyPlusGate,
+  pickDisplayedAvaStep,
+  readDismissedLegacyPlusGates,
+} from "@/lib/ava/legacy-plus-gate";
+import { isBetaPlanPickerEnabled } from "@/lib/billing/beta-flags";
 import { cn } from "@/lib/utils";
 
 type AvaHelperProps = {
@@ -346,7 +355,11 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [gateSwitchError, setGateSwitchError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [dismissedGates, setDismissedGates] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [, startTransition] = useTransition();
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
@@ -356,6 +369,7 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
 
   useEffect(() => {
     setMounted(true);
+    setDismissedGates(readDismissedLegacyPlusGates());
     for (const reason of readPersistedAutoOpenReasons()) {
       shownAutoOpenRef.current.add(reason as AvaAutoOpenReason);
     }
@@ -566,10 +580,23 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
     })();
   }
 
+  function markLegacyPlusGateDismissed(stepId: string) {
+    persistDismissedLegacyPlusGate(stepId);
+    setDismissedGates(readDismissedLegacyPlusGates());
+  }
+
   function dismissQuietly() {
+    setError(null);
+    setGateSwitchError(null);
     setOpen(false);
     const current = progressRef.current;
     const stepId = current?.activeStepId;
+    // Legacy+ upgrade cards: close like X, remember for this tab only.
+    // Do not skip_step (Invalid request) or call billing.
+    if (isAvaLegacyPlusGateStep(stepId)) {
+      markLegacyPlusGateDismissed(stepId);
+      return;
+    }
     // Soft-complete quiet milestones so cancel stays quiet until the next one.
     if (stepId === "photos_ready") {
       runAction(
@@ -588,21 +615,43 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
       );
       return;
     }
-    const skippable = new Set([
-      "encourage_memory",
-      "create_memory",
-      "people",
-      "create_movie",
-      "ask_ai",
-      "invite",
-      "documents_legacy",
-      "will_planner",
-    ]);
-    if (stepId && skippable.has(stepId)) {
+    if (stepId && isAvaSkipViaApiStep(stepId)) {
       runAction({ action: "skip_step", stepId }, { closeAfter: true });
     } else {
       runAction({ action: "dismiss" }, { closeAfter: true });
     }
+  }
+
+  function switchToLegacyPlus(step: AvaStep) {
+    if (!isAvaLegacyPlusGateStep(step.id)) return;
+    setError(null);
+    setGateSwitchError(null);
+    setPending(true);
+    void (async () => {
+      try {
+        const res = await fetch("/api/billing/beta-assign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ planSlug: "legacy" }),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        if (!res.ok) {
+          throw new Error(data.error || t("ava.couldNotUpdate"));
+        }
+        markLegacyPlusGateDismissed(step.id);
+        setOpen(false);
+        router.push(featureHrefForLegacyPlusGate(step.id));
+        router.refresh();
+      } catch (err) {
+        setGateSwitchError(
+          err instanceof Error ? err.message : t("ava.couldNotUpdate"),
+        );
+      } finally {
+        setPending(false);
+      }
+    })();
   }
 
   useOverlayA11y({
@@ -615,6 +664,7 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
 
   function openHelper() {
     setError(null);
+    setGateSwitchError(null);
     // Always resume so soft-dismiss clears and the server picks the first
     // missing identity step (welcome → name → avatar).
     if (
@@ -643,10 +693,9 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
   }
 
   const active =
-    progress?.steps.find((s) => s.id === progress.activeStepId) ??
-    progress?.visibleSteps.find((s) => s.status === "active") ??
-    progress?.visibleSteps.find((s) => s.status === "available") ??
-    null;
+    progress
+      ? pickDisplayedAvaStep(progress, dismissedGates)
+      : null;
 
   const firstName = progress?.screenName?.trim().split(/\s+/)[0] || null;
 
@@ -739,7 +788,8 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
                   </p>
                 ) : null}
 
-                {active?.optional ? (
+                {active?.optional &&
+                !isAvaLegacyPlusGateStep(active.id) ? (
                   <p className="mt-2 text-xs text-ink-muted/80">
                     {t("ava.optional")}
                   </p>
@@ -872,6 +922,53 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
                         ) : null}
                         {active.ctaLabel || t("ava.continue")}
                       </button>
+                    ) : isAvaLegacyPlusGateStep(active.id) &&
+                      active.href &&
+                      active.ctaLabel ? (
+                      <>
+                        {isBetaPlanPickerEnabled() ? (
+                          <button
+                            type="button"
+                            data-ava-primary
+                            disabled={pending}
+                            onClick={() => switchToLegacyPlus(active)}
+                            className="ui-btn ui-btn-primary w-full justify-center focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-60"
+                          >
+                            {pending ? (
+                              <Loader2
+                                className="size-4 animate-spin"
+                                aria-hidden
+                              />
+                            ) : null}
+                            {active.ctaLabel}
+                          </button>
+                        ) : (
+                          <Link
+                            href={active.href}
+                            data-ava-primary
+                            className="ui-btn ui-btn-primary w-full justify-center focus-visible:ring-2 focus-visible:ring-accent/40"
+                            onClick={() => setOpen(false)}
+                          >
+                            {active.ctaLabel}
+                          </Link>
+                        )}
+                        {gateSwitchError ? (
+                          <p
+                            className="text-sm text-red-800"
+                            role="alert"
+                          >
+                            {gateSwitchError}
+                          </p>
+                        ) : null}
+                        <button
+                          type="button"
+                          disabled={pending}
+                          onClick={dismissQuietly}
+                          className="ui-btn ui-btn-secondary w-full justify-center focus-visible:ring-2 focus-visible:ring-accent/40"
+                        >
+                          {t("ava.maybeLater")}
+                        </button>
+                      </>
                     ) : active.href && active.ctaLabel ? (
                       <>
                         <Link
@@ -886,11 +983,7 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
                               e.preventDefault();
                               askAi?.openAskAi();
                             }
-                            if (
-                              active.id === "people" ||
-                              active.id === "documents_legacy" ||
-                              active.id === "will_planner"
-                            ) {
+                            if (active.id === "people") {
                               void postAva({
                                 action: "acknowledge",
                                 stepId: active.id,
