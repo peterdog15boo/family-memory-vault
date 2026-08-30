@@ -244,6 +244,57 @@ export function familyInviteEmail(data: {
   };
 }
 
+/** Resend template: photo_request */
+export function photoRequestEmail(data: {
+  requesterName: string;
+  requesterFirstName: string;
+  familyName: string;
+  note?: string | null;
+  ctaUrl: string;
+  locale?: AppLocale;
+}): EmailContent {
+  const t = createTranslator(data.locale ?? DEFAULT_LOCALE);
+  const name = data.requesterName.trim() || data.requesterFirstName;
+  const firstName = data.requesterFirstName.trim() || name || "Someone";
+  const note = data.note?.trim() || "";
+  const subject = t("emails.photoRequest.subject", { firstName });
+  const bodyLines = [
+    t("emails.photoRequest.bodyWho", {
+      name,
+      family: data.familyName,
+    }),
+    note
+      ? t("emails.photoRequest.bodyNote", { note })
+      : t("emails.photoRequest.bodyGeneric"),
+    t("emails.photoRequest.bodyUpload"),
+  ];
+  const text = [
+    t("emails.photoRequest.greeting"),
+    ``,
+    ...bodyLines,
+    ``,
+    t("emails.photoRequest.cta"),
+    data.ctaUrl,
+  ].join("\n");
+
+  return {
+    subject,
+    text,
+    html: layout({
+      preview: t("emails.photoRequest.preview", { name }),
+      heading: t("emails.photoRequest.heading"),
+      bodyHtml: paragraphs([
+        t("emails.photoRequest.greeting"),
+        ...bodyLines,
+      ]),
+      ctaLabel: t("emails.photoRequest.cta"),
+      ctaHref: data.ctaUrl,
+      plainLinkHref: data.ctaUrl,
+      footerNote: t("emails.photoRequest.footer"),
+    }),
+  };
+}
+
 export function movieReadyEmail(data: {
   firstName?: string | null;
   movieTitle: string;

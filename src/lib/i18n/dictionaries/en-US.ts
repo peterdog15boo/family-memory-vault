@@ -1407,6 +1407,7 @@ export const enUS = {
     requestPhotosCopyFailed: "Couldn’t copy the link.",
     requestPhotosFailed: "Couldn’t send that photo request.",
     requestPhotosCreatedNotice: "Photo request sent.",
+    requestPhotosAlreadySent: "We already sent a request.",
     familySharingTitle: "Family sharing",
     familySharingBody:
       "Invite people you trust to a shared household vault. Available on Family plans and above.",
@@ -2229,6 +2230,20 @@ export const enUS = {
       cta: "Accept invitation",
       footer:
         "This invitation was sent by {inviter} via Family Memory Vault. If you weren’t expecting it, you can ignore this email.",
+    },
+    photoRequest: {
+      subject: "{firstName} requested photos in Family Memory Vault",
+      greeting: "Hi there,",
+      bodyWho: "{name} asked you to add photos to “{family}” on Family Memory Vault.",
+      bodyGeneric: "They’d like you to share some photos with the family.",
+      bodyNote: "They wrote: “{note}”",
+      bodyUpload:
+        "You can upload from Photos and share with the family.",
+      preview: "{name} asked you to share photos with the family.",
+      heading: "A photo request for your family",
+      cta: "Open Family Memory Vault",
+      footer:
+        "You’re receiving this because you’re a member of this family on Family Memory Vault.",
     },
   },
   feedback: {

@@ -3,7 +3,7 @@
  * Never exposes the requester’s private library on the deep-link surface.
  */
 
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { getDb } from "@/lib/db";
 import {
@@ -16,6 +16,11 @@ import {
 } from "@/lib/db/schema";
 import { getAppUrl } from "@/lib/env";
 import { buildFamilyInviteLink } from "@/lib/families/invite-link";
+import {
+  PHOTO_REQUEST_EMAIL_COOLDOWN_MS,
+  notifyThenEmailPhotoRequest,
+  sendPhotoRequestFollowUpEmail,
+} from "@/lib/email/photo-request";
 import { DEFAULT_PHOTO_REQUEST_MESSAGE } from "@/lib/photo-requests/copy";
 
 export {
@@ -117,6 +122,8 @@ export async function createPhotoRequest(input: {
   request: PhotoRequest;
   deepLink: string;
   serialized: SerializedPhotoRequest;
+  emailSent: boolean;
+  alreadySent: boolean;
 }> {
   const familyId = input.familyId.trim();
   const requestedByUserId = input.requestedByUserId.trim();
@@ -169,6 +176,21 @@ export async function createPhotoRequest(input: {
     .where(eq(users.id, requestedByUserId))
     .limit(1);
 
+  const cutoff = new Date(Date.now() - PHOTO_REQUEST_EMAIL_COOLDOWN_MS);
+  const recent = await db
+    .select({ id: photoRequests.id })
+    .from(photoRequests)
+    .where(
+      and(
+        eq(photoRequests.familyId, familyId),
+        eq(photoRequests.requestedByUserId, requestedByUserId),
+        eq(photoRequests.targetMemberId, targetMemberId),
+        gte(photoRequests.createdAt, cutoff),
+      ),
+    )
+    .limit(1);
+  const alreadySent = recent.length > 0;
+
   const now = new Date();
   const token = nanoid(24);
   const [created] = await db
@@ -205,11 +227,12 @@ export async function createPhotoRequest(input: {
     target,
   });
 
-  // Notify active members with accounts; pending invitees get email via caller.
-  if (target.userId) {
-    try {
+  // Notify active members with accounts; email is additive (24h cap).
+  const delivery = await notifyThenEmailPhotoRequest({
+    targetUserId: target.userId,
+    notify: async () => {
       const { notifyPhotoRequest } = await import("@/lib/notifications");
-      await notifyPhotoRequest(target.userId, {
+      await notifyPhotoRequest(target.userId!, {
         requestId: created.id,
         familyId,
         familyName: family.name,
@@ -217,12 +240,32 @@ export async function createPhotoRequest(input: {
         message,
         link: `/upload?request=${encodeURIComponent(token)}`,
       });
-    } catch (error) {
-      console.error("[photo-requests] notify failed", error);
-    }
+    },
+    email: () =>
+      sendPhotoRequestFollowUpEmail({
+        targetUserId: target.userId,
+        invitedEmail: target.invitedEmail,
+        alreadySent,
+        familyName: family.name,
+        requesterName: requester?.displayName ?? null,
+        message,
+        ctaUrl: target.userId
+          ? new URL("/family", getAppUrl()).toString()
+          : deepLink,
+      }),
+  });
+
+  if (!delivery.notified && delivery.skipped === "send_failed") {
+    throw new PhotoRequestError("Couldn’t send that photo request.");
   }
 
-  return { request: created, deepLink, serialized };
+  return {
+    request: created,
+    deepLink,
+    serialized,
+    emailSent: delivery.emailSent,
+    alreadySent,
+  };
 }
 
 function serializePhotoRequestRow(input: {

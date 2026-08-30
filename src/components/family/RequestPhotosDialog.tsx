@@ -18,7 +18,7 @@ type RequestPhotosDialogProps = {
   memoryId?: string | null;
   personId?: string | null;
   onClose: () => void;
-  onCreated?: () => void;
+  onCreated?: (info?: { alreadySent?: boolean }) => void;
 };
 
 /**
@@ -38,6 +38,7 @@ export function RequestPhotosDialog({
   const [message, setMessage] = useState(DEFAULT_PHOTO_REQUEST_MESSAGE);
   const [error, setError] = useState<string | null>(null);
   const [deepLink, setDeepLink] = useState<string | null>(null);
+  const [alreadySent, setAlreadySent] = useState(false);
   const [copied, setCopied] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -67,12 +68,17 @@ export function RequestPhotosDialog({
         const data = (await res.json().catch(() => ({}))) as {
           error?: string;
           deepLink?: string;
+          alreadySent?: boolean;
         };
         if (!res.ok || !data.deepLink) {
           throw new Error(data.error || t("family.requestPhotosFailed"));
         }
         setDeepLink(data.deepLink);
-        onCreated?.();
+        if (data.alreadySent) {
+          setError(null);
+          setAlreadySent(true);
+        }
+        onCreated?.({ alreadySent: Boolean(data.alreadySent) });
       } catch (err) {
         setError(
           err instanceof Error ? err.message : t("family.requestPhotosFailed"),
@@ -131,7 +137,9 @@ export function RequestPhotosDialog({
         {deepLink ? (
           <div className="mt-5 space-y-3">
             <p className="text-sm leading-relaxed text-ink">
-              {t("family.requestPhotosSent")}
+              {alreadySent
+                ? t("family.requestPhotosAlreadySent")
+                : t("family.requestPhotosSent")}
             </p>
             <button
               type="button"
