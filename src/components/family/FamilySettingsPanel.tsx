@@ -822,9 +822,10 @@ export function FamilySettingsPanel({
           onClose={() => setRequestTarget(null)}
           onCreated={(info) =>
             setNotice(
-              info?.alreadySent
-                ? t("family.requestPhotosAlreadySent")
-                : t("family.requestPhotosCreatedNotice"),
+              info?.notice ||
+                (info?.alreadySent
+                  ? t("family.requestPhotosAlreadySent")
+                  : t("family.requestPhotosCreatedNotice")),
             )
           }
         />

@@ -66,6 +66,8 @@ export async function POST(request: Request) {
   }
 
   try {
+    const ignoreEmailCooldown =
+      new URL(request.url).searchParams.get("betaEmailRetry") === "1";
     const result = await createPhotoRequest({
       familyId: parsed.data.familyId,
       requestedByUserId: userId,
@@ -73,12 +75,16 @@ export async function POST(request: Request) {
       message: parsed.data.message,
       memoryId: parsed.data.memoryId,
       personId: parsed.data.personId,
+      ignoreEmailCooldown,
     });
     return NextResponse.json({
       request: result.serialized,
       deepLink: result.deepLink,
+      notified: result.notified,
       emailSent: result.emailSent,
       alreadySent: result.alreadySent,
+      emailSkip: result.emailSkip,
+      emailToRedacted: result.emailToRedacted,
     });
   } catch (error) {
     if (error instanceof PhotoRequestError) {

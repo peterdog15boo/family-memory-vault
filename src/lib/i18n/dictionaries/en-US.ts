@@ -1402,6 +1402,15 @@ export const enUS = {
     requestPhotosSend: "Send request",
     requestPhotosSent:
       "Request sent. Copy the link if you’d like to share it again.",
+    requestPhotosInAppSent: "Request sent in the app",
+    requestPhotosEmailSent: "Email sent to {email}",
+    requestPhotosEmailNotSent: "Email not sent: {reason}",
+    requestPhotosEmailReasonMissingKey:
+      "email isn’t configured on the server",
+    requestPhotosEmailReasonNoEmail: "no email on file for this person",
+    requestPhotosEmailReasonAlreadySent: "already emailed today",
+    requestPhotosEmailReasonFromRejected: "the sender address was rejected",
+    requestPhotosEmailReasonProvider: "the email provider returned an error",
     requestPhotosCopyLink: "Copy request link",
     requestPhotosCopied: "Link copied",
     requestPhotosCopyFailed: "Couldn’t copy the link.",

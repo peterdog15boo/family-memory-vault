@@ -11,6 +11,19 @@ import {
 import { useOverlayA11y } from "@/hooks/useOverlayA11y";
 import { useRef } from "react";
 
+type PhotoRequestDeliveryPayload = {
+  notified?: boolean;
+  emailSent?: boolean;
+  alreadySent?: boolean;
+  emailSkip?: string | null;
+  emailToRedacted?: string | null;
+};
+
+export type RequestPhotosCreatedInfo = {
+  alreadySent?: boolean;
+  notice: string;
+};
+
 type RequestPhotosDialogProps = {
   familyId: string;
   targetMemberId: string;
@@ -18,8 +31,49 @@ type RequestPhotosDialogProps = {
   memoryId?: string | null;
   personId?: string | null;
   onClose: () => void;
-  onCreated?: (info?: { alreadySent?: boolean }) => void;
+  onCreated?: (info?: RequestPhotosCreatedInfo) => void;
 };
+
+function emailSkipReason(
+  t: (key: string) => string,
+  skip: string | null | undefined,
+): string {
+  switch (skip) {
+    case "missing_key":
+      return t("family.requestPhotosEmailReasonMissingKey");
+    case "no_email":
+      return t("family.requestPhotosEmailReasonNoEmail");
+    case "already_sent":
+      return t("family.requestPhotosEmailReasonAlreadySent");
+    case "from_rejected":
+      return t("family.requestPhotosEmailReasonFromRejected");
+    case "send_failed":
+      return t("family.requestPhotosEmailReasonProvider");
+    default:
+      return t("family.requestPhotosEmailReasonProvider");
+  }
+}
+
+export function photoRequestDeliveryLines(
+  t: (key: string, values?: Record<string, string | number | boolean | null | undefined>) => string,
+  data: PhotoRequestDeliveryPayload,
+): string[] {
+  const lines: string[] = [t("family.requestPhotosInAppSent")];
+  if (data.emailSent) {
+    lines.push(
+      t("family.requestPhotosEmailSent", {
+        email: data.emailToRedacted || "the recipient",
+      }),
+    );
+  } else {
+    lines.push(
+      t("family.requestPhotosEmailNotSent", {
+        reason: emailSkipReason(t, data.emailSkip),
+      }),
+    );
+  }
+  return lines;
+}
 
 /**
  * Ask a family member / invitee to upload photos — preset-friendly message.
@@ -38,7 +92,7 @@ export function RequestPhotosDialog({
   const [message, setMessage] = useState(DEFAULT_PHOTO_REQUEST_MESSAGE);
   const [error, setError] = useState<string | null>(null);
   const [deepLink, setDeepLink] = useState<string | null>(null);
-  const [alreadySent, setAlreadySent] = useState(false);
+  const [statusLines, setStatusLines] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -68,17 +122,17 @@ export function RequestPhotosDialog({
         const data = (await res.json().catch(() => ({}))) as {
           error?: string;
           deepLink?: string;
-          alreadySent?: boolean;
-        };
+        } & PhotoRequestDeliveryPayload;
         if (!res.ok || !data.deepLink) {
           throw new Error(data.error || t("family.requestPhotosFailed"));
         }
+        const lines = photoRequestDeliveryLines(t, data);
         setDeepLink(data.deepLink);
-        if (data.alreadySent) {
-          setError(null);
-          setAlreadySent(true);
-        }
-        onCreated?.({ alreadySent: Boolean(data.alreadySent) });
+        setStatusLines(lines);
+        onCreated?.({
+          alreadySent: Boolean(data.alreadySent),
+          notice: lines.join(" "),
+        });
       } catch (err) {
         setError(
           err instanceof Error ? err.message : t("family.requestPhotosFailed"),
@@ -136,11 +190,13 @@ export function RequestPhotosDialog({
 
         {deepLink ? (
           <div className="mt-5 space-y-3">
-            <p className="text-sm leading-relaxed text-ink">
-              {alreadySent
-                ? t("family.requestPhotosAlreadySent")
-                : t("family.requestPhotosSent")}
-            </p>
+            <div className="space-y-1.5" role="status">
+              {statusLines.map((line) => (
+                <p key={line} className="text-sm leading-relaxed text-ink">
+                  {line}
+                </p>
+              ))}
+            </div>
             <button
               type="button"
               onClick={() => void copyLink()}

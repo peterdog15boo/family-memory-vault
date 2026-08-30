@@ -17,9 +17,11 @@ import {
 import { getAppUrl } from "@/lib/env";
 import { buildFamilyInviteLink } from "@/lib/families/invite-link";
 import {
-  PHOTO_REQUEST_EMAIL_COOLDOWN_MS,
+  isPhotoRequestEmailTestMode,
   notifyThenEmailPhotoRequest,
+  photoRequestEmailCooldownMs,
   sendPhotoRequestFollowUpEmail,
+  type PhotoRequestEmailSkip,
 } from "@/lib/email/photo-request";
 import { DEFAULT_PHOTO_REQUEST_MESSAGE } from "@/lib/photo-requests/copy";
 
@@ -118,12 +120,17 @@ export async function createPhotoRequest(input: {
   message?: string;
   memoryId?: string | null;
   personId?: string | null;
+  /** Honored only in dev/beta — skip the email cooldown for this request. */
+  ignoreEmailCooldown?: boolean;
 }): Promise<{
   request: PhotoRequest;
   deepLink: string;
   serialized: SerializedPhotoRequest;
+  notified: boolean;
   emailSent: boolean;
   alreadySent: boolean;
+  emailSkip: PhotoRequestEmailSkip | null;
+  emailToRedacted: string | null;
 }> {
   const familyId = input.familyId.trim();
   const requestedByUserId = input.requestedByUserId.trim();
@@ -176,7 +183,7 @@ export async function createPhotoRequest(input: {
     .where(eq(users.id, requestedByUserId))
     .limit(1);
 
-  const cutoff = new Date(Date.now() - PHOTO_REQUEST_EMAIL_COOLDOWN_MS);
+  const cutoff = new Date(Date.now() - photoRequestEmailCooldownMs());
   const recent = await db
     .select({ id: photoRequests.id })
     .from(photoRequests)
@@ -189,7 +196,9 @@ export async function createPhotoRequest(input: {
       ),
     )
     .limit(1);
-  const alreadySent = recent.length > 0;
+  const alreadySent =
+    recent.length > 0 &&
+    !(input.ignoreEmailCooldown && isPhotoRequestEmailTestMode());
 
   const now = new Date();
   const token = nanoid(24);
@@ -227,7 +236,7 @@ export async function createPhotoRequest(input: {
     target,
   });
 
-  // Notify active members with accounts; email is additive (24h cap).
+  // Notify active members with accounts; email is additive (cooldown cap).
   const delivery = await notifyThenEmailPhotoRequest({
     targetUserId: target.userId,
     notify: async () => {
@@ -263,8 +272,11 @@ export async function createPhotoRequest(input: {
     request: created,
     deepLink,
     serialized,
+    notified: delivery.notified,
     emailSent: delivery.emailSent,
-    alreadySent,
+    alreadySent: alreadySent || delivery.skipped === "already_sent",
+    emailSkip: delivery.skipped,
+    emailToRedacted: delivery.toRedacted,
   };
 }
 
