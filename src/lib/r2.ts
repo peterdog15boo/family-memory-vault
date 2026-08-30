@@ -64,6 +64,13 @@ export const R2_PREFIXES = {
    */
   privateLegacyWills: "private-legacy-wills/",
   privateLegacyWillsTemp: "private-legacy-wills-temp/",
+  /**
+   * Owner-only Living Trust Planner exports (never gallery / family share).
+   * Permanent: private-legacy-trusts/{userId}/{draftId}/…
+   * Staging:   private-legacy-trusts-temp/{userId}/…
+   */
+  privateLegacyTrusts: "private-legacy-trusts/",
+  privateLegacyTrustsTemp: "private-legacy-trusts-temp/",
   /** Beta feedback screenshots (admin-only evidence; never gallery-served). */
   betaFeedback: "beta-feedback/",
 } as const;
@@ -351,12 +358,21 @@ export function isWillDraftStorageKey(key: string): boolean {
   );
 }
 
+/** Gallery/media helpers must never touch Trust Planner export objects. */
+export function isTrustDraftStorageKey(key: string): boolean {
+  return (
+    key.startsWith(R2_PREFIXES.privateLegacyTrusts) ||
+    key.startsWith(R2_PREFIXES.privateLegacyTrustsTemp)
+  );
+}
+
 /** True for any owner-only private vault object prefix. */
 export function isPrivateVaultStorageKey(key: string): boolean {
   return (
     isPrivateDocumentStorageKey(key) ||
     isLegacyVideoStorageKey(key) ||
-    isWillDraftStorageKey(key)
+    isWillDraftStorageKey(key) ||
+    isTrustDraftStorageKey(key)
   );
 }
 
@@ -689,6 +705,11 @@ export async function putObjectBytes(
   if (key.startsWith(R2_PREFIXES.privateLegacyWillsTemp)) {
     throw new Error(
       `Refusing putObjectBytes into private-legacy-wills-temp/ ("${key}"). Use will planner storage helpers for exports.`,
+    );
+  }
+  if (key.startsWith(R2_PREFIXES.privateLegacyTrustsTemp)) {
+    throw new Error(
+      `Refusing putObjectBytes into private-legacy-trusts-temp/ ("${key}"). Use trust planner storage helpers for exports.`,
     );
   }
 

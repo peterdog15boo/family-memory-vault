@@ -1,13 +1,13 @@
 /**
- * Multi-page text PDF for Will Planner exports (no PDF library).
- * Every page: DRAFT header + state footer. Body includes cover sheet from generator.
+ * Multi-page text PDF for Trust Planner exports (no PDF library).
+ * Every page: DRAFT header + footer. Body includes cover disclaimer from generator.
  */
 
 import {
-  WILL_DRAFT_PAGE_HEADER,
-  willDraftPageFooter,
-} from "@/lib/will-planner/generate";
-import { WILL_DISCLAIMER_TEXT } from "@/lib/will-planner/constants";
+  TRUST_DRAFT_PAGE_HEADER,
+  trustDraftPageFooter,
+} from "@/lib/trust-planner/generate";
+import { TRUST_DISCLAIMER_TEXT } from "@/lib/trust-planner/constants";
 
 /** Helvetica Type1 only supports WinAnsi — fold Unicode to ASCII for reliable rendering. */
 function toPdfSafeText(text: string): string {
@@ -47,38 +47,31 @@ function wrapLine(raw: string, maxChars: number, indent = ""): string[] {
   return out;
 }
 
-export type BuildWillPdfOptions = {
-  /** Shown on every page (default: DRAFT — NOT AN EXECUTED WILL). */
+export type BuildTrustPdfOptions = {
   pageHeader?: string;
-  /** Shown on every page footer (default: FMV disclaimer; pass state footer). */
   pageFooter?: string;
-  /** @deprecated Prefer pageFooter — still accepted for older callers. */
   footerDisclaimer?: string;
   stateCode?: string | null;
 };
 
-/**
- * Build a multi-page PDF. Header + footer on every page; body is the proforma will text.
- */
-export function buildSimpleTextPdf(
+export function buildTrustDraftPdf(
   title: string,
   body: string,
-  options?: BuildWillPdfOptions,
+  options?: BuildTrustPdfOptions,
 ): Uint8Array {
-  const pageHeader = options?.pageHeader ?? WILL_DRAFT_PAGE_HEADER;
+  const pageHeader = options?.pageHeader ?? TRUST_DRAFT_PAGE_HEADER;
   const pageFooter =
     options?.pageFooter ??
     (options?.stateCode != null
-      ? willDraftPageFooter(options.stateCode)
+      ? trustDraftPageFooter(options.stateCode)
       : options?.footerDisclaimer) ??
-    WILL_DISCLAIMER_TEXT;
+    TRUST_DISCLAIMER_TEXT;
 
   const maxChars = 88;
   const headerLines = wrapLine(pageHeader, maxChars);
   const footerLines = wrapLine(pageFooter, maxChars);
 
   const bodyLines: string[] = [];
-  // Title line once at start of body stream (cover already in body from generator)
   if (title.trim() && !body.startsWith(title.trim())) {
     bodyLines.push(...wrapLine(title.trim(), maxChars));
     bodyLines.push("");
@@ -87,7 +80,6 @@ export function buildSimpleTextPdf(
     bodyLines.push(...wrapLine(paragraph, maxChars));
   }
 
-  // Layout: header (2) + gap + body + gap + footer (up to 4) ≈ 48 body lines
   const headerBlock = Math.min(headerLines.length, 2);
   const footerBlock = Math.min(Math.max(footerLines.length, 1), 4);
   const linesPerPageBody = 48 - headerBlock - footerBlock;
@@ -110,29 +102,25 @@ export function buildSimpleTextPdf(
   for (const pageBody of pages) {
     const contentLines = ["BT", "/F1 9 Tf", "50 760 Td", "12 TL"];
 
-    // Header
-    headerLines.slice(0, headerBlock).forEach((line, idx) => {
-      const escaped = escapePdfString(line);
+    headerLines.slice(0, headerBlock).forEach((lineText, idx) => {
+      const escaped = escapePdfString(lineText);
       if (idx === 0) contentLines.push(`(${escaped}) Tj`);
       else contentLines.push(`T* (${escaped}) Tj`);
     });
-    contentLines.push("T* () Tj"); // gap under header
+    contentLines.push("T* () Tj");
 
-    // Body
-    pageBody.forEach((line) => {
-      contentLines.push(`T* (${escapePdfString(line)}) Tj`);
+    pageBody.forEach((lineText) => {
+      contentLines.push(`T* (${escapePdfString(lineText)}) Tj`);
     });
 
-    // Move toward footer: pad remaining body slots then write footer
-    const used =
-      headerBlock + 1 + pageBody.length;
+    const used = headerBlock + 1 + pageBody.length;
     const pad = Math.max(0, linesPerPageBody + headerBlock + 1 - used);
     for (let p = 0; p < pad; p++) {
       contentLines.push("T* () Tj");
     }
     contentLines.push("T* () Tj");
-    footerLines.slice(0, footerBlock).forEach((line) => {
-      contentLines.push(`T* (${escapePdfString(line)}) Tj`);
+    footerLines.slice(0, footerBlock).forEach((lineText) => {
+      contentLines.push(`T* (${escapePdfString(lineText)}) Tj`);
     });
 
     contentLines.push("ET");

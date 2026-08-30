@@ -449,6 +449,20 @@
       "when": 1788010000000,
       "tag": "0074_will_planner_document",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1788020000000,
+      "tag": "0075_trust_planner",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1788030000000,
+      "tag": "0076_trust_signed_scan",
+      "breakpoints": true
     }
   ]
 }

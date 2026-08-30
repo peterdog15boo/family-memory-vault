@@ -693,6 +693,7 @@ export const enUS = {
       "View this private document in the vault? Access is logged for your security.",
     navOverview: "Overview",
     navWillPlanner: "Will planner",
+    navTrustPlanner: "Living trust planner",
     navMessage: "Message to Loved Ones",
     navContacts: "Key Contacts",
     navBusiness: "Business Continuity",

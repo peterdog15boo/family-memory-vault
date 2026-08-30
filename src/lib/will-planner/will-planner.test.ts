@@ -194,6 +194,25 @@ describe("generated downloads include disclaimer on page 1", () => {
     expect(headerPos).toBeLessThan(bodyPos);
   });
 
+  it("PDF content stream Length matches UTF-8 byte length", () => {
+    const plain = generateWillDraftMarkdown(baseAnswers);
+    const pdf = buildSimpleTextPdf("Draft", plain, {
+      pageHeader: WILL_DRAFT_PAGE_HEADER,
+      pageFooter: willDraftPageFooter("TX"),
+      stateCode: "TX",
+    });
+    const asText = new TextDecoder("utf8").decode(pdf);
+    const streams = [
+      ...asText.matchAll(/<< \/Length (\d+) >>\nstream\n([\s\S]*?)\nendstream/g),
+    ];
+    expect(streams.length).toBeGreaterThan(0);
+    for (const [, declared, body] of streams) {
+      expect(parseInt(declared!, 10)).toBe(
+        new TextEncoder().encode(body!).byteLength,
+      );
+    }
+  });
+
   it("DOCX includes disclaimer text", () => {
     const plain = generateWillDraftMarkdown(baseAnswers);
     const docx = buildSimpleDocx("Draft", plain, {

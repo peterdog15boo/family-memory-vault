@@ -147,7 +147,14 @@ export function isPrivateDocumentKeyForUser(
 ): boolean {
   const permanent = `${R2_PREFIXES.privateDocuments}${userId}/`;
   const temp = `${R2_PREFIXES.privateDocumentsTemp}${userId}/`;
-  return key.startsWith(permanent) || key.startsWith(temp);
+  const trustPermanent = `${R2_PREFIXES.privateLegacyTrusts}${userId}/`;
+  const trustTemp = `${R2_PREFIXES.privateLegacyTrustsTemp}${userId}/`;
+  return (
+    key.startsWith(permanent) ||
+    key.startsWith(temp) ||
+    key.startsWith(trustPermanent) ||
+    key.startsWith(trustTemp)
+  );
 }
 
 export function isPrivateDocumentTempKey(key: string): boolean {

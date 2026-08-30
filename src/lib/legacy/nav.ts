@@ -22,6 +22,11 @@ export const LEGACY_NAV: LegacyNavItem[] = [
     description: "Guided interview that builds an attorney planning draft",
   },
   {
+    href: "/legacy/trust",
+    label: "Living trust planner",
+    description: "Plan a revocable trust outline and funding notes for counsel",
+  },
+  {
     href: "/documents/legacy/message",
     label: "Message to Loved Ones",
     description: "A personal letter and wishes for those you care about",

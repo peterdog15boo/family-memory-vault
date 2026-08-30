@@ -149,6 +149,12 @@ export function LegacyOverview({ progress }: LegacyOverviewProps) {
             {t("legacy.navWillPlanner")}
           </Link>
           <Link
+            href="/legacy/trust"
+            className="inline-flex rounded-md border border-[color:var(--legacy-line)] bg-white/60 px-3.5 py-2.5 text-sm font-medium text-[color:var(--legacy-ink)] hover:bg-[color:var(--legacy-accent-soft)]"
+          >
+            {t("legacy.navTrustPlanner")}
+          </Link>
+          <Link
             href="/documents/legacy/message"
             className="inline-flex rounded-md bg-[color:var(--legacy-accent)] px-3.5 py-2.5 text-sm font-medium text-white hover:bg-[color:var(--legacy-accent-deep)]"
           >

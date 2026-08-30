@@ -2830,6 +2830,109 @@ export const willDrafts = pgTable(
 );
 
 /**
+ * Trust Planner disclaimer clickwrap (audit trail).
+ * Required before the interview starts — versioned like Will Planner.
+ */
+export const trustDisclaimerAcceptances = pgTable(
+  "trust_disclaimer_acceptances",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    disclaimerVersion: text("disclaimer_version").notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("trust_disclaimer_acceptances_user_id_idx").on(table.userId),
+    index("trust_disclaimer_acceptances_version_idx").on(
+      table.disclaimerVersion,
+    ),
+    uniqueIndex("trust_disclaimer_acceptances_user_version_uidx").on(
+      table.userId,
+      table.disclaimerVersion,
+    ),
+  ],
+);
+
+export const TRUST_DRAFT_STATUSES = [
+  "in_progress",
+  "draft_ready",
+  "archived",
+] as const;
+export type TrustDraftStatus = (typeof TRUST_DRAFT_STATUSES)[number];
+
+export const trustDraftStatusEnum = pgEnum(
+  "trust_draft_status",
+  TRUST_DRAFT_STATUSES,
+);
+
+/**
+ * Owner-only Living Trust Planner interview drafts.
+ * Never family-shared; excluded from Ask AI / Photos / movie pipelines.
+ * One active (in_progress | draft_ready) draft per user — enforced in app code.
+ */
+export const trustDrafts = pgTable(
+  "trust_drafts",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: trustDraftStatusEnum("status").notNull().default("in_progress"),
+    stateCode: text("state_code"),
+    answers: jsonb("answers").$type<Record<string, unknown>>().default({}).notNull(),
+    generatedMarkdown: text("generated_markdown"),
+    generatedAt: timestamp("generated_at", { withTimezone: true }),
+    /**
+     * Owner-only funding task checks after draft is ready.
+     * Shape: { checks: Record<taskId, boolean> } — never auto-filled from generate.
+     */
+    fundingChecklist: jsonb("funding_checklist")
+      .$type<{ checks?: Record<string, boolean> }>()
+      .default({})
+      .notNull(),
+    /**
+     * Optional scan of the signed trust archived in Private Documents.
+     * FMV does not verify signatures or funding.
+     */
+    signedScan: jsonb("signed_scan").$type<{
+      documentId: string;
+      storageKey: string;
+      originalFilename: string;
+      contentType: string;
+      sizeBytes: number;
+      uploadedAt: string;
+      note: string;
+    } | null>(),
+    disclaimerVersion: text("disclaimer_version").notNull(),
+    /** Optional link to a Will Planner draft for pour-over companion planning. */
+    linkedWillDraftId: text("linked_will_draft_id").references(
+      () => willDrafts.id,
+      { onDelete: "set null" },
+    ),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("trust_drafts_user_id_idx").on(table.userId),
+    index("trust_drafts_user_status_idx").on(table.userId, table.status),
+    index("trust_drafts_linked_will_draft_id_idx").on(table.linkedWillDraftId),
+  ],
+);
+
+/**
  * In-app beta feedback submissions (bugs + feature requests).
  * Status workflow: new → triaged → in-progress → resolved.
  */
@@ -3063,6 +3166,8 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   termsAcceptances: many(termsAcceptances),
   willDisclaimerAcceptances: many(willDisclaimerAcceptances),
   willDrafts: many(willDrafts),
+  trustDisclaimerAcceptances: many(trustDisclaimerAcceptances),
+  trustDrafts: many(trustDrafts),
   betaFeedback: many(feedbackSubmissions),
   feedbackSubmissions: many(feedbackSubmissions),
   people: many(people),
@@ -3148,7 +3253,7 @@ export const willDisclaimerAcceptancesRelations = relations(
   }),
 );
 
-export const willDraftsRelations = relations(willDrafts, ({ one }) => ({
+export const willDraftsRelations = relations(willDrafts, ({ one, many }) => ({
   user: one(users, {
     fields: [willDrafts.userId],
     references: [users.id],
@@ -3156,6 +3261,28 @@ export const willDraftsRelations = relations(willDrafts, ({ one }) => ({
   family: one(families, {
     fields: [willDrafts.familyId],
     references: [families.id],
+  }),
+  linkedTrustDrafts: many(trustDrafts),
+}));
+
+export const trustDisclaimerAcceptancesRelations = relations(
+  trustDisclaimerAcceptances,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [trustDisclaimerAcceptances.userId],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const trustDraftsRelations = relations(trustDrafts, ({ one }) => ({
+  user: one(users, {
+    fields: [trustDrafts.userId],
+    references: [users.id],
+  }),
+  linkedWillDraft: one(willDrafts, {
+    fields: [trustDrafts.linkedWillDraftId],
+    references: [willDrafts.id],
   }),
 }));
 
@@ -3803,6 +3930,12 @@ export type NewWillDisclaimerAcceptance =
   typeof willDisclaimerAcceptances.$inferInsert;
 export type WillDraft = typeof willDrafts.$inferSelect;
 export type NewWillDraft = typeof willDrafts.$inferInsert;
+export type TrustDisclaimerAcceptance =
+  typeof trustDisclaimerAcceptances.$inferSelect;
+export type NewTrustDisclaimerAcceptance =
+  typeof trustDisclaimerAcceptances.$inferInsert;
+export type TrustDraft = typeof trustDrafts.$inferSelect;
+export type NewTrustDraft = typeof trustDrafts.$inferInsert;
 export type BetaFeedback = typeof feedbackSubmissions.$inferSelect;
 export type NewBetaFeedback = typeof feedbackSubmissions.$inferInsert;
 export type FeedbackSubmission = typeof feedbackSubmissions.$inferSelect;

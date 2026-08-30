@@ -49,20 +49,38 @@ export default async function LegacyPlanningPage() {
       />
 
       <div className="app-page mx-auto max-w-3xl pb-16">
-        <div className="mb-8 rounded-2xl border border-[color:var(--legacy-line)] bg-[color:var(--legacy-panel)] p-5 sm:p-6">
-          <h2 className="font-display text-lg text-[color:var(--legacy-ink)]">
-            Will planner
-          </h2>
-          <p className="mt-1 text-sm text-[color:var(--legacy-muted)]">
-            Build a plain-language attorney draft from a guided interview. This
-            is a planning draft only — not a will.
-          </p>
-          <Link
-            href="/legacy/will"
-            className="ui-btn ui-btn-primary mt-4 inline-flex"
-          >
-            Start will planner
-          </Link>
+        <div className="mb-8 grid gap-4 sm:grid-cols-2">
+          <div className="rounded-2xl border border-[color:var(--legacy-line)] bg-[color:var(--legacy-panel)] p-5 sm:p-6">
+            <h2 className="font-display text-lg text-[color:var(--legacy-ink)]">
+              Will planner
+            </h2>
+            <p className="mt-1 text-sm text-[color:var(--legacy-muted)]">
+              Build a plain-language attorney draft from a guided interview. This
+              is a planning draft only — not a will.
+            </p>
+            <Link
+              href="/legacy/will"
+              className="ui-btn ui-btn-primary mt-4 inline-flex"
+            >
+              Start will planner
+            </Link>
+          </div>
+
+          <div className="rounded-2xl border border-[color:var(--legacy-line)] bg-[color:var(--legacy-panel)] p-5 sm:p-6">
+            <h2 className="font-display text-lg text-[color:var(--legacy-ink)]">
+              Living trust planner
+            </h2>
+            <p className="mt-1 text-sm text-[color:var(--legacy-muted)]">
+              Plan a revocable living trust outline for your attorney — including
+              funding reminders. Not a signed trust.
+            </p>
+            <Link
+              href="/legacy/trust"
+              className="ui-btn ui-btn-primary mt-4 inline-flex"
+            >
+              Start trust planner
+            </Link>
+          </div>
         </div>
 
         <LegacyPlanningBoard
