@@ -199,7 +199,9 @@ export const TRUST_PACK_OPTIONS: Array<{
   },
 ];
 
-export function isCommunityPropertyState(stateCode: string | undefined): boolean {
+export function isCommunityPropertyState(
+  stateCode: string | null | undefined,
+): boolean {
   if (!stateCode?.trim()) return false;
   return (COMMUNITY_PROPERTY_STATE_CODES as readonly string[]).includes(
     stateCode.trim().toUpperCase(),

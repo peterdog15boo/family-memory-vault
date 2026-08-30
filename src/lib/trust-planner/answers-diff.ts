@@ -6,7 +6,8 @@
 import type { TrustAnswers } from "@/lib/trust-planner/questions";
 
 export function trustAnswersContentFingerprint(answers: TrustAnswers): string {
-  const { currentStepId: _step, ...rest } = answers;
+  const rest = { ...answers };
+  delete rest.currentStepId;
   return JSON.stringify(rest);
 }
 

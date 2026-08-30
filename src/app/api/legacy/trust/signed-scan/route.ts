@@ -13,7 +13,6 @@ import {
   completeTrustSignedScanUpload,
   discardTrustSignedScanTempUpload,
   getOwnedTrustDraft,
-  isTrustSignedScanContentType,
   removeTrustSignedScan,
   serializeTrustDraft,
 } from "@/lib/trust-planner/server";
