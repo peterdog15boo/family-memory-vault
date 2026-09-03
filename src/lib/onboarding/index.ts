@@ -16,6 +16,8 @@ import {
   type UserOnboardingState,
 } from "@/lib/db/schema";
 import { normalizeOnboardingState } from "@/lib/ava/onboarding-state";
+import { createTranslator } from "@/lib/i18n";
+import { getLocale } from "@/lib/i18n/server";
 import type {
   OnboardingProgress,
   OnboardingStep,
@@ -88,6 +90,7 @@ export async function getOnboardingProgress(
 
   const state = normalizeState(user?.onboarding);
   const firstName = user?.displayName?.trim().split(/\s+/)[0] || null;
+  const t = createTranslator(await getLocale());
 
   const [mediaCount, memoryCount, inviteCount] = await Promise.all([
     countUserMedia(userId),
@@ -98,37 +101,37 @@ export async function getOnboardingProgress(
   const steps: OnboardingStep[] = [
     {
       id: "welcome",
-      title: "Welcome to your vault",
-      description: "A private, family-safe place for photos and memories.",
+      title: t("onboarding.steps.welcome.title"),
+      description: t("onboarding.steps.welcome.description"),
       href: "/dashboard",
-      ctaLabel: "Got it",
+      ctaLabel: t("onboarding.steps.welcome.cta"),
       optional: false,
       done: Boolean(state.welcomeSeenAt),
     },
     {
       id: "upload",
-      title: "Upload your first photos",
-      description: "Add a few pictures — they're checked for safety first.",
+      title: t("onboarding.steps.upload.title"),
+      description: t("onboarding.steps.upload.description"),
       href: "/upload",
-      ctaLabel: "Upload photos",
+      ctaLabel: t("onboarding.steps.upload.cta"),
       optional: false,
       done: mediaCount > 0,
     },
     {
       id: "memory",
-      title: "Create a memory",
-      description: "Gather photos into an album or story you can revisit.",
+      title: t("onboarding.steps.memory.title"),
+      description: t("onboarding.steps.memory.description"),
       href: "/memories/new",
-      ctaLabel: "Create memory",
+      ctaLabel: t("onboarding.steps.memory.cta"),
       optional: true,
       done: memoryCount > 0,
     },
     {
       id: "invite",
-      title: "Invite family",
-      description: "Share the vault with someone you trust — optional.",
+      title: t("onboarding.steps.invite.title"),
+      description: t("onboarding.steps.invite.description"),
       href: "/family",
-      ctaLabel: "Invite someone",
+      ctaLabel: t("onboarding.steps.invite.cta"),
       optional: true,
       done: inviteCount > 0,
     },

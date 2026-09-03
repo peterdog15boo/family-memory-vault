@@ -1,5 +1,18 @@
 import type { MessageTree } from "@/lib/i18n/types";
 
+/*
+ * English (US) source dictionary.
+ *
+ * Keys that intentionally stay English (or English brand tokens) across locales:
+ * - Product / brand: Family Memory Vault, Family Memory Box, Ava, Ask AI, Legacy+
+ * - Third-party brands: Clerk, Plaid, Stripe, Google Drive, Dropbox, Facebook,
+ *   Instagram, Pinterest, TikTok, X, Face ID, Touch ID, Windows Hello
+ * - Theme product names: Modern, Original (may stay as-is in some locales)
+ * - Currency amounts shown as $199 / $299
+ * - Pure placeholders / templates: {page}, {count}/{max}, {name}: {preview}, etc.
+ * - Loanwords identical in many locales (e.g. French Photos, Documents, Beta, URL)
+ */
+
 export const enUS = {
   meta: {
     appName: "Family Memory Vault",
@@ -891,6 +904,53 @@ export const enUS = {
     next: "Next",
     pause: "Pause",
     play: "Play",
+  },
+  onboarding: {
+    eyebrow: "Getting started",
+    welcomeTitle: "Welcome to your vault",
+    welcomeTitleNamed: "Welcome to your vault, {name}",
+    lead:
+      "A few gentle steps to settle in. Skip anytime — you can always come back to uploads, memories, and family invites later.",
+    dismissAria: "Dismiss onboarding",
+    progressAria: "Onboarding progress",
+    progressCount: "{done} of {total} complete",
+    skipForNow: "Skip for now",
+    optionalBadge: "optional",
+    steps: {
+      welcome: {
+        title: "Welcome to your vault",
+        description: "A private, family-safe place for photos and memories.",
+        cta: "Got it",
+      },
+      upload: {
+        title: "Upload your first photos",
+        description: "Add a few pictures — they're checked for safety first.",
+        cta: "Upload photos",
+      },
+      memory: {
+        title: "Create a memory",
+        description: "Gather photos into an album or story you can revisit.",
+        cta: "Create memory",
+      },
+      invite: {
+        title: "Invite family",
+        description: "Share the vault with someone you trust — optional.",
+        cta: "Invite someone",
+      },
+    },
+  },
+  theme: {
+    aria: "App theme",
+    original: "Original",
+    modern: "Modern",
+    originalDescription:
+      "The familiar warm vault look — paper grain, sage accents, classic display type, and the simpler public landing.",
+    modernDescription:
+      "The default look — cinematic public pages, premium login, gallery-first home, and a calmer family app shell.",
+    useAria: "Use {theme} theme",
+    optionAria: "{theme} theme",
+    savedNote:
+      "Your choice is saved on this device. You can switch back anytime — nothing about your memories or data changes.",
   },
   session: {
     idleTitle: "Are you still there?",

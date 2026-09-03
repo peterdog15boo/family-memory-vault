@@ -144,4 +144,18 @@ describe("t() lookups", () => {
     expect(ja("beta.submit")).not.toBe(en("beta.submit"));
     expect(ja("memoryBox.submitPay")).not.toBe(en("memoryBox.submitPay"));
   });
+
+  it("translates home tiles, journey, idle, and onboarding chrome", () => {
+    const es = createTranslator("es");
+    const de = createTranslator("de");
+    const en = createTranslator("en-US");
+    expect(es("dashboard.tileSharedTitle")).not.toBe(en("dashboard.tileSharedTitle"));
+    expect(es("dashboard.betaSwitchChip")).not.toBe(en("dashboard.betaSwitchChip"));
+    expect(es("completeness.title")).not.toBe(en("completeness.title"));
+    expect(es("session.idleTitle")).not.toBe(en("session.idleTitle"));
+    expect(es("familyChat.title")).not.toBe(en("familyChat.title"));
+    expect(es("onboarding.skipForNow")).not.toBe(en("onboarding.skipForNow"));
+    expect(de("theme.savedNote")).not.toBe(en("theme.savedNote"));
+    expect(es("onboarding.welcomeTitleNamed", { name: "Ada" })).toContain("Ada");
+  });
 });

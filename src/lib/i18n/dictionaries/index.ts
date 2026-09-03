@@ -7,6 +7,10 @@ import { esMissing } from "@/lib/i18n/dictionaries/extras/es-missing";
 import { newKeysByLocale } from "@/lib/i18n/dictionaries/extras/new-keys";
 import { newKeysRound2ByLocale } from "@/lib/i18n/dictionaries/extras/new-keys-round2";
 import { newKeysRound3ByLocale } from "@/lib/i18n/dictionaries/extras/new-keys-round3";
+import { newKeysRound4CjkByLocale } from "@/lib/i18n/dictionaries/extras/new-keys-round4-cjk";
+import { newKeysRound4RomanceByLocale } from "@/lib/i18n/dictionaries/extras/new-keys-round4-romance";
+import { newKeysRound5ByLocale } from "@/lib/i18n/dictionaries/extras/new-keys-round5";
+import { newKeysRound6ByLocale } from "@/lib/i18n/dictionaries/extras/new-keys-round6";
 import { sharedMissingByLocale } from "@/lib/i18n/dictionaries/extras/shared-missing";
 import { termsChromeByLocale } from "@/lib/i18n/dictionaries/extras/terms-chrome";
 import { fr } from "@/lib/i18n/dictionaries/fr";
@@ -61,14 +65,28 @@ function extrasFor(locale: Exclude<AppLocale, "en-US">): MessageTree {
   const round1 = newKeysByLocale[locale] ?? {};
   const round2 = newKeysRound2ByLocale[locale] ?? {};
   const round3 = newKeysRound3ByLocale[locale] ?? {};
+  const round4Romance =
+    (newKeysRound4RomanceByLocale as Partial<Record<AppLocale, MessageTree>>)[
+      locale
+    ] ?? {};
+  const round4Cjk =
+    (newKeysRound4CjkByLocale as Partial<Record<AppLocale, MessageTree>>)[
+      locale
+    ] ?? {};
+  const round5 = newKeysRound5ByLocale[locale] ?? {};
+  const round6 = newKeysRound6ByLocale[locale] ?? {};
   const termsChrome = termsChromeByLocale[locale] ?? {};
-  return deepMergeMessages(
-    deepMergeMessages(
-      deepMergeMessages(deepMergeMessages(shared, round1), round2),
-      round3,
-    ),
+  return [
+    shared,
+    round1,
+    round2,
+    round3,
+    round4Romance,
+    round4Cjk,
+    round5,
+    round6,
     termsChrome,
-  );
+  ].reduce((acc, layer) => deepMergeMessages(acc, layer), {} as MessageTree);
 }
 
 /** Gap-fill overlays for keys added after the initial locale pass. */

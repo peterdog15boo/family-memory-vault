@@ -1,11 +1,10 @@
 "use client";
 
 import { Check } from "lucide-react";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import {
   APP_THEMES,
-  APP_THEME_DESCRIPTIONS,
-  APP_THEME_LABELS,
   type AppTheme,
 } from "@/lib/theme/types";
 import { cn } from "@/lib/utils";
@@ -20,7 +19,18 @@ type ThemeSwitcherProps = {
  * Choose Original vs Modern appearance. Fully reversible.
  */
 export function ThemeSwitcher({ compact = false, className }: ThemeSwitcherProps) {
+  const t = useTranslations();
   const { theme, setTheme, ready } = useTheme();
+
+  function labelFor(id: AppTheme) {
+    return id === "modern" ? t("theme.modern") : t("theme.original");
+  }
+
+  function descriptionFor(id: AppTheme) {
+    return id === "modern"
+      ? t("theme.modernDescription")
+      : t("theme.originalDescription");
+  }
 
   function select(next: AppTheme) {
     setTheme(next);
@@ -34,10 +44,11 @@ export function ThemeSwitcher({ compact = false, className }: ThemeSwitcherProps
           className,
         )}
         role="group"
-        aria-label="App theme"
+        aria-label={t("theme.aria")}
       >
         {APP_THEMES.map((id) => {
           const active = theme === id;
+          const label = labelFor(id);
           return (
             <button
               key={id}
@@ -51,9 +62,9 @@ export function ThemeSwitcher({ compact = false, className }: ThemeSwitcherProps
                   : "text-[color:var(--ink-muted)] hover:text-[color:var(--ink)]",
               )}
               aria-pressed={active}
-              aria-label={`${APP_THEME_LABELS[id]} theme`}
+              aria-label={t("theme.optionAria", { theme: label })}
             >
-              {APP_THEME_LABELS[id]}
+              {label}
             </button>
           );
         })}
@@ -66,6 +77,7 @@ export function ThemeSwitcher({ compact = false, className }: ThemeSwitcherProps
       <div className="grid gap-3 sm:grid-cols-2">
         {APP_THEMES.map((id) => {
           const active = theme === id;
+          const label = labelFor(id);
           return (
             <button
               key={id}
@@ -73,7 +85,7 @@ export function ThemeSwitcher({ compact = false, className }: ThemeSwitcherProps
               disabled={!ready}
               onClick={() => select(id)}
               aria-pressed={active}
-              aria-label={`Use ${APP_THEME_LABELS[id]} theme`}
+              aria-label={t("theme.useAria", { theme: label })}
               className={cn(
                 "group relative rounded-[var(--radius-lg)] border px-4 py-4 text-left transition duration-200",
                 "bg-[color:var(--surface)] hover:border-[color:var(--accent)]/40",
@@ -85,10 +97,10 @@ export function ThemeSwitcher({ compact = false, className }: ThemeSwitcherProps
               <span className="flex items-start justify-between gap-3">
                 <span>
                   <span className="block font-display text-lg tracking-tight text-[color:var(--ink)]">
-                    {APP_THEME_LABELS[id]}
+                    {label}
                   </span>
                   <span className="mt-1.5 block text-sm leading-relaxed text-[color:var(--ink-muted)]">
-                    {APP_THEME_DESCRIPTIONS[id]}
+                    {descriptionFor(id)}
                   </span>
                 </span>
                 <span
@@ -126,8 +138,7 @@ export function ThemeSwitcher({ compact = false, className }: ThemeSwitcherProps
         })}
       </div>
       <p className="text-xs text-[color:var(--ink-muted)]">
-        Your choice is saved on this device. You can switch back anytime —
-        nothing about your memories or data changes.
+        {t("theme.savedNote")}
       </p>
     </div>
   );

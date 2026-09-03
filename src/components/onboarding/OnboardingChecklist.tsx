@@ -11,9 +11,10 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { useTranslations } from "@/components/i18n/LocaleProvider";
+import { MediaSection } from "@/components/media-section";
 import { cn } from "@/lib/utils";
 import type { OnboardingProgress, OnboardingStepId } from "@/lib/onboarding/types";
-import { MediaSection } from "@/components/media-section";
 
 type Props = {
   progress: OnboardingProgress;
@@ -27,6 +28,7 @@ const STEP_ICONS: Record<OnboardingStepId, typeof Sparkles> = {
 };
 
 export function OnboardingChecklist({ progress: initial }: Props) {
+  const t = useTranslations();
   const router = useRouter();
   const [progress, setProgress] = useState(initial);
   const [hidden, setHidden] = useState(!initial.show);
@@ -56,7 +58,9 @@ export function OnboardingChecklist({ progress: initial }: Props) {
     void postAction("welcome_seen");
   }
 
-  const name = progress.firstName ? `, ${progress.firstName}` : "";
+  const welcomeTitle = progress.firstName
+    ? t("onboarding.welcomeTitleNamed", { name: progress.firstName })
+    : t("onboarding.welcomeTitle");
 
   return (
     <MediaSection
@@ -71,17 +75,16 @@ export function OnboardingChecklist({ progress: initial }: Props) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-medium uppercase tracking-wide text-accent-deep">
-            Getting started
+            {t("onboarding.eyebrow")}
           </p>
           <h2
             id="onboarding-heading"
             className="mt-1 font-display text-xl tracking-tight text-ink sm:text-2xl"
           >
-            Welcome to your vault{name}
+            {welcomeTitle}
           </h2>
           <p className="mt-1.5 max-w-lg text-sm leading-relaxed text-ink-muted">
-            A few gentle steps to settle in. Skip anytime — you can always come
-            back to uploads, memories, and family invites later.
+            {t("onboarding.lead")}
           </p>
         </div>
         <button
@@ -89,17 +92,19 @@ export function OnboardingChecklist({ progress: initial }: Props) {
           onClick={handleDismiss}
           disabled={pending}
           className="shrink-0 rounded-md p-1.5 text-ink-muted transition hover:bg-ink/5 hover:text-ink"
-          aria-label="Dismiss onboarding"
+          aria-label={t("onboarding.dismissAria")}
         >
           <X className="size-4" />
         </button>
       </div>
 
-      {/* Progress bar */}
       <div className="mt-4">
         <div className="flex items-center justify-between gap-2 text-xs text-ink-muted">
           <span>
-            {progress.completedCount} of {progress.totalCount} complete
+            {t("onboarding.progressCount", {
+              done: progress.completedCount,
+              total: progress.totalCount,
+            })}
           </span>
           <span>{progress.percent}%</span>
         </div>
@@ -109,7 +114,7 @@ export function OnboardingChecklist({ progress: initial }: Props) {
           aria-valuenow={progress.percent}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label="Onboarding progress"
+          aria-label={t("onboarding.progressAria")}
         >
           <div
             className="h-full rounded-full bg-accent transition-all duration-500"
@@ -158,7 +163,7 @@ export function OnboardingChecklist({ progress: initial }: Props) {
                   {step.title}
                   {step.optional && !step.done ? (
                     <span className="ml-1.5 text-xs font-normal text-ink-muted">
-                      optional
+                      {t("onboarding.optionalBadge")}
                     </span>
                   ) : null}
                 </p>
@@ -200,7 +205,7 @@ export function OnboardingChecklist({ progress: initial }: Props) {
           disabled={pending}
           className="text-xs font-medium text-ink-muted transition hover:text-ink"
         >
-          Skip for now
+          {t("onboarding.skipForNow")}
         </button>
       </div>
     </MediaSection>
