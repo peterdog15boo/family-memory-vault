@@ -17,8 +17,10 @@ import { FamilyChatPanel } from "@/components/family-chat/FamilyChatPanel";
 import { FeedbackButton } from "@/components/feedback/FeedbackButton";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { AppFooter } from "@/components/dashboard/AppFooter";
+import { DashboardAccountMenu } from "@/components/dashboard/DashboardAccountMenu";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
 import { DashboardUserMenu } from "@/components/dashboard/DashboardUserMenu";
+import { useShellSectionTitle } from "@/components/dashboard/useShellSectionTitle";
 import { useTranslations } from "@/components/i18n/LocaleProvider";
 import { CelebrationHost } from "@/components/celebrations/CelebrationHost";
 import { PasskeyEnrollPrompt } from "@/components/auth/PasskeyEnrollPrompt";
@@ -26,6 +28,10 @@ import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { PushSubscriptionSync } from "@/components/notifications/PushSubscriptionSync";
 import { IdleSessionGuard } from "@/components/session/IdleSessionGuard";
 import { useTheme } from "@/components/theme/ThemeProvider";
+import {
+  SHELL_COMPACT_CHROME_MQ,
+  useMediaQuery,
+} from "@/hooks/useMediaQuery";
 import type { AvaProgress } from "@/lib/ava/types";
 import { APP_HOME_PATH } from "@/lib/routes";
 import type { IdleTimeoutPolicy } from "@/lib/session/idle-timeout-policy";
@@ -48,6 +54,8 @@ type DashboardShellProps = {
 /**
  * Authenticated app chrome.
  * Slim full-bleed header → sidebar + main (page heroes live in main) → full-bleed footer.
+ * Phone / short landscape: logo | section | Ava | bell | account menu.
+ * Desktop wide: full header actions unchanged.
  */
 export function DashboardShell(props: DashboardShellProps) {
   return (
@@ -74,18 +82,23 @@ function DashboardShellInner({
   const t = useTranslations();
   const { open, openAskAi } = useAskAi();
   const { closeFamilyChat } = useFamilyChat();
+  const compactChrome = useMediaQuery(SHELL_COMPACT_CHROME_MQ);
+  const sectionTitle = useShellSectionTitle();
 
   return (
     <div
       className={cn(
         "dashboard-shell flex min-h-full flex-col bg-canvas",
         isModern && "dashboard-shell--modern bg-transparent",
+        compactChrome && "dashboard-shell--compact-chrome",
       )}
+      data-shell-chrome={compactChrome ? "compact" : "expanded"}
     >
       <header
         className={cn(
-          "dashboard-shell-header relative z-40 flex w-full shrink-0 items-center justify-between gap-4 border-b border-ink/8 bg-canvas/90 px-5 py-4 backdrop-blur-sm",
+          "dashboard-shell-header relative z-40 flex w-full shrink-0 items-center justify-between gap-3 border-b border-ink/8 bg-canvas/90 px-4 py-3 backdrop-blur-sm sm:gap-4 sm:px-5 sm:py-4",
           isModern && "dashboard-shell-header--modern",
+          compactChrome && "dashboard-shell-header--compact",
         )}
       >
         {isModern ? (
@@ -95,14 +108,19 @@ function DashboardShellInner({
               className="inline-flex shrink-0 transition-opacity hover:opacity-80"
               aria-label={t("meta.appName")}
             >
-              <BrandLogo tone="onDark" size="lg" priority decorative />
+              <BrandLogo
+                tone="onDark"
+                size={compactChrome ? "md" : "lg"}
+                priority
+                decorative
+              />
             </Link>
             <p className="dashboard-shell-greeting truncate text-sm text-ink-muted lg:text-[0.95rem]">
               {t("nav.welcomeBack")}
             </p>
           </div>
         ) : (
-          <div className="dashboard-shell-safety flex items-start gap-2 lg:hidden">
+          <div className="dashboard-shell-safety flex min-w-0 items-start gap-2 lg:hidden">
             <Shield
               className="mt-0.5 size-4 shrink-0 text-accent"
               aria-hidden
@@ -112,31 +130,56 @@ function DashboardShellInner({
             </p>
           </div>
         )}
-        <div className="dashboard-shell-toolbar ml-auto flex items-center gap-2 sm:gap-3">
-          <FeedbackButton placement="header" />
-          <FamilyChatHeaderButton />
-          <button
-            type="button"
-            onClick={() => {
-              closeFamilyChat();
-              openAskAi();
-            }}
-            className={cn(
-              "dashboard-icon-btn relative inline-flex items-center justify-center gap-1.5 rounded-md border border-ink/10 bg-canvas px-2.5 py-2 text-ink-muted transition-colors hover:border-ink/20 hover:text-ink sm:px-3",
-              open && "border-accent/30 text-accent-deep",
-            )}
-            aria-label={t("nav.askAi")}
-            aria-expanded={open}
-            aria-haspopup="dialog"
-          >
-            <Bot className="size-4" aria-hidden />
-            <span className="hidden text-xs font-medium sm:inline">
-              {t("nav.askAi")}
-            </span>
-          </button>
-          <span id="ava-header-slot" className="inline-flex items-center" />
+
+        {sectionTitle ? (
+          <p className="dashboard-shell-section-title min-w-0 flex-1 truncate text-center text-sm font-semibold text-ink">
+            {sectionTitle}
+          </p>
+        ) : (
+          <span
+            className="dashboard-shell-section-spacer min-w-0 flex-1"
+            aria-hidden
+          />
+        )}
+
+        <div className="dashboard-shell-toolbar ml-auto flex shrink-0 items-center gap-1.5 sm:gap-3">
+          <div className="dashboard-shell-toolbar-actions-expanded flex items-center gap-2 sm:gap-3">
+            <FeedbackButton placement="header" />
+            <FamilyChatHeaderButton />
+            <button
+              type="button"
+              onClick={() => {
+                closeFamilyChat();
+                openAskAi();
+              }}
+              className={cn(
+                "dashboard-icon-btn relative inline-flex items-center justify-center gap-1.5 rounded-md border border-ink/10 bg-canvas px-2.5 py-2 text-ink-muted transition-colors hover:border-ink/20 hover:text-ink sm:px-3",
+                open && "border-accent/30 text-accent-deep",
+              )}
+              aria-label={t("nav.askAi")}
+              aria-expanded={open}
+              aria-haspopup="dialog"
+            >
+              <Bot className="size-4" aria-hidden />
+              <span className="hidden text-xs font-medium sm:inline">
+                {t("nav.askAi")}
+              </span>
+            </button>
+          </div>
+
+          <span
+            id="ava-header-slot"
+            className="dashboard-shell-ava-slot inline-flex items-center"
+          />
+
           <NotificationBell initialUnreadCount={initialUnreadCount} />
-          <DashboardUserMenu displayName={displayName} email={email} />
+
+          <div className="dashboard-shell-toolbar-account-expanded">
+            <DashboardUserMenu displayName={displayName} email={email} />
+          </div>
+          <div className="dashboard-shell-toolbar-account-compact">
+            <DashboardAccountMenu displayName={displayName} email={email} />
+          </div>
         </div>
       </header>
 

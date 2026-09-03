@@ -60,6 +60,7 @@ export function SlideshowPlayer({
   const dialogRef = useRef<HTMLDivElement>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
   const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openedAtRef = useRef(Date.now());
   const indexRef = useRef(index);
   indexRef.current = index;
 
@@ -219,7 +220,8 @@ export function SlideshowPlayer({
     return createPortal(
       <div
         ref={dialogRef}
-        className="slideshow-player fixed inset-0 z-[80] flex items-center justify-center bg-ink/90 p-6"
+        data-app-portal=""
+        className="slideshow-player fixed inset-0 z-[200] flex items-center justify-center bg-ink/90 p-6"
         role="dialog"
         aria-modal="true"
         aria-labelledby="slideshow-empty-title"
@@ -251,7 +253,8 @@ export function SlideshowPlayer({
   return createPortal(
     <div
       ref={dialogRef}
-      className="slideshow-player fixed inset-0 z-[80] flex flex-col bg-[#1a1816]"
+      data-app-portal=""
+      className="slideshow-player fixed inset-0 z-[200] flex flex-col bg-[#1a1816]"
       role="dialog"
       aria-modal="true"
       aria-labelledby="slideshow-title"
@@ -298,10 +301,13 @@ export function SlideshowPlayer({
         </div>
       </div>
 
-      {/* Stage — click empty chrome to close; media stops propagation */}
+      {/* Stage — click empty chrome to close; ignore the opening gesture */}
       <div
         className="relative flex min-h-0 flex-1 items-center justify-center px-3 pb-24 sm:px-8"
-        onClick={onClose}
+        onClick={() => {
+          if (Date.now() - openedAtRef.current < 400) return;
+          onClose();
+        }}
       >
         <button
           type="button"

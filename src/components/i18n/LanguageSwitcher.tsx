@@ -54,7 +54,9 @@ export function LanguageSwitcher({
   const onDark = tone === "onDark";
   const selectClass = cn(
     "ui-input w-full min-w-0 appearance-none py-2 text-sm leading-normal",
-    compact ? "min-h-9 max-w-[10.5rem] py-1.5 pl-2 pr-7" : "mt-1.5 min-h-11 max-w-sm",
+    compact
+      ? "min-h-9 max-w-[10.5rem] py-1.5 pl-2 pr-7 [.dashboard-account-menu-lang_&]:max-w-none [.dashboard-account-menu-lang_&]:w-full"
+      : "mt-1.5 min-h-11 max-w-sm",
     onDark &&
       "border-white/25 bg-black/35 text-white shadow-none focus:border-white/45 focus:ring-white/20",
   );

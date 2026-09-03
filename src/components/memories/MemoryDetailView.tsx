@@ -159,6 +159,8 @@ export function MemoryDetailView({
     setNotice(null);
     if (!canMakeMovie) {
       setError(makeMovieDisabledReason);
+      setPickedIds([]);
+      setAddOpen(true);
       return;
     }
     setMovieOpen(true);
@@ -479,9 +481,9 @@ export function MemoryDetailView({
               </>
             )}
 
-            {/* Same action bar for every memory — never gated on age, cover, or edit mode. */}
+            {/* Same action bar for every memory — never gated on age, cover, flags, or edit mode. */}
             {allowEdit || allowManageMedia ? (
-              <div className="mt-5 flex flex-wrap gap-2">
+              <div className="memory-detail-actions mt-5 flex flex-wrap gap-2">
                 {allowEdit && !editing ? (
                   <button
                     type="button"
@@ -508,14 +510,26 @@ export function MemoryDetailView({
                 {allowManageMedia ? (
                   <button
                     type="button"
-                    onClick={openMakeMovie}
-                    disabled={!canMakeMovie}
+                    onClick={() => {
+                      if (!canMakeMovie) {
+                        setError(makeMovieDisabledReason);
+                        setPickedIds([]);
+                        setAddOpen(true);
+                        return;
+                      }
+                      openMakeMovie();
+                    }}
                     title={makeMovieDisabledReason ?? undefined}
                     aria-disabled={!canMakeMovie}
-                    className="ui-btn ui-btn-primary"
+                    className={cn(
+                      "ui-btn ui-btn-primary",
+                      !canMakeMovie && "opacity-70",
+                    )}
                   >
                     <Film className="size-3.5" aria-hidden />
-                    {t("pages.moviesMake")}
+                    {canMakeMovie
+                      ? t("pages.moviesMake")
+                      : t("memories.makeMovieNeedMediaShort")}
                   </button>
                 ) : null}
                 <button
@@ -524,15 +538,21 @@ export function MemoryDetailView({
                     setError(null);
                     setNotice(null);
                     if (memory.media.length === 0) {
-                      setError("Add a few photos before playing a slideshow.");
+                      setError(t("memories.slideshowNeedMedia"));
                       return;
                     }
                     setSlideshowOpen(true);
                   }}
+                  disabled={memory.media.length === 0}
+                  title={
+                    memory.media.length === 0
+                      ? t("memories.slideshowNeedMedia")
+                      : undefined
+                  }
                   className="ui-btn ui-btn-secondary"
                 >
                   <Clapperboard className="size-3.5" aria-hidden />
-                  Play slideshow
+                  {t("memories.playSlideshow")}
                 </button>
                 {allowManageMedia ? (
                   <button
@@ -550,22 +570,28 @@ export function MemoryDetailView({
                 ) : null}
               </div>
             ) : (
-              <div className="mt-5">
+              <div className="memory-detail-actions mt-5">
                 <button
                   type="button"
                   onClick={() => {
                     setError(null);
                     setNotice(null);
                     if (memory.media.length === 0) {
-                      setError("Add a few photos before playing a slideshow.");
+                      setError(t("memories.slideshowNeedMedia"));
                       return;
                     }
                     setSlideshowOpen(true);
                   }}
+                  disabled={memory.media.length === 0}
+                  title={
+                    memory.media.length === 0
+                      ? t("memories.slideshowNeedMedia")
+                      : undefined
+                  }
                   className="ui-btn ui-btn-primary"
                 >
                   <Clapperboard className="size-3.5" aria-hidden />
-                  Play slideshow
+                  {t("memories.playSlideshow")}
                 </button>
               </div>
             )}
@@ -661,12 +687,17 @@ export function MemoryDetailView({
               <button
                 type="button"
                 onClick={openMakeMovie}
-                disabled={!canMakeMovie}
                 title={makeMovieDisabledReason ?? undefined}
-                className="ui-btn ui-btn-primary ui-btn-sm"
+                aria-disabled={!canMakeMovie}
+                className={cn(
+                  "ui-btn ui-btn-primary ui-btn-sm",
+                  !canMakeMovie && "opacity-70",
+                )}
               >
                 <Film className="size-3.5" aria-hidden />
-                {t("pages.moviesMake")}
+                {canMakeMovie
+                  ? t("pages.moviesMake")
+                  : t("memories.makeMovieNeedMediaShort")}
               </button>
             ) : null}
             <div className="inline-flex rounded-md border border-ink/10 bg-canvas p-0.5 text-xs">
@@ -821,12 +852,17 @@ export function MemoryDetailView({
             <button
               type="button"
               onClick={openMakeMovie}
-              disabled={!canMakeMovie}
               title={makeMovieDisabledReason ?? undefined}
-              className="ui-btn ui-btn-secondary"
+              aria-disabled={!canMakeMovie}
+              className={cn(
+                "ui-btn ui-btn-secondary",
+                !canMakeMovie && "opacity-70",
+              )}
             >
               <Film className="size-3.5" aria-hidden />
-              {t("pages.moviesMake")}
+              {canMakeMovie
+                ? t("pages.moviesMake")
+                : t("memories.makeMovieNeedMediaShort")}
             </button>
           </div>
           <MovieLibrary
@@ -846,7 +882,8 @@ export function MemoryDetailView({
         ? createPortal(
             <div
               ref={addSheetRef}
-              className="fixed inset-0 z-[100] flex items-end justify-center bg-ink/50 p-3 backdrop-blur-sm sm:items-center sm:p-4"
+              data-app-portal=""
+              className="fixed inset-0 z-[200] flex items-end justify-center bg-ink/50 p-3 backdrop-blur-sm sm:items-center sm:p-4"
               role="dialog"
               aria-modal="true"
               aria-labelledby="add-photos-memory-title"
@@ -984,7 +1021,8 @@ export function MemoryDetailView({
         ? createPortal(
             <div
               ref={lightboxRef}
-              className="fixed inset-0 z-[100] flex items-center justify-center bg-ink/70 p-4 backdrop-blur-sm"
+              data-app-portal=""
+              className="fixed inset-0 z-[200] flex items-center justify-center bg-ink/70 p-4 backdrop-blur-sm"
               role="dialog"
               aria-modal="true"
               aria-labelledby="memory-lightbox-title"

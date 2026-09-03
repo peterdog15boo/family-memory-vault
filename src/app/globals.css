@@ -372,9 +372,11 @@ body {
 [data-theme="modern"] body.page-atmosphere > .slideshow-player,
 [data-theme="modern"] body.page-atmosphere > .movie-player,
 [data-theme="modern"] body.page-atmosphere > .movie-share-dialog,
+[data-theme="modern"] body.page-atmosphere > .dashboard-account-menu-overlay,
 [data-theme="modern"] body.page-atmosphere > [data-feedback-modal],
 [data-theme="modern"] body.page-atmosphere > [data-app-portal] {
   position: fixed;
+  z-index: 200;
 }
 
 @keyframes modern-atmosphere-sheen {
@@ -8348,6 +8350,150 @@ html {
 
 [data-theme="modern"] .dashboard-shell-toolbar {
   gap: 0.7rem;
+}
+
+/* Compact phone / short-landscape account overflow */
+.dashboard-account-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: max(0.75rem, env(safe-area-inset-top, 0px))
+    max(0.75rem, env(safe-area-inset-right, 0px))
+    1rem
+    max(0.75rem, env(safe-area-inset-left, 0px));
+  background: var(--scrim, rgb(12 10 8 / 0.45));
+}
+
+.dashboard-account-menu-panel {
+  width: min(100%, 20rem);
+  max-height: min(85dvh, 32rem);
+  overflow: auto;
+  border-radius: 1rem;
+  border: 1px solid var(--border-subtle, color-mix(in srgb, var(--ink) 10%, transparent));
+  background: var(--surface-elevated, var(--canvas));
+  box-shadow: var(--shadow-lg, 0 18px 40px rgba(0, 0, 0, 0.2));
+}
+
+.dashboard-account-menu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.65rem;
+  border-radius: 0.65rem;
+  padding: 0.7rem 0.75rem;
+  text-align: left;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--ink);
+  transition: background-color 0.15s ease;
+}
+
+.dashboard-account-menu-item:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.dashboard-account-menu-lang {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+}
+
+.dashboard-account-menu-lang .ui-input,
+.dashboard-account-menu-lang select {
+  max-width: none !important;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.dashboard-shell-toolbar-account-compact {
+  display: none;
+}
+
+.dashboard-shell-section-title,
+.dashboard-shell-section-spacer {
+  display: none;
+}
+
+/* Phone portrait + short landscape under desktop breakpoint */
+@media (max-width: 639px), ((max-height: 500px) and (max-width: 1023px)) {
+  .dashboard-shell-toolbar-actions-expanded,
+  .dashboard-shell-toolbar-account-expanded {
+    display: none !important;
+  }
+
+  .dashboard-shell-toolbar-account-compact {
+    display: block !important;
+  }
+
+  .dashboard-shell-section-title,
+  .dashboard-shell-section-spacer {
+    display: block;
+  }
+
+  .dashboard-shell-greeting {
+    display: none !important;
+  }
+
+  .dashboard-shell-header {
+    gap: 0.5rem;
+    padding-block: 0.55rem;
+    padding-inline: 0.75rem;
+  }
+
+  .dashboard-shell-brand-cluster .brand-logo {
+    height: 2.35rem !important;
+    width: calc(2.35rem * 1.534) !important;
+  }
+
+  .dashboard-shell-toolbar {
+    gap: 0.35rem;
+  }
+
+  .dashboard-shell-toolbar .dashboard-icon-btn,
+  .dashboard-shell-toolbar .dashboard-account-menu-trigger {
+    min-height: 2.5rem;
+    min-width: 2.5rem;
+  }
+}
+
+/* Desktop wide — always expanded chrome, never compact overflow */
+@media (min-width: 1024px) {
+  .dashboard-shell-toolbar-actions-expanded,
+  .dashboard-shell-toolbar-account-expanded {
+    display: flex !important;
+  }
+
+  .dashboard-shell-toolbar-account-compact {
+    display: none !important;
+  }
+
+  .dashboard-shell-section-title,
+  .dashboard-shell-section-spacer {
+    display: none !important;
+  }
+}
+
+.dashboard-shell-header--compact {
+  gap: 0.5rem;
+  padding-block: 0.55rem;
+  padding-inline: 0.75rem;
+}
+
+.dashboard-shell--compact-chrome .dashboard-shell-brand-cluster .brand-logo {
+  height: 2.35rem !important;
+  width: calc(2.35rem * 1.534) !important;
+}
+
+.dashboard-shell--compact-chrome .dashboard-shell-section-title {
+  font-size: 0.875rem;
+  letter-spacing: -0.01em;
+}
+
+.dashboard-shell--compact-chrome .dashboard-shell-ava-slot {
+  margin-inline-end: 0.15rem;
 }
 
 [data-theme="modern"] .memory-list-grid {

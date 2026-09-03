@@ -1079,7 +1079,13 @@ function AvaHeaderSlot({ children }: { children: ReactNode }) {
   const [target, setTarget] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
-    setTarget(document.getElementById("ava-header-slot"));
+    function sync() {
+      setTarget(document.getElementById("ava-header-slot"));
+    }
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
   }, []);
 
   if (!target || !children) return null;

@@ -640,7 +640,8 @@ export function CreateMoviePanel({
   return createPortal(
     <div
       ref={panelRef}
-      className="fixed inset-0 z-[100] flex items-end justify-center overflow-y-auto bg-ink/45 p-0 backdrop-blur-[2px] sm:items-center sm:p-6"
+      data-app-portal=""
+      className="fixed inset-0 z-[200] flex items-end justify-center overflow-y-auto bg-ink/45 p-0 backdrop-blur-[2px] sm:items-center sm:p-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby="create-movie-title"
