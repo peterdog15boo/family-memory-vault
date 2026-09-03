@@ -34,6 +34,10 @@ import {
 } from "@/components/i18n/LocaleProvider";
 import { useOverlayA11y } from "@/hooks/useOverlayA11y";
 import { formatDate, type TranslateFn } from "@/lib/i18n";
+import {
+  computeNotificationPanelPos,
+  type NotificationPanelPos,
+} from "@/components/notifications/notification-panel-position";
 
 type NotificationItem = {
   id: string;
@@ -64,18 +68,7 @@ const ICON_MAP: Record<string, typeof Bell> = {
   moderation_attention: Shield,
 };
 
-/** Above page chrome / FABs so the inbox stays readable. */
-const NOTIFICATION_PANEL_Z = 90;
-/** Margin from viewport edges when clamping the portal panel. */
-const VIEWPORT_EDGE = 8;
-/** Preferred panel width (matches sm:w-96); shrinks on narrow screens. */
-const PANEL_PREFERRED_WIDTH = 24 * 16;
-
-type PanelPos = {
-  top: number;
-  left: number;
-  width: number;
-};
+type PanelPos = NotificationPanelPos;
 
 function timeAgo(dateStr: string, t: TranslateFn, locale: string): string {
   const seconds = Math.floor(
@@ -196,44 +189,41 @@ export function NotificationBell({
   );
 
   /**
-   * Anchor the portal panel to the bell, choosing left vs right alignment from
-   * the trigger’s horizontal position, then clamp so it never leaves the viewport.
+   * Anchor the portal panel to the bell. Narrow viewports get a full-width
+   * sheet under the header; desktop stays right-aligned when the bell is on
+   * the right. Always clamp inside the viewport.
    */
   const updatePanelPosition = useCallback(() => {
     const btn = buttonRef.current;
     if (!btn) return;
 
     const rect = btn.getBoundingClientRect();
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const width = Math.min(PANEL_PREFERRED_WIDTH, vw - VIEWPORT_EDGE * 2);
-
-    // Left-half trigger → open left-aligned; right-half → open right-aligned.
-    const triggerCenterX = rect.left + rect.width / 2;
-    const alignStart = triggerCenterX < vw / 2;
-
-    let left = alignStart ? rect.left : rect.right - width;
-    left = Math.min(
-      Math.max(VIEWPORT_EDGE, left),
-      Math.max(VIEWPORT_EDGE, vw - VIEWPORT_EDGE - width),
+    setPanelPos(
+      computeNotificationPanelPos({
+        trigger: {
+          left: rect.left,
+          right: rect.right,
+          top: rect.top,
+          bottom: rect.bottom,
+          width: rect.width,
+        },
+        vw: window.innerWidth,
+        vh: window.innerHeight,
+        panelHeight: panelRef.current?.offsetHeight ?? 0,
+      }),
     );
-
-    let top = rect.bottom + 8;
-    const measuredHeight = panelRef.current?.offsetHeight ?? 0;
-    if (measuredHeight > 0) {
-      const maxTop = Math.max(
-        VIEWPORT_EDGE,
-        vh - VIEWPORT_EDGE - measuredHeight,
-      );
-      if (top > maxTop) {
-        // Prefer flipping above the bell when there isn’t room below.
-        const above = rect.top - measuredHeight - 8;
-        top = above >= VIEWPORT_EDGE ? above : maxTop;
-      }
-    }
-
-    setPanelPos({ top, left, width });
   }, []);
+
+  function toggleOpen() {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    // Measure before paint so the portal is not gated on a null panelPos
+    // (which left the click looking like a no-op when layout lagged).
+    updatePanelPosition();
+    setOpen(true);
+  }
 
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
@@ -337,21 +327,18 @@ export function NotificationBell({
     };
   }, [open, syncUnreadFromServer]);
 
-  // Close on outside click
+  // Close on outside pointer — backdrop handles most cases; this covers
+  // clicks that miss the transparent scrim (e.g. into other portaled UI).
   useEffect(() => {
     if (!open) return;
-    function handleClick(e: MouseEvent) {
-      if (
-        panelRef.current &&
-        !panelRef.current.contains(e.target as Node) &&
-        buttonRef.current &&
-        !buttonRef.current.contains(e.target as Node)
-      ) {
-        setOpen(false);
-      }
+    function handlePointerDown(e: PointerEvent) {
+      const target = e.target as Node;
+      if (panelRef.current?.contains(target)) return;
+      if (buttonRef.current?.contains(target)) return;
+      setOpen(false);
     }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [open]);
 
   useOverlayA11y({
@@ -425,139 +412,151 @@ export function NotificationBell({
   const hasUnread = unreadCount > 0;
 
   const panel =
-    open && mounted && panelPos
+    open && mounted
       ? createPortal(
-          <div
-            ref={panelRef}
-            className="ui-popover fixed overflow-hidden rounded-xl border border-ink/10 bg-canvas shadow-lg"
-            style={{
-              top: panelPos.top,
-              left: panelPos.left,
-              width: panelPos.width,
-              maxWidth: `calc(100vw - ${VIEWPORT_EDGE * 2}px)`,
-              zIndex: NOTIFICATION_PANEL_Z,
-            }}
-            role="dialog"
-            aria-modal="true"
-            aria-label={t("notifications.ui.title")}
-            tabIndex={-1}
-          >
-            <div className="flex items-center justify-between border-b border-ink/8 px-4 py-3">
-              <h2 className="text-sm font-semibold text-ink">
-                {t("notifications.ui.title")}
-              </h2>
-              <div className="flex items-center gap-2">
-                {hasUnread ? (
+          <>
+            {/* Transparent scrim — closes on backdrop tap; stays under the panel. */}
+            <div
+              data-app-portal=""
+              className="fixed inset-0 z-[200] bg-transparent"
+              aria-hidden
+              onClick={() => setOpen(false)}
+            />
+            <div
+              ref={panelRef}
+              data-app-portal=""
+              className="ui-popover notification-bell-panel fixed overflow-hidden rounded-xl border border-ink/10 bg-canvas shadow-lg"
+              style={{
+                top: panelPos?.top ?? 0,
+                left: panelPos?.left ?? 8,
+                width: panelPos?.width ?? `calc(100vw - 16px)`,
+                maxWidth: "calc(100vw - 16px)",
+                maxHeight: "min(24rem, calc(100vh - 16px))",
+                visibility: panelPos ? "visible" : "hidden",
+                zIndex: 201,
+              }}
+              role="dialog"
+              aria-modal="true"
+              aria-label={t("notifications.ui.title")}
+              tabIndex={-1}
+            >
+              <div className="flex items-center justify-between border-b border-ink/8 px-4 py-3">
+                <h2 className="text-sm font-semibold text-ink">
+                  {t("notifications.ui.title")}
+                </h2>
+                <div className="flex items-center gap-2">
+                  {hasUnread ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleMarkAllRead()}
+                      className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-accent-deep transition hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                    >
+                      <CheckCheck className="size-3" aria-hidden />
+                      {t("notifications.ui.markAllRead")}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
-                    onClick={() => void handleMarkAllRead()}
-                    className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-accent-deep transition hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                    onClick={() => setOpen(false)}
+                    className="rounded p-1 text-ink-muted transition hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                    aria-label={t("notifications.ui.close")}
                   >
-                    <CheckCheck className="size-3" aria-hidden />
-                    {t("notifications.ui.markAllRead")}
+                    <X className="size-4" />
                   </button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => setOpen(false)}
-                  className="rounded p-1 text-ink-muted transition hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-                  aria-label={t("notifications.ui.close")}
-                >
-                  <X className="size-4" />
-                </button>
+                </div>
               </div>
-            </div>
 
-            <div className="max-h-[min(24rem,70vh)] overflow-y-auto overscroll-contain">
-              {loading && items.length === 0 ? (
-                <div className="flex items-center justify-center py-10">
-                  <Loader2 className="size-5 animate-spin text-ink-muted" />
-                </div>
-              ) : items.length === 0 ? (
-                <div className="px-4 py-10 text-center">
-                  <Bell className="mx-auto size-8 text-ink/20" aria-hidden />
-                  <p className="mt-2 text-sm text-ink-muted">
-                    {t("notifications.ui.empty")}
-                  </p>
-                  <p className="mt-1 text-xs text-ink-muted">
-                    {t("notifications.ui.emptyHint")}
-                  </p>
-                </div>
-              ) : (
-                <ul>
-                  {items.map((item) => {
-                    const Icon = ICON_MAP[item.type] ?? Bell;
-                    const isUnread = !item.readAt;
+              <div className="max-h-[min(24rem,70vh)] overflow-y-auto overscroll-contain">
+                {loading && items.length === 0 ? (
+                  <div className="flex items-center justify-center py-10">
+                    <Loader2 className="size-5 animate-spin text-ink-muted" />
+                  </div>
+                ) : items.length === 0 ? (
+                  <div className="px-4 py-10 text-center">
+                    <Bell className="mx-auto size-8 text-ink/20" aria-hidden />
+                    <p className="mt-2 text-sm text-ink-muted">
+                      {t("notifications.ui.caughtUp")}
+                    </p>
+                    <p className="mt-1 text-xs text-ink-muted">
+                      {t("notifications.ui.emptyHint")}
+                    </p>
+                  </div>
+                ) : (
+                  <ul>
+                    {items.map((item) => {
+                      const Icon = ICON_MAP[item.type] ?? Bell;
+                      const isUnread = !item.readAt;
 
-                    return (
-                      <li
-                        key={item.id}
-                        className="border-b border-ink/5 last:border-0"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => handleClickNotification(item)}
-                          className={cn(
-                            "flex w-full gap-3 px-4 py-3 text-left transition hover:bg-ink/[0.03]",
-                            isUnread && "bg-accent/[0.04]",
-                          )}
+                      return (
+                        <li
+                          key={item.id}
+                          className="border-b border-ink/5 last:border-0"
                         >
-                          <span
+                          <button
+                            type="button"
+                            onClick={() => handleClickNotification(item)}
                             className={cn(
-                              "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg",
-                              isUnread
-                                ? "bg-accent/15 text-accent-deep"
-                                : "bg-ink/5 text-ink-muted",
+                              "flex w-full gap-3 px-4 py-3 text-left transition hover:bg-ink/[0.03]",
+                              isUnread && "bg-accent/[0.04]",
                             )}
                           >
-                            <Icon className="size-4" aria-hidden />
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-2">
-                              <p
-                                className={cn(
-                                  "truncate text-sm",
-                                  isUnread
-                                    ? "font-semibold text-ink"
-                                    : "font-medium text-ink/80",
-                                )}
-                              >
-                                {item.title}
+                            <span
+                              className={cn(
+                                "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg",
+                                isUnread
+                                  ? "bg-accent/15 text-accent-deep"
+                                  : "bg-ink/5 text-ink-muted",
+                              )}
+                            >
+                              <Icon className="size-4" aria-hidden />
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-start justify-between gap-2">
+                                <p
+                                  className={cn(
+                                    "truncate text-sm",
+                                    isUnread
+                                      ? "font-semibold text-ink"
+                                      : "font-medium text-ink/80",
+                                  )}
+                                >
+                                  {item.title}
+                                </p>
+                                {isUnread ? (
+                                  <span
+                                    className="mt-1.5 size-2 shrink-0 rounded-full bg-accent"
+                                    aria-label={t("notifications.ui.unreadAria")}
+                                  />
+                                ) : null}
+                              </div>
+                              <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-ink-muted">
+                                {item.message}
                               </p>
-                              {isUnread ? (
-                                <span
-                                  className="mt-1.5 size-2 shrink-0 rounded-full bg-accent"
-                                  aria-label={t("notifications.ui.unreadAria")}
-                                />
-                              ) : null}
+                              <p className="mt-1 text-[11px] text-ink-muted/70">
+                                {timeAgo(item.createdAt, t, locale)}
+                              </p>
                             </div>
-                            <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-ink-muted">
-                              {item.message}
-                            </p>
-                            <p className="mt-1 text-[11px] text-ink-muted/70">
-                              {timeAgo(item.createdAt, t, locale)}
-                            </p>
-                          </div>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-
-            {items.length > 0 ? (
-              <div className="border-t border-ink/8 px-4 py-2.5 text-center">
-                <Link
-                  href="/notifications"
-                  onClick={() => setOpen(false)}
-                  className="text-xs font-medium text-accent-deep hover:text-accent"
-                >
-                  {t("notifications.ui.viewAll")}
-                </Link>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </div>
-            ) : null}
-          </div>,
+
+              {items.length > 0 ? (
+                <div className="border-t border-ink/8 px-4 py-2.5 text-center">
+                  <Link
+                    href="/notifications"
+                    onClick={() => setOpen(false)}
+                    className="text-xs font-medium text-accent-deep hover:text-accent"
+                  >
+                    {t("notifications.ui.viewAll")}
+                  </Link>
+                </div>
+              ) : null}
+            </div>
+          </>,
           document.body,
         )
       : null;
@@ -567,7 +566,7 @@ export function NotificationBell({
       <button
         ref={buttonRef}
         type="button"
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={toggleOpen}
         className={cn(
           "dashboard-icon-btn notification-bell-btn relative inline-flex items-center justify-center rounded-md border border-ink/10 bg-canvas p-2 text-ink-muted transition-colors hover:border-ink/20 hover:text-ink",
           open && "border-accent/30 text-accent-deep",
@@ -583,7 +582,7 @@ export function NotificationBell({
               : t("notifications.ui.ariaLabel")
         }
         aria-expanded={open}
-        aria-haspopup="true"
+        aria-haspopup="dialog"
       >
         <Bell className="size-4" />
         {hasUnread ? (
