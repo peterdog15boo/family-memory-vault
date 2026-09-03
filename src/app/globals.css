@@ -4220,11 +4220,13 @@ html[data-theme="modern"][data-atmosphere-paused] body.page-atmosphere::after {
 [data-theme="modern"] .people-hero {
   border-radius: var(--ui-card-radius);
   box-shadow: var(--shadow-sm);
+  background: color-mix(in srgb, var(--surface-elevated) 88%, var(--canvas-deep));
+  border: 1px solid var(--border-subtle);
 }
 
 [data-theme="modern"] .people-card {
   padding-top: 2rem;
-  background: var(--surface-elevated);
+  background: color-mix(in srgb, var(--surface-elevated) 92%, var(--canvas-deep));
 }
 
 [data-theme="modern"] .family-photo-area .media-tile,
@@ -8661,12 +8663,16 @@ html {
 }
 
 [data-theme="modern"] .ui-empty {
-  border-radius: 1.4rem;
+  border-radius: var(--app-radius-xl, 1.25rem);
   background:
-    radial-gradient(circle at top right, rgba(181, 111, 94, 0.1), transparent 30%),
-    linear-gradient(180deg, rgba(255, 252, 248, 0.96), rgba(255, 248, 242, 0.94));
-  border: 1px solid rgba(61, 44, 29, 0.08);
-  box-shadow: 0 12px 28px rgba(40, 28, 18, 0.05);
+    radial-gradient(
+      circle at top right,
+      color-mix(in srgb, var(--accent) 12%, transparent),
+      transparent 40%
+    ),
+    color-mix(in srgb, var(--surface-elevated) 90%, var(--canvas-deep));
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-sm);
 }
 
 [data-theme="modern"] .ui-empty-copy {
@@ -8694,29 +8700,76 @@ html {
 
 [data-theme="modern"] .people-gallery .ui-empty {
   margin-top: 0.5rem;
+  border-radius: var(--app-radius-xl, 1.25rem);
+  border: 1px solid var(--border-subtle);
+  background:
+    radial-gradient(
+      circle at top right,
+      color-mix(in srgb, var(--accent) 14%, transparent),
+      transparent 42%
+    ),
+    color-mix(in srgb, var(--surface-elevated) 88%, var(--canvas-deep));
+  box-shadow: var(--shadow-sm);
 }
 
+/* People tiles — dark glass (not the old light-Modern white slab). */
 [data-theme="modern"] .people-card {
-  border: none;
-  border-radius: 1.4rem;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 250, 246, 0.9));
-  box-shadow: 0 12px 34px rgba(40, 28, 18, 0.07);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--app-radius-xl, 1.25rem);
+  background: color-mix(in srgb, var(--surface-elevated) 92%, var(--canvas-deep));
+  box-shadow:
+    0 12px 28px rgb(8 6 5 / 0.28),
+    inset 0 0 0 1px color-mix(in srgb, #fffcfa 6%, transparent);
   padding-top: 2rem;
   padding-bottom: 1.55rem;
+  transition:
+    box-shadow 0.28s ease,
+    border-color 0.28s ease,
+    transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-theme="modern"] .people-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--border-subtle));
+  box-shadow:
+    0 16px 36px rgb(8 6 5 / 0.34),
+    inset 0 0 0 1px color-mix(in srgb, #fffcfa 10%, transparent);
 }
 
 [data-theme="modern"] .people-card h3 {
   font-size: 1.28rem;
+  color: var(--ink);
+}
+
+[data-theme="modern"] .people-card p {
+  color: var(--ink-muted);
 }
 
 [data-theme="modern"] .people-card-avatar {
   width: 8.5rem;
   height: 8.5rem;
+  --tw-ring-color: var(--canvas);
 }
 
 [data-theme="modern"] .people-gallery ul {
   gap: 1rem;
+}
+
+/* Face crop placeholder — warm charcoal, not a cream tile. */
+[data-theme="modern"] .person-avatar {
+  background: linear-gradient(
+    145deg,
+    #3f3630 0%,
+    #2a2420 48%,
+    #1c1815 100%
+  );
+}
+
+[data-theme="modern"] .person-avatar-placeholder {
+  color: color-mix(in srgb, var(--ink-muted) 50%, transparent);
+}
+
+[data-theme="modern"] .person-avatar-ring {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #fffcfa 12%, transparent);
 }
 
 [data-theme="modern"] .movie-poster {
@@ -8726,7 +8779,29 @@ html {
 [data-theme="modern"] .app-page--movies .list-card,
 [data-theme="modern"] .app-page--memories .list-card,
 [data-theme="modern"] .app-page--people .list-card {
-  box-shadow: 0 12px 36px rgba(40, 28, 18, 0.08);
+  box-shadow:
+    0 12px 28px rgb(8 6 5 / 0.28),
+    inset 0 0 0 1px color-mix(in srgb, #fffcfa 6%, transparent);
+}
+
+/* Person detail story / control panels on the People routes */
+[data-theme="modern"] .app-page.family-photo-area .person-story-panel,
+[data-theme="modern"] .people-story-panel {
+  background: color-mix(in srgb, var(--surface-elevated) 88%, var(--canvas-deep));
+  border-color: var(--border-subtle);
+}
+
+[data-theme="modern"] .app-page.family-photo-area .rounded-xl.border-dashed,
+[data-theme="modern"] .app-page.family-photo-area .rounded-2xl.border-dashed {
+  border-color: var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-elevated) 70%, var(--canvas-deep));
+}
+
+[data-theme="modern"] .app-page.family-photo-area select,
+[data-theme="modern"] .app-page.family-photo-area input[type="text"] {
+  background-color: var(--surface-elevated);
+  border-color: var(--border-subtle);
+  color: var(--ink);
 }
 
 [data-theme="modern"] .app-page--movies .list-card h3 {

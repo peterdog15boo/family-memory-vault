@@ -94,7 +94,7 @@ export function PeopleList({ people: initialPeople, className }: PeopleListProps
             <li key={person.id} className="relative">
               <Link
                 href={`/people/${person.id}`}
-                className="list-card people-card group flex flex-col items-center rounded-2xl border border-ink/8 bg-canvas/80 px-5 pb-5 pt-7 text-center transition"
+                className="list-card people-card group flex flex-col items-center rounded-2xl border border-ink/8 bg-canvas/80 px-5 pb-5 pt-7 text-center transition hover:border-accent/25"
                 style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}
               >
                 <PersonAvatar

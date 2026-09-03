@@ -199,7 +199,7 @@ export function PersonStorySection({
   return (
     <section
       className={cn(
-        "rounded-2xl border border-ink/8 bg-canvas/60 px-4 py-4 sm:px-5",
+        "people-story-panel rounded-2xl border border-ink/8 bg-canvas/60 px-4 py-4 sm:px-5",
         className,
       )}
       aria-labelledby="person-story-heading"

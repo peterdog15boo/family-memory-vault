@@ -66,7 +66,7 @@ export function PersonAvatar({
   return (
     <div
       className={cn(
-        "relative overflow-hidden bg-gradient-to-br from-[#d9cfc0] via-[#e8dfd2] to-[#c5b8a4]",
+        "person-avatar relative overflow-hidden bg-gradient-to-br from-[#d9cfc0] via-[#e8dfd2] to-[#c5b8a4]",
         shape === "circle" ? "rounded-full" : "rounded-2xl",
         className,
       )}
@@ -85,13 +85,13 @@ export function PersonAvatar({
           style={imageStyle}
         />
       ) : (
-        <div className="flex h-full w-full items-center justify-center text-ink/25">
+        <div className="person-avatar-placeholder flex h-full w-full items-center justify-center text-ink/25">
           <UserRound className="size-[40%] max-w-16" aria-hidden />
           <span className="sr-only">{alt}</span>
         </div>
       )}
       <span
-        className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-ink/10"
+        className="person-avatar-ring pointer-events-none absolute inset-0 ring-1 ring-inset ring-ink/10"
         aria-hidden
       />
     </div>
