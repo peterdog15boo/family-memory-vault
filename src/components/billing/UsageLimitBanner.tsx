@@ -13,6 +13,7 @@ type UsageLimitBannerProps = {
 
 /**
  * Gentle warnings (80%+) and clear blocked-state banners for usage limits.
+ * Original keeps light alert colors; Modern uses dark notice surfaces via CSS.
  */
 export function UsageLimitBanner({ summary, className }: UsageLimitBannerProps) {
   if (summary.warnings.length === 0) return null;
@@ -32,21 +33,21 @@ function UsageWarningCard({ warning }: { warning: UsageWarning }) {
   return (
     <div
       className={cn(
-        "flex gap-3 rounded-xl border px-4 py-3 text-sm",
+        "app-banner usage-limit-banner flex gap-3 rounded-xl border px-4 py-3 text-sm",
         isCritical
-          ? "border-rose-200/90 bg-rose-50/80 text-rose-950"
-          : "border-amber-200/90 bg-amber-50/80 text-amber-950",
+          ? "usage-limit-banner--critical border-rose-200/90 bg-rose-50/80 text-rose-950"
+          : "usage-limit-banner--warn border-amber-200/90 bg-amber-50/80 text-amber-950",
       )}
       role="status"
     >
       {isCritical ? (
         <AlertCircle
-          className="mt-0.5 size-4 shrink-0 text-rose-700"
+          className="usage-limit-banner__icon usage-limit-banner__icon--critical mt-0.5 size-4 shrink-0 text-rose-700"
           aria-hidden
         />
       ) : (
         <Sparkles
-          className="mt-0.5 size-4 shrink-0 text-amber-700"
+          className="usage-limit-banner__icon usage-limit-banner__icon--warn mt-0.5 size-4 shrink-0 text-amber-700"
           aria-hidden
         />
       )}
@@ -54,7 +55,7 @@ function UsageWarningCard({ warning }: { warning: UsageWarning }) {
         <p className="font-medium">{warning.title}</p>
         <p
           className={cn(
-            "mt-0.5 leading-relaxed",
+            "usage-limit-banner__body mt-0.5 leading-relaxed",
             isCritical ? "text-rose-900/90" : "text-amber-900/90",
           )}
         >
@@ -62,14 +63,14 @@ function UsageWarningCard({ warning }: { warning: UsageWarning }) {
         </p>
         <Link
           href="/billing"
-          className="mt-2 mr-4 inline-flex text-sm font-medium text-accent-deep underline-offset-2 hover:text-accent hover:underline"
+          className="usage-limit-banner__link mt-2 mr-4 inline-flex text-sm font-medium text-accent-deep underline-offset-2 hover:text-accent hover:underline"
         >
           View usage &amp; plans
         </Link>
         {isCritical ? (
           <Link
             href="/pricing"
-            className="mt-2 inline-flex text-sm font-medium text-accent-deep underline-offset-2 hover:text-accent hover:underline"
+            className="usage-limit-banner__link mt-2 inline-flex text-sm font-medium text-accent-deep underline-offset-2 hover:text-accent hover:underline"
           >
             Upgrade plan
           </Link>

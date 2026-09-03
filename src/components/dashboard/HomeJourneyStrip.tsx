@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, X } from "lucide-react";
 import { LegacyJourneyCard } from "@/components/gamification/LegacyJourneyCard";
@@ -25,13 +25,14 @@ function trackCurrent(
 
 /**
  * Compact horizontal progress: journey numbers + completeness checks.
- * Click opens the existing Legacy Journey card.
+ * Click opens the existing Legacy Journey card in a portaled dialog.
  */
 export function HomeJourneyStrip({
   board,
   completeness = null,
 }: HomeJourneyStripProps) {
   const t = useTranslations();
+  const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
   const photos = trackCurrent(board, "photos");
@@ -39,10 +40,15 @@ export function HomeJourneyStrip({
   const badges = board.recentBadges.length;
   const stepZero = board.level <= 1 && board.totalLp === 0 && photos === 0;
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   useOverlayA11y({
     open,
     onClose: () => setOpen(false),
     containerRef: dialogRef,
+    initialFocus: "container",
   });
 
   const stats = [
@@ -63,6 +69,10 @@ export function HomeJourneyStrip({
       label: t("dashboard.journeyStatMemories"),
     },
   ];
+
+  function closeDialog() {
+    setOpen(false);
+  }
 
   return (
     <>
@@ -124,16 +134,19 @@ export function HomeJourneyStrip({
         <span className="home-journey-hint">{t("dashboard.journeyStripHint")}</span>
       </button>
 
-      {open
+      {mounted && open
         ? createPortal(
             <div
               ref={dialogRef}
+              data-app-portal=""
               className="home-journey-overlay"
               role="dialog"
               aria-modal="true"
               aria-labelledby="home-journey-dialog-title"
               tabIndex={-1}
-              onClick={() => setOpen(false)}
+              onClick={(event) => {
+                if (event.target === event.currentTarget) closeDialog();
+              }}
             >
               <div
                 className="home-journey-dialog"
@@ -149,7 +162,7 @@ export function HomeJourneyStrip({
                   <button
                     type="button"
                     className="home-journey-dialog-close"
-                    onClick={() => setOpen(false)}
+                    onClick={closeDialog}
                     aria-label={t("common.close")}
                   >
                     <X className="size-5" aria-hidden />

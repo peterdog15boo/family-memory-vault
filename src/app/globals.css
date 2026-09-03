@@ -353,9 +353,28 @@ body {
   will-change: background-position;
 }
 
-[data-theme="modern"] body.page-atmosphere > * {
+/*
+ * Lift app chrome above fixed atmosphere layers (::before/::after at z-0).
+ * :where() keeps specificity low so portaled overlays (position:fixed + their
+ * own z-index) are not forced relative — that trapped Home Journey / modals
+ * under scroll-lock at the end of <body>.
+ */
+[data-theme="modern"] :where(body.page-atmosphere) > :where(*) {
   position: relative;
   z-index: 1;
+}
+
+/* Explicit portal roots — stay viewport-fixed above the shell. */
+[data-theme="modern"] body.page-atmosphere > .home-journey-overlay,
+[data-theme="modern"] body.page-atmosphere > .ask-ai-panel-root,
+[data-theme="modern"] body.page-atmosphere > .family-chat-panel-root,
+[data-theme="modern"] body.page-atmosphere > .journey-celebration-root,
+[data-theme="modern"] body.page-atmosphere > .slideshow-player,
+[data-theme="modern"] body.page-atmosphere > .movie-player,
+[data-theme="modern"] body.page-atmosphere > .movie-share-dialog,
+[data-theme="modern"] body.page-atmosphere > [data-feedback-modal],
+[data-theme="modern"] body.page-atmosphere > [data-app-portal] {
+  position: fixed;
 }
 
 @keyframes modern-atmosphere-sheen {
@@ -7374,13 +7393,13 @@ html {
 [data-theme="modern"] .home-journey-overlay {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: 200;
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  background: rgb(12 10 8 / 0.55);
+  background: var(--scrim, rgb(12 10 8 / 0.62));
   padding: 0;
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(8px);
 }
 
 @media (min-width: 640px) {
@@ -7396,11 +7415,18 @@ html {
   max-height: min(90vh, 44rem);
   overflow: auto;
   border-radius: 1.25rem 1.25rem 0 0;
-  background: var(--surface-elevated);
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--surface-elevated) 88%, var(--accent-soft) 12%) 0%,
+      var(--surface-elevated) 42%,
+      color-mix(in srgb, var(--surface-elevated) 82%, var(--canvas-deep)) 100%
+    );
   color: var(--ink);
   border: 1px solid var(--border-subtle);
   padding: 1rem 1rem 1.25rem;
   box-shadow: var(--shadow-lg);
+  -webkit-overflow-scrolling: touch;
 }
 
 @media (min-width: 640px) {
@@ -7408,6 +7434,14 @@ html {
     border-radius: 1.25rem;
     padding: 1.15rem 1.15rem 1.35rem;
   }
+}
+
+/* Nested journey card: dialog already provides charcoal chrome. */
+[data-theme="modern"] .home-journey-dialog .legacy-journey-card {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
 }
 
 [data-theme="modern"] .home-journey-dialog-bar {
@@ -7433,8 +7467,53 @@ html {
 }
 
 [data-theme="modern"] .home-journey-dialog-close:hover {
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
   color: var(--ink);
+}
+
+/* Usage limit / seats notice — Original keeps light alert colors; Modern matches slim banners. */
+[data-theme="modern"] .usage-limit-banner {
+  border-radius: var(--app-radius-xl);
+  border-color: var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-elevated) 88%, var(--canvas-deep));
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+
+[data-theme="modern"] .usage-limit-banner--critical {
+  border-color: color-mix(in srgb, #fb7185 32%, var(--border-subtle));
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, #9f1239 22%, var(--surface-elevated)) 0%,
+      color-mix(in srgb, var(--surface-elevated) 90%, var(--canvas-deep)) 100%
+    );
+}
+
+[data-theme="modern"] .usage-limit-banner--warn {
+  border-color: color-mix(in srgb, #fbbf24 28%, var(--border-subtle));
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, #a16207 18%, var(--surface-elevated)) 0%,
+      color-mix(in srgb, var(--surface-elevated) 90%, var(--canvas-deep)) 100%
+    );
+}
+
+[data-theme="modern"] .usage-limit-banner__icon--critical {
+  color: color-mix(in srgb, #fb7185 85%, var(--ink));
+}
+
+[data-theme="modern"] .usage-limit-banner__icon--warn {
+  color: color-mix(in srgb, #fbbf24 80%, var(--ink));
+}
+
+[data-theme="modern"] .usage-limit-banner__body {
+  color: var(--ink-muted);
+}
+
+[data-theme="modern"] .usage-limit-banner__link {
+  color: var(--accent-deep, var(--accent));
 }
 
 [data-theme="modern"] .home-upload-card {
