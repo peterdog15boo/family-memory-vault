@@ -21,6 +21,7 @@ import {
   useLocale,
   useTranslations,
 } from "@/components/i18n/LocaleProvider";
+import { DialogErrorBoundary } from "@/components/ui/DialogErrorBoundary";
 import {
   AvaAvatarClientError,
   avaAvatarClientErrorKey,
@@ -363,6 +364,7 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
   const [, startTransition] = useTransition();
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const openedAtRef = useRef(0);
   const shownAutoOpenRef = useRef<Set<AvaAutoOpenReason>>(new Set());
   const progressRef = useRef(progress);
   progressRef.current = progress;
@@ -400,6 +402,7 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
       if (shownAutoOpenRef.current.has(reason) || persisted.has(reason)) return;
       shownAutoOpenRef.current.add(reason);
       persistAutoOpenReason(reason);
+      openedAtRef.current = Date.now();
       setOpen(true);
     },
     [],
@@ -555,6 +558,7 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
         if (opts?.closeAfter) {
           applyProgress(next, { open: false });
         } else if (opts?.openAfter) {
+          openedAtRef.current = Date.now();
           applyProgress(next, { open: true });
         } else {
           applyProgress(next);
@@ -666,17 +670,14 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
   function openHelper() {
     setError(null);
     setGateSwitchError(null);
-    // Always resume so soft-dismiss clears and the server picks the first
-    // missing identity step (welcome → name → avatar).
-    if (
-      progress?.dismissed ||
-      !progress?.helperEnabled ||
-      progress?.identityIncomplete
-    ) {
+    // Resume only when soft-dismissed or identity is still incomplete.
+    // Complete profiles open the idle/tip panel — do not restart the welcome wizard.
+    if (progress?.dismissed || progress?.identityIncomplete) {
       runAction({ action: "resume" }, { openAfter: true });
-    } else {
-      setOpen(true);
+      return;
     }
+    openedAtRef.current = Date.now();
+    setOpen(true);
   }
 
   // Keep Ava mounted while identity is incomplete or the dialog is open —
@@ -732,10 +733,18 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
   const modal =
     mounted && open && progress
       ? createPortal(
+          <DialogErrorBoundary
+            title="Couldn't open Ava"
+            onClose={dismissQuietly}
+          >
           <div
-            className="fixed inset-0 z-[100] flex items-end justify-center bg-ink/45 p-4 backdrop-blur-sm sm:items-center"
+            data-app-portal=""
+            className="fixed inset-0 z-[200] flex items-end justify-center bg-ink/45 p-4 backdrop-blur-sm sm:items-center"
             role="presentation"
-            onClick={dismissQuietly}
+            onClick={() => {
+              if (Date.now() - openedAtRef.current < 400) return;
+              dismissQuietly();
+            }}
           >
             <div
               ref={dialogRef}
@@ -1062,7 +1071,8 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
                 )}
               </div>
             </div>
-          </div>,
+          </div>
+          </DialogErrorBoundary>,
           document.body,
         )
       : null;
@@ -1079,13 +1089,10 @@ function AvaHeaderSlot({ children }: { children: ReactNode }) {
   const [target, setTarget] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
-    function sync() {
-      setTarget(document.getElementById("ava-header-slot"));
-    }
-    sync();
-    const observer = new MutationObserver(sync);
-    observer.observe(document.body, { childList: true, subtree: true });
-    return () => observer.disconnect();
+    // Stable #ava-header-slot in DashboardShell — look up once.
+    // Do NOT observe document.body: portal/button DOM mutations + setState
+    // flooded the main thread and froze the tab when Ava or other overlays opened.
+    setTarget(document.getElementById("ava-header-slot"));
   }, []);
 
   if (!target || !children) return null;

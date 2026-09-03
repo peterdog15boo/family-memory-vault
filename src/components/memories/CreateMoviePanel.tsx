@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { UpgradePrompt } from "@/components/billing/UpgradePrompt";
+import { DialogErrorBoundary } from "@/components/ui/DialogErrorBoundary";
 import { HintTooltip } from "@/components/ui/HintTooltip";
 import { USAGE_WARNING_PERCENT } from "@/lib/billing/usage-thresholds";
 import { useCopy, useTranslations } from "@/components/i18n/LocaleProvider";
@@ -262,6 +263,7 @@ export function CreateMoviePanel({
   const [submitting, setSubmitting] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [mounted, setMounted] = useState(false);
+  const openedAtRef = useRef(Date.now());
   const announcedPhaseRef = useRef<PanelPhase>("compose");
 
   useAnnounceStatus(error, { priority: "assertive" });
@@ -380,11 +382,13 @@ export function CreateMoviePanel({
 
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // Match Slideshow / Ask AI: lock overflow only — padding lock fought Modern
+  // shell layout and left the page feeling frozen if close failed.
   useOverlayA11y({
     open: mounted,
     onClose,
     containerRef: panelRef,
-    lockScrollPadding: true,
+    lockScrollPadding: false,
   });
 
   const pollMovie = useCallback(
@@ -638,6 +642,7 @@ export function CreateMoviePanel({
   if (!mounted) return null;
 
   return createPortal(
+    <DialogErrorBoundary title="Couldn't open movie tools" onClose={onClose}>
     <div
       ref={panelRef}
       data-app-portal=""
@@ -647,7 +652,10 @@ export function CreateMoviePanel({
       aria-labelledby="create-movie-title"
       tabIndex={-1}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target !== e.currentTarget) return;
+        // Ignore the opening click that bubbled through (same pattern as slideshow).
+        if (Date.now() - openedAtRef.current < 400) return;
+        onClose();
       }}
     >
       <div
@@ -1340,7 +1348,8 @@ export function CreateMoviePanel({
           ) : null}
         </div>
       </div>
-    </div>,
+    </div>
+    </DialogErrorBoundary>,
     document.body,
   );
 }
