@@ -75,8 +75,20 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       applyThemeToDocument(next);
     }
 
+    function syncAtmospherePaused() {
+      document.documentElement.toggleAttribute(
+        "data-atmosphere-paused",
+        document.hidden,
+      );
+    }
+
+    syncAtmospherePaused();
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    document.addEventListener("visibilitychange", syncAtmospherePaused);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      document.removeEventListener("visibilitychange", syncAtmospherePaused);
+    };
   }, []);
 
   const setTheme = useCallback((next: AppTheme) => {

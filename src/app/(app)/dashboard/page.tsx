@@ -24,7 +24,13 @@ import {
 import { ensureAppUser } from "@/lib/users";
 import { shouldEnterFirstFamilyMovie } from "@/lib/first-family-movie";
 import { FIRST_FAMILY_MOVIE_PATH } from "@/lib/routes";
+import { firstReadyPhotoPreview } from "@/lib/dashboard/home-tiles";
 
+/**
+ * Dashboard data for Modern + Original homes.
+ * Photos tile cover reuses the first clean/ready own preview from the
+ * Original gallery payload (ownLimit 12) — no second library dump for decoration.
+ */
 export default async function DashboardPage() {
   const { userId, isAuthenticated } = await auth();
   if (!isAuthenticated || !userId) {
@@ -93,6 +99,9 @@ export default async function DashboardPage() {
       completeness={completeness}
       onThisDayCount={onThisDayCount}
       onThisDayLabel={onThisDayLabelFor()}
+      tileImages={{
+        photos: firstReadyPhotoPreview(mediaLibrary.own),
+      }}
     />
   );
 }

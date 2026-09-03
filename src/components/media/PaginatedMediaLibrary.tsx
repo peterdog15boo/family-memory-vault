@@ -118,6 +118,16 @@ export function PaginatedMediaLibrary({
   const [searchDraft, setSearchDraft] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (new URLSearchParams(window.location.search).get("scope") !== "shared") {
+      return;
+    }
+    const target = document.getElementById("media-shared");
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [hasFamilySharing, shared.length]);
+
   // Debounce draft → applied query (min 2 chars, matching API).
   useEffect(() => {
     const trimmed = searchDraft.trim();
@@ -448,6 +458,7 @@ export function PaginatedMediaLibrary({
 
       {hasFamilySharing || shared.length > 0 || (searching && hasFamilySharing) ? (
         <LibrarySection
+          id="media-shared"
           title={t("mediaUi.sharedSectionTitle")}
           description={t("mediaUi.sharedSectionLead")}
           count={shared.length}

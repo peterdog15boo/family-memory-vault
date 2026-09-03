@@ -11,6 +11,7 @@ type LibrarySectionProps = {
   actions?: ReactNode;
   children: ReactNode;
   className?: string;
+  id?: string;
 };
 
 /**
@@ -24,9 +25,10 @@ export function LibrarySection({
   actions,
   children,
   className,
+  id,
 }: LibrarySectionProps) {
   return (
-    <section className={cn("library-section mt-10", className)}>
+    <section id={id} className={cn("library-section mt-10", className)}>
       <div className="library-section-header mb-4 flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">

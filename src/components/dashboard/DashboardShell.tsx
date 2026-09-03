@@ -79,7 +79,7 @@ function DashboardShellInner({
     <div
       className={cn(
         "dashboard-shell flex min-h-full flex-col bg-canvas",
-        isModern && "dashboard-shell--modern",
+        isModern && "dashboard-shell--modern bg-transparent",
       )}
     >
       <header
@@ -95,7 +95,7 @@ function DashboardShellInner({
               className="inline-flex shrink-0 transition-opacity hover:opacity-80"
               aria-label={t("meta.appName")}
             >
-              <BrandLogo tone="color" size="lg" priority decorative />
+              <BrandLogo tone="onDark" size="lg" priority decorative />
             </Link>
             <p className="dashboard-shell-greeting truncate text-sm text-ink-muted lg:text-[0.95rem]">
               {t("nav.welcomeBack")}

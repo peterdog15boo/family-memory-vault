@@ -1,20 +1,36 @@
 "use client";
 
+/**
+ * Signed-in home (Modern consumer layout + Original denser vault).
+ *
+ * Quick test:
+ * - xl: 4 tiles in one row; md: 2×2; phone: 1 column
+ * - Tile URLs: /media, /memories, /media?scope=shared, /people
+ * - Compact progress strip click opens journey details
+ * - Upload from home → /upload
+ * - Modern vs Original theme (Settings / ?theme=)
+ * - Empty account still shows curated tiles + empty destinations
+ * - Keyboard only: tiles → stats → upload (after any banner links)
+ * - Desktop: home fills main pane (no phone-column max-width)
+ * - Atmosphere matches Modern shell (not a dark inset widget)
+ */
+
 import Link from "next/link";
-import { ArrowRight, Bot, CalendarDays, Clapperboard, Plus, Upload } from "lucide-react";
-import { AskAiOpenButton } from "@/components/assistant/AskAiOpenButton";
+import { ArrowRight, CalendarDays, Plus, Upload } from "lucide-react";
 import { BetaSurveyBanner } from "@/components/beta/BetaSurveyBanner";
 import { CurrentPlanBadge } from "@/components/billing/CurrentPlanBadge";
 import { StorageUsageCard } from "@/components/billing/StorageUsageCard";
 import { UsageLimitBanner } from "@/components/billing/UsageLimitBanner";
 import { DigitizePromoCard } from "@/components/dashboard/DigitizePromoCard";
+import { HomeJourneyStrip } from "@/components/dashboard/HomeJourneyStrip";
+import { HomeNavTiles, type HomeTileImages } from "@/components/dashboard/HomeNavTiles";
+import { HomeUploadCard } from "@/components/dashboard/HomeUploadCard";
 import { MediaGallery } from "@/components/dashboard/MediaGallery";
 import { ReviewStatusBanner } from "@/components/dashboard/ReviewStatusBanner";
 import { LibrarySection } from "@/components/library/LibrarySection";
 import { MemoryList } from "@/components/memories/MemoryList";
 import { OnboardingChecklist } from "@/components/onboarding/OnboardingChecklist";
 import { AppPageIntro } from "@/components/ui/AppPageIntro";
-import { PageHero } from "@/components/ui/PageHero";
 import { useCopy, useTranslations } from "@/components/i18n/LocaleProvider";
 import { FamilyCompletenessCard } from "@/components/dashboard/FamilyCompletenessCard";
 import { LegacyJourneyCard } from "@/components/gamification/LegacyJourneyCard";
@@ -43,20 +59,16 @@ type DashboardHomeModernProps = {
   /** Prior-year moments for today's month/day (0 hides teaser). */
   onThisDayCount?: number;
   onThisDayLabel?: string;
+  /** Clean/ready Photos-tile cover only (one preview; curated assets otherwise). */
+  tileImages?: HomeTileImages;
 };
 
 /**
- * Modern home — gallery-first welcome, not an ops console.
+ * Modern home — image tiles, compact journey, upload on a dusk atmosphere.
  * Billing / review details stay available but visually secondary.
  */
 export function DashboardHomeModern({
   displayName,
-  mediaOwn,
-  mediaShared,
-  hasFamilyMedia,
-  memoriesOwn,
-  memoriesShared,
-  hasFamilyMemories,
   reviewSummary,
   usage,
   onboarding,
@@ -65,197 +77,57 @@ export function DashboardHomeModern({
   completeness,
   onThisDayCount = 0,
   onThisDayLabel,
+  tileImages,
 }: DashboardHomeModernProps) {
-  const copy = useCopy();
   const t = useTranslations();
   const firstName = displayName.split(" ")[0] || "there";
-  const hasMemories = memoriesOwn.length > 0;
-  const hasPhotos = mediaOwn.length > 0;
+  const betaMode = isBetaPlanPickerEnabled();
+  const covers: HomeTileImages = tileImages ?? { photos: null };
 
   return (
-    <>
-      <PageHero
-        slot="dashboard"
-        eyebrow={t("dashboard.eyebrow")}
-        title={t("dashboard.welcomeName", { name: firstName })}
-        description={t("dashboard.heroDescription")}
-        actions={
-          <>
-            <Link href="/upload" className="ui-btn ui-btn-primary ui-btn-lg">
-              <Upload className="size-4" aria-hidden />
-              {t("pages.mediaAdd")}
-            </Link>
-            <Link href="/memories/new" className="ui-btn ui-btn-secondary ui-btn-lg">
-              <Plus className="size-4" aria-hidden />
-              {t("pages.createMemory")}
-            </Link>
-            <AskAiOpenButton className="ui-btn ui-btn-ghost ui-btn-lg">
-              <Bot className="size-4" aria-hidden />
-              {t("nav.askAi")}
-            </AskAiOpenButton>
-          </>
-        }
-      />
-
-      <div className="app-page app-stack home-dashboard mx-auto max-w-6xl">
-        {onboarding.show ? (
-          <OnboardingChecklist progress={onboarding} />
-        ) : null}
-
-        <BetaSurveyBanner />
-        <UsageLimitBanner summary={usage} />
-        <FamilyCompletenessCard snapshot={completeness} />
-        <LegacyJourneyCard initial={journeyBoard} />
-
-        {onThisDayCount > 0 && onThisDayLabel ? (
-          <section
-            className="home-shelf"
-            aria-labelledby="home-on-this-day-title"
-          >
-            <div className="home-shelf-header">
-              <div>
-                <h2 id="home-on-this-day-title" className="home-shelf-title">
-                  {t("dashboard.onThisDayTitle")}
-                </h2>
-                <p className="home-shelf-lead">
-                  {t("dashboard.onThisDayLead", { date: onThisDayLabel })}
-                </p>
-              </div>
-              <Link href="/on-this-day" className="home-shelf-link">
-                <CalendarDays className="size-3.5" aria-hidden />
-                {t("dashboard.onThisDayOpen")}
-                <ArrowRight className="size-3.5" aria-hidden />
-              </Link>
-            </div>
-            <p className="text-sm text-ink-muted">
-              {t("dashboard.onThisDayCount", { count: onThisDayCount })}
-            </p>
-          </section>
-        ) : null}
-
-        <section className="home-shelf" aria-labelledby="home-memories-title">
-          <div className="home-shelf-header">
-            <div>
-              <h2 id="home-memories-title" className="home-shelf-title">
-                {t("dashboard.recentMemories")}
-              </h2>
-              <p className="home-shelf-lead">
-                {t("dashboard.recentMemoriesLead")}
-              </p>
-            </div>
-            <Link href="/memories" className="home-shelf-link">
-              {t("dashboard.allMemories")}
-              <ArrowRight className="size-3.5" aria-hidden />
-            </Link>
+    <div className="home-atmosphere">
+      <div className="app-page app-stack home-dashboard">
+        <header className="home-welcome home-welcome--row">
+          <div className="home-welcome-copy">
+            <p className="home-welcome-eyebrow">{t("dashboard.eyebrow")}</p>
+            <h1 className="home-welcome-title">
+              {t("dashboard.welcomeName", { name: firstName })}
+            </h1>
           </div>
-          {hasMemories ? (
-            <MemoryList memories={memoriesOwn} showActions={false} />
-          ) : (
-            <div className="home-empty">
-              <p className="home-empty-title">{t("dashboard.noAlbumsYet")}</p>
-              <p className="home-empty-copy">{t("dashboard.noAlbumsYetBody")}</p>
-              <Link href="/memories/new" className="ui-btn ui-btn-primary">
-                <Plus className="size-4" aria-hidden />
-                {t("pages.createMemory")}
-              </Link>
-            </div>
-          )}
-        </section>
+          {betaMode ? (
+            <Link href="/billing" className="home-beta-chip">
+              {t("dashboard.betaSwitchChip")}
+            </Link>
+          ) : null}
+        </header>
 
-        {hasFamilyMemories || memoriesShared.length > 0 ? (
-          <section className="home-shelf" aria-labelledby="home-shared-title">
-            <div className="home-shelf-header">
-              <div>
-                <h2 id="home-shared-title" className="home-shelf-title">
-                  {t("dashboard.sharedWithFamily")}
-                </h2>
-                <p className="home-shelf-lead">
-                  {t("dashboard.sharedAlbumsLead")}
-                </p>
-              </div>
-              <Link href="/memories" className="home-shelf-link">
-                {t("dashboard.viewShared")}
-                <ArrowRight className="size-3.5" aria-hidden />
-              </Link>
-            </div>
-            <MemoryList
-              memories={memoriesShared}
-              emptyVariant="shared"
-              showActions={false}
-            />
-          </section>
-        ) : null}
+        <div className="home-banners">
+          {onboarding.show ? (
+            <OnboardingChecklist progress={onboarding} />
+          ) : null}
+          <BetaSurveyBanner />
+          <UsageLimitBanner summary={usage} />
+          <ReviewStatusBanner summary={reviewSummary} />
+          {onThisDayCount > 0 && onThisDayLabel ? (
+            <Link href="/on-this-day" className="home-on-this-day-chip">
+              <CalendarDays className="size-3.5" aria-hidden />
+              <span>
+                {t("dashboard.onThisDayTitle")}
+                {onThisDayLabel ? ` · ${onThisDayLabel}` : ""}
+                {" · "}
+                {t("dashboard.onThisDayCount", { count: onThisDayCount })}
+              </span>
+            </Link>
+          ) : null}
+        </div>
 
-        <section className="home-shelf" aria-labelledby="home-photos-title">
-          <div className="home-shelf-header">
-            <div>
-              <h2 id="home-photos-title" className="home-shelf-title">
-                {t("dashboard.recentPhotos")}
-              </h2>
-              <p className="home-shelf-lead">
-                {t("dashboard.recentPhotosLead")}
-              </p>
-            </div>
-            <div className="home-shelf-links">
-              <Link href="/movies" className="home-shelf-link">
-                <Clapperboard className="size-3.5" aria-hidden />
-                {t("nav.movies")}
-              </Link>
-              <Link href="/media" className="home-shelf-link">
-                {t("dashboard.allPhotos")}
-                <ArrowRight className="size-3.5" aria-hidden />
-              </Link>
-            </div>
-          </div>
-          {hasPhotos ? (
-            <MediaGallery items={mediaOwn} />
-          ) : (
-            <div className="home-empty">
-              <p className="home-empty-title">{copy.empty.mediaOwn.title}</p>
-              <p className="home-empty-copy">
-                {copy.empty.mediaOwn.description}
-              </p>
-              <div className="mt-4 flex flex-col items-center gap-2 sm:flex-row sm:justify-center">
-                <Link href="/upload" className="ui-btn ui-btn-primary">
-                  <Upload className="size-4" aria-hidden />
-                  {t("pages.uploadPhotos")}
-                </Link>
-                <Link
-                  href="/family-memory-box"
-                  className="text-sm font-medium text-ink-muted underline-offset-2 transition hover:text-ink hover:underline"
-                >
-                  {t("pages.digitizeOld")}
-                </Link>
-              </div>
-            </div>
-          )}
-        </section>
-
-        {hasFamilyMedia || mediaShared.length > 0 ? (
-          <section className="home-shelf" aria-labelledby="home-family-photos">
-            <div className="home-shelf-header">
-              <div>
-                <h2 id="home-family-photos" className="home-shelf-title">
-                  {t("dashboard.familyPhotos")}
-                </h2>
-                <p className="home-shelf-lead">
-                  {t("dashboard.familyPhotosLead")}
-                </p>
-              </div>
-            </div>
-            <MediaGallery
-              items={mediaShared}
-              emptyTitle={copy.empty.mediaShared.title}
-              emptyDescription={copy.empty.mediaShared.description}
-              emptyActionHref={null}
-              emptySecondaryAction={null}
-            />
-          </section>
-        ) : null}
+        <HomeJourneyStrip board={journeyBoard} completeness={completeness} />
+        <HomeNavTiles images={covers} />
+        <HomeUploadCard />
 
         <DigitizePromoCard />
 
-        <details className="home-account-details">
+        <details className="home-panel home-account-details">
           <summary className="home-account-summary">
             {t("dashboard.planStorage")}
           </summary>
@@ -267,14 +139,13 @@ export function DashboardHomeModern({
               planSource={usage.planSource}
               canManageBilling={usage.canManageBilling}
               stripeConfigured={stripeConfigured}
-              betaMode={isBetaPlanPickerEnabled()}
+              betaMode={betaMode}
             />
             <StorageUsageCard snapshot={usage.storage} variant="compact" />
-            <ReviewStatusBanner summary={reviewSummary} />
           </div>
         </details>
       </div>
-    </>
+    </div>
   );
 }
 

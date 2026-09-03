@@ -12,6 +12,7 @@ import type { MediaReviewSummary, SafeMediaItem } from "@/lib/media/queries";
 import type { MemoryListItem } from "@/lib/memories";
 import type { OnboardingProgress } from "@/lib/onboarding/types";
 import type { JourneyBoardSnapshot } from "@/lib/gamification/journey-board";
+import type { HomeTileImages } from "@/components/dashboard/HomeNavTiles";
 import {
   APP_THEME_DEFAULT,
   isAppTheme,
@@ -34,6 +35,7 @@ type DashboardHomeProps = {
   completeness: FamilyCompletenessSnapshot;
   onThisDayCount?: number;
   onThisDayLabel?: string;
+  tileImages?: HomeTileImages;
 };
 
 /**
@@ -57,7 +59,12 @@ export function DashboardHome(props: DashboardHomeProps) {
     return <DashboardHomeModern {...props} />;
   }
 
-  const { displayName: _displayName, ...originalProps } = props;
+  const {
+    displayName: _displayName,
+    tileImages: _tileImages,
+    ...originalProps
+  } = props;
   void _displayName;
+  void _tileImages;
   return <DashboardHomeOriginal {...originalProps} />;
 }

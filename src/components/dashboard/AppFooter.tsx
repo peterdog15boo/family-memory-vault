@@ -55,7 +55,7 @@ export function AppFooter({ showLegacyPlusNav = false }: AppFooterProps) {
               className="app-footer-logo"
               aria-label={t("meta.appName")}
             >
-              <BrandLogo tone="color" size="lg" decorative />
+              <BrandLogo tone="onDark" size="lg" decorative />
             </Link>
             <p className="app-footer-tagline">{t("meta.tagline")}</p>
           </div>
