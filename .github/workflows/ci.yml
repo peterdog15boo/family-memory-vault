@@ -1,5 +1,9 @@
 # Catch compile/type/lint failures before Vercel deploys.
-# Mirrors `npm run build` on the production host (Next.js lint + typecheck + build).
+# Mirrors `npm run build` (Next.js typecheck + compile) without live secrets.
+#
+# Note: do not treat bare CI=true as a skip signal in app code — Vercel sets CI
+# during production builds and must keep assertProductionEnv strict. We rely on
+# GITHUB_ACTIONS=true (set automatically by Actions).
 
 name: CI
 
@@ -26,22 +30,53 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Pin 22 — ubuntu-latest may otherwise force newer majors that fight
+          # local engines; --use-system-ca is probed at runtime (Node 23.8+ only).
+          node-version: "22"
           cache: npm
 
       - name: Install dependencies
         run: npm ci
 
+      - name: Confirm Node, Next, and sharp
+        run: |
+          node -v
+          npm -v
+          node -e "console.log('next', require('next/package.json').version)"
+          node -e "console.log('sharp', require('sharp/package.json').version)"
+          node -e "require('sharp'); console.log('sharp load ok')"
+
       - name: Production build
         run: npm run build
         env:
-          # Placeholders for any build-time env reads; real secrets stay in Vercel.
+          # Harmless placeholders for build-time env reads. No real secrets.
+          # GITHUB_ACTIONS=true is set by the runner — assertProductionEnv skips
+          # live-secret checks; Vercel production does not set GITHUB_ACTIONS.
+          CI: "true"
           NEXT_PUBLIC_APP_URL: https://ci.github-actions.local
-          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ci_placeholder
-          CLERK_SECRET_KEY: sk_test_ci_placeholder
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_Y2ktcGxhY2Vob2xkZXItZm9yLWdpdGh1Yi1hY3Rpb25z
+          NEXT_PUBLIC_CLERK_SIGN_IN_URL: /sign-in
+          NEXT_PUBLIC_CLERK_SIGN_UP_URL: /sign-up
+          NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: /dashboard
+          NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: /dashboard
+          NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN: pk.eyJjaSI6InBsYWNlaG9sZGVyIn0.ci
+          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_ci_placeholder
+          NEXT_PUBLIC_ENABLE_BETA_FEEDBACK: "false"
+          NEXT_PUBLIC_BETA_PLAN_PICKER: "false"
+          NEXT_PUBLIC_FIRST_FAMILY_MOVIE_ONBOARDING: "false"
+          NEXT_PUBLIC_BETA_SURVEY_URL: ""
+          NEXT_PUBLIC_BETA_DISCORD_URL: ""
+          CLERK_SECRET_KEY: sk_test_ci_placeholder_not_a_real_secret
           DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
-          R2_ACCESS_KEY_ID: ci
-          R2_SECRET_ACCESS_KEY: ci
-          R2_BUCKET_NAME: ci
+          DATABASE_URL_UNPOOLED: postgresql://ci:ci@127.0.0.1:5432/ci
+          R2_ACCESS_KEY_ID: ci_access_key
+          R2_SECRET_ACCESS_KEY: ci_secret_key
+          R2_BUCKET_NAME: ci-bucket
           R2_ACCOUNT_ID: "00000000000000000000000000000000"
+          R2_ENDPOINT: https://00000000000000000000000000000000.r2.cloudflarestorage.com
           WORKER_SECRET: ci-worker-secret-not-used-in-build
+          WORKER_ENABLED: "false"
+          AI_MODERATION_ENABLED: "false"
+          PHOTODNA_ENABLED: "false"
+          NCMEC_REPORTING_ENABLED: "false"
+          FACE_DETECTION_ENABLED: "false"

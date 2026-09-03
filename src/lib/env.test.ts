@@ -12,8 +12,38 @@ describe("assertProductionEnv", () => {
     expect(() => assertProductionEnv()).not.toThrow();
   });
 
+  it("skips live secret checks on GitHub Actions", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("GITHUB_ACTIONS", "true");
+    vi.stubEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "");
+    vi.stubEnv("CLERK_SECRET_KEY", "");
+    vi.stubEnv("DATABASE_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "");
+
+    const { assertProductionEnv } = await import("@/lib/env");
+    expect(() => assertProductionEnv()).not.toThrow();
+  });
+
+  it("still enforces when CI=true without GITHUB_ACTIONS (Vercel-like)", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("CI", "true");
+    vi.stubEnv("GITHUB_ACTIONS", "");
+    vi.stubEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "");
+    vi.stubEnv("CLERK_SECRET_KEY", "");
+    vi.stubEnv("DATABASE_URL", "");
+    vi.stubEnv("R2_ACCESS_KEY_ID", "");
+    vi.stubEnv("R2_SECRET_ACCESS_KEY", "");
+    vi.stubEnv("R2_BUCKET_NAME", "");
+    vi.stubEnv("WORKER_SECRET", "");
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "");
+
+    const { assertProductionEnv } = await import("@/lib/env");
+    expect(() => assertProductionEnv()).toThrow(/Production environment invalid/);
+  });
+
   it("throws when required production vars are missing", async () => {
     vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("GITHUB_ACTIONS", "");
     vi.stubEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "");
     vi.stubEnv("CLERK_SECRET_KEY", "");
     vi.stubEnv("DATABASE_URL", "");
@@ -29,6 +59,7 @@ describe("assertProductionEnv", () => {
 
   it("rejects http app URL and insecure TLS in production", async () => {
     vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("GITHUB_ACTIONS", "");
     vi.stubEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "pk_live_x");
     vi.stubEnv("CLERK_SECRET_KEY", "sk_live_x");
     vi.stubEnv("DATABASE_URL", "postgres://x");

@@ -14,6 +14,14 @@ export function isProduction(): boolean {
 }
 
 /**
+ * GitHub Actions compile-only builds. Do not use bare `CI=true` — Vercel sets
+ * that during production builds and must keep strict env checks.
+ */
+export function isGitHubActions(): boolean {
+  return process.env.GITHUB_ACTIONS === "true";
+}
+
+/**
  * Canonical public app origin (no trailing slash).
  * Production requires NEXT_PUBLIC_APP_URL (https).
  */
@@ -39,9 +47,21 @@ function missing(name: string): boolean {
  *
  * Soft warnings (moderation vendors, email) do not throw — ops should
  * still treat them as launch blockers for a family-safety product.
+ *
+ * On GitHub Actions, skip live-secret shape checks so `next build` can
+ * typecheck/compile with harmless placeholders. Vercel production keeps
+ * the full assert (GITHUB_ACTIONS is unset there).
  */
 export function assertProductionEnv(): void {
   if (!isProduction()) return;
+
+  if (isGitHubActions()) {
+    logger.info("env.production_ci_skip", {
+      message:
+        "Skipping live secret checks on GitHub Actions (placeholders only)",
+    });
+    return;
+  }
 
   const errors: string[] = [];
   const warnings: string[] = [];
