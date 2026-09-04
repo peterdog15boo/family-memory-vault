@@ -99,6 +99,9 @@ function willPlannerProgress(
       latestMemoryId: null,
       hasActiveWillDraft: false,
     },
+    dormant: false,
+    retentionTip: null,
+    retentionCanAutoOpen: false,
     ...overrides,
   };
 }

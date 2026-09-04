@@ -36,6 +36,7 @@ import {
   validateAvaScreenName,
 } from "@/lib/ava/setup";
 import { normalizeOnboardingState } from "@/lib/ava/onboarding-state";
+import { resolveRetentionAvaTip } from "@/lib/retention/ava";
 import {
   isRealAvatarUrl,
   isRealDisplayName,
@@ -1129,13 +1130,28 @@ export async function getAvaProgress(userId: string): Promise<AvaProgress> {
     user?.imageUrl ?? null,
   );
 
+  let dormant = false;
+  let retentionTip: AvaProgress["retentionTip"] = null;
+  let retentionCanAutoOpen = false;
+  if (!identityIncomplete && helperEnabled) {
+    try {
+      const retention = await resolveRetentionAvaTip(userId);
+      dormant = retention.dormant;
+      retentionTip = retention.tip;
+      retentionCanAutoOpen = retention.canAutoOpen && Boolean(retention.tip);
+    } catch (err) {
+      console.warn("[ava.retention] resolve failed", err);
+    }
+  }
+
   return {
     showPanel,
     autoOpenReason,
     pollWhileWaiting,
     showResumeChip,
     showHeaderIcon,
-    hasRecommendedAction,
+    hasRecommendedAction:
+      hasRecommendedAction || Boolean(retentionTip && dormant),
     identityIncomplete,
     eligible,
     helperEnabled,
@@ -1152,6 +1168,9 @@ export async function getAvaProgress(userId: string): Promise<AvaProgress> {
     totalCount: steps.length,
     percent,
     signals,
+    dormant,
+    retentionTip,
+    retentionCanAutoOpen,
   };
 }
 

@@ -64,6 +64,9 @@ function progressWith(steps: AvaStep[], activeStepId: AvaStep["id"]): AvaProgres
       latestMemoryId: null,
       hasActiveWillDraft: false,
     },
+    dormant: false,
+    retentionTip: null,
+    retentionCanAutoOpen: false,
   };
 }
 

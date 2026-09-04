@@ -207,6 +207,9 @@ export const enUS = {
     featureTips: "Feature tips",
     featureTipsHelp:
       "Occasional suggestions when a feature you haven’t tried yet would help — at most one every 7 days. Stopped automatically once you use that feature.",
+    weeklyIdeas: "Weekly ideas from Family Memory Vault",
+    weeklyIdeasHelp:
+      "One gentle email a week with a single next step. Turn off anytime — Ava tips in the app stay separate.",
     browserPushGroup: "This device",
     browserPushHelp:
       "Get a gentle alert when a movie is ready or you reach a rare milestone — even if the vault is closed. We never use this for marketing. You can turn it off anytime.",
@@ -2187,6 +2190,9 @@ export const enUS = {
       statusReady: "Ready when you need a nudge",
       statusOff: "Turned off in settings",
       percentTouched: "{percent}% of steps touched",
+    },
+    retention: {
+      maybeLater: "Maybe later",
     },
   },
   notifications: {

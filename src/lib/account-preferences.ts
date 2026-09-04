@@ -43,6 +43,7 @@ export const ACCOUNT_PREFERENCE_TOGGLE_KEYS = [
   "inAppWeeklyDigest",
   "productUpdatesEmail",
   "emailFeatureTips",
+  "emailWeeklyIdeas",
   "idleTimeoutEnabled",
 ] as const satisfies readonly (keyof UserAccountPreferences)[];
 
@@ -85,6 +86,25 @@ export function resolveAccountPreferences(
     out.lastLifecycleEmailAt = raw.lastLifecycleEmailAt;
   } else if (raw.lastLifecycleEmailAt === null) {
     out.lastLifecycleEmailAt = null;
+  }
+  if (typeof raw.lastRetentionEmailAt === "string") {
+    out.lastRetentionEmailAt = raw.lastRetentionEmailAt;
+  } else if (raw.lastRetentionEmailAt === null) {
+    out.lastRetentionEmailAt = null;
+  }
+  if (typeof raw.retentionEmailUnsubscribedAt === "string") {
+    out.retentionEmailUnsubscribedAt = raw.retentionEmailUnsubscribedAt;
+  } else if (raw.retentionEmailUnsubscribedAt === null) {
+    out.retentionEmailUnsubscribedAt = null;
+  }
+  if (
+    typeof raw.weeklyEmailWeekIndex === "number" &&
+    Number.isFinite(raw.weeklyEmailWeekIndex)
+  ) {
+    out.weeklyEmailWeekIndex = Math.max(
+      0,
+      Math.floor(raw.weeklyEmailWeekIndex),
+    );
   }
   if (Array.isArray(raw.lifecycleEmailsSent)) {
     out.lifecycleEmailsSent = raw.lifecycleEmailsSent.filter(
@@ -182,6 +202,18 @@ export async function updateAccountPreferences(
   if (patch.lastLifecycleEmailAt !== undefined) {
     next.lastLifecycleEmailAt = patch.lastLifecycleEmailAt;
   }
+  if (patch.lastRetentionEmailAt !== undefined) {
+    next.lastRetentionEmailAt = patch.lastRetentionEmailAt;
+  }
+  if (patch.retentionEmailUnsubscribedAt !== undefined) {
+    next.retentionEmailUnsubscribedAt = patch.retentionEmailUnsubscribedAt;
+  }
+  if (typeof patch.weeklyEmailWeekIndex === "number") {
+    next.weeklyEmailWeekIndex = Math.max(
+      0,
+      Math.floor(patch.weeklyEmailWeekIndex),
+    );
+  }
   if (patch.lifecycleEmailsSent !== undefined) {
     next.lifecycleEmailsSent = Array.isArray(patch.lifecycleEmailsSent)
       ? patch.lifecycleEmailsSent.filter(
@@ -214,6 +246,7 @@ export async function userAllowsEmail(
     | "milestone"
     | "weekly_digest"
     | "feature_tips"
+    | "weekly_ideas"
     | "product_updates",
 ): Promise<boolean> {
   const prefs = await getAccountPreferences(userId);
@@ -230,6 +263,10 @@ export async function userAllowsEmail(
       return prefs.emailWeeklyDigest;
     case "feature_tips":
       return prefs.emailFeatureTips;
+    case "weekly_ideas":
+      return (
+        prefs.emailWeeklyIdeas && !prefs.retentionEmailUnsubscribedAt
+      );
     case "product_updates":
       return prefs.productUpdatesEmail;
     default:

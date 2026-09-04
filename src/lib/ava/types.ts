@@ -66,7 +66,17 @@ export type AvaAutoOpenReason =
   | "photos_ready"
   | "encourage_memory"
   | "memory_celebrate"
-  | "invite_after_movie";
+  | "invite_after_movie"
+  | "retention_tip";
+
+export type AvaRetentionTip = {
+  id: string;
+  title: string;
+  description: string;
+  href: string;
+  ctaLabel: string;
+  upgradeNote?: string | null;
+};
 
 export type AvaProgress = {
   /**
@@ -109,4 +119,10 @@ export type AvaProgress = {
   totalCount: number;
   percent: number;
   signals: AvaSignals;
+  /** Soft retention: user looks dormant (no recent meaningful vault action). */
+  dormant: boolean;
+  /** Soft tip for dormant users — never stacks over identity / welcome. */
+  retentionTip: AvaRetentionTip | null;
+  /** Client may idle-open this tip (24h + session caps still apply client-side). */
+  retentionCanAutoOpen: boolean;
 };

@@ -33,6 +33,7 @@ const prefsPatchSchema = z
     emailMilestoneCelebrations: z.boolean().optional(),
     productUpdatesEmail: z.boolean().optional(),
     emailFeatureTips: z.boolean().optional(),
+    emailWeeklyIdeas: z.boolean().optional(),
     idleTimeoutEnabled: z.boolean().optional(),
     locale: z.enum(APP_LOCALES).optional(),
   })

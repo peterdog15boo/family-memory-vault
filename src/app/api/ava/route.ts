@@ -14,6 +14,12 @@ import {
   skipEncourageMemory,
   type AvaStepId,
 } from "@/lib/ava";
+import {
+  completeRetentionTip,
+  snoozeRetentionTip,
+  stampRetentionTipShown,
+} from "@/lib/retention/ava";
+import { RETENTION_TIP_IDS, type RetentionTipId } from "@/lib/retention/types";
 import { requireApiUser } from "@/lib/auth/api";
 import { rejectUntrustedOrigin } from "@/lib/security/origin";
 
@@ -77,6 +83,15 @@ const bodySchema = z.discriminatedUnion("action", [
     avatarUrl: z.string().min(1).max(200_000).optional(),
     skip: z.boolean().optional(),
   }),
+  z.object({
+    action: z.literal("snooze_retention_tip"),
+    tipId: z.string().min(1).max(64),
+  }),
+  z.object({
+    action: z.literal("complete_retention_tip"),
+    tipId: z.string().min(1).max(64),
+  }),
+  z.object({ action: z.literal("stamp_retention_tip_shown") }),
 ]);
 
 /**
@@ -155,6 +170,25 @@ export async function POST(request: Request) {
           avatarUrl: parsed.data.avatarUrl,
           skip: parsed.data.skip,
         });
+        break;
+      case "snooze_retention_tip": {
+        const tipId = parsed.data.tipId;
+        if (!(RETENTION_TIP_IDS as readonly string[]).includes(tipId)) {
+          throw new Error("Unknown retention tip.");
+        }
+        await snoozeRetentionTip(userId, tipId as RetentionTipId);
+        break;
+      }
+      case "complete_retention_tip": {
+        const tipId = parsed.data.tipId;
+        if (!(RETENTION_TIP_IDS as readonly string[]).includes(tipId)) {
+          throw new Error("Unknown retention tip.");
+        }
+        await completeRetentionTip(userId, tipId as RetentionTipId);
+        break;
+      }
+      case "stamp_retention_tip_shown":
+        await stampRetentionTipShown(userId);
         break;
     }
   } catch (error) {

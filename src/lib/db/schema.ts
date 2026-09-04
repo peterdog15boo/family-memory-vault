@@ -236,6 +236,16 @@ export type AvaHelperProgress = {
   willPlannerIntroSeen?: boolean;
   willPlannerSkipped?: boolean;
   completionCelebrated?: boolean;
+  /** Soft retention: tipId → snooze-until ISO. */
+  retentionSnoozes?: Array<{ tipId: string; until: string }>;
+  /** Soft retention tips completed forever. */
+  retentionCompletedTips?: string[];
+  /** Last time a retention tip was shown (24h cooldown). */
+  lastRetentionTipAt?: string | null;
+  /** Surfaces opened at least once (on_this_day, …). */
+  retentionOpenedSurfaces?: string[];
+  /** Completeness next-action stall tracking. */
+  completenessStalled?: { id: string; since: string } | null;
 };
 
 /**
@@ -316,6 +326,11 @@ export type UserAccountPreferences = {
    */
   emailFeatureTips?: boolean;
   /**
+   * Soft weekly “ideas” email (retention). Default on.
+   * Distinct from Ava helper tips and from the vault highlights digest.
+   */
+  emailWeeklyIdeas?: boolean;
+  /**
    * Automatically log out after inactivity (bank-style idle timeout).
    * Persisted as `idle_timeout_enabled` conceptually / `idleTimeoutEnabled` in JSON.
    * Default ON. Free plans always enforce ON regardless of this value.
@@ -327,6 +342,12 @@ export type UserAccountPreferences = {
   lastWeeklyDigestAt?: string | null;
   /** Internal dedupe for automated feature-tip emails (ISO timestamp). */
   lastLifecycleEmailAt?: string | null;
+  /** Soft weekly retention email cadence stamp. */
+  lastRetentionEmailAt?: string | null;
+  /** When the user unsubscribed from weekly ideas (ISO). */
+  retentionEmailUnsubscribedAt?: string | null;
+  /** Stable rotation index for weekly retention focus. */
+  weeklyEmailWeekIndex?: number;
   /**
    * Campaign keys already sent (invite_family, try_family_chat, …).
    * Each tip is sent at most once; feature use also suppresses eligibility.
@@ -354,10 +375,14 @@ export const DEFAULT_USER_ACCOUNT_PREFERENCES: Required<UserAccountPreferences> 
     inAppWeeklyDigest: true,
     productUpdatesEmail: false,
     emailFeatureTips: true,
+    emailWeeklyIdeas: true,
     idleTimeoutEnabled: true,
     lastStorageWarningAt: null,
     lastWeeklyDigestAt: null,
     lastLifecycleEmailAt: null,
+    lastRetentionEmailAt: null,
+    retentionEmailUnsubscribedAt: null,
+    weeklyEmailWeekIndex: 0,
     lifecycleEmailsSent: [],
     locale: "en-US",
   };

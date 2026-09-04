@@ -29,12 +29,14 @@ import {
 } from "@/lib/ava/avatar-client";
 import { useOverlayA11y } from "@/hooks/useOverlayA11y";
 import {
-  AVA_AVATAR_PRESETS,  AVA_SCREEN_NAME_MAX,
+  AVA_AVATAR_PRESETS,
+  AVA_SCREEN_NAME_MAX,
   AVA_SCREEN_NAME_MIN,
   avaScreenNameErrorKey,
   validateAvaScreenName,
 } from "@/lib/ava/setup";
 import type { AvaAutoOpenReason, AvaProgress, AvaStep } from "@/lib/ava/types";
+import { RETENTION_IDLE_MS } from "@/lib/retention/types";
 import {
   featureHrefForLegacyPlusGate,
   isAvaLegacyPlusGateStep,
@@ -79,6 +81,15 @@ function allowsIdentityIdleReprompt(pathname: string): boolean {
 }
 
 /** Soft re-prompt after this much idle time on main pages (ms). */
+function allowsRetentionIdle(pathname: string): boolean {
+  if (blocksAvaAutoOpen(pathname)) return false;
+  return (
+    pathname === "/dashboard" ||
+    pathname === "/" ||
+    pathname.startsWith("/dashboard/")
+  );
+}
+
 const IDENTITY_IDLE_MS = 45_000;
 const AVA_AUTO_OPEN_STORAGE_KEY = "fmv.ava.autoOpenReasons";
 
@@ -368,6 +379,7 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
   const shownAutoOpenRef = useRef<Set<AvaAutoOpenReason>>(new Set());
   const progressRef = useRef(progress);
   progressRef.current = progress;
+  const [retentionOpen, setRetentionOpen] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -534,6 +546,64 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
     router,
   ]);
 
+  /**
+   * Soft retention: dormant users may see one tip after a short idle on Home.
+   * Identity / welcome / first-photo flows always win. Max one per session + 24h.
+   */
+  useEffect(() => {
+    if (!progress?.helperEnabled || progress.identityIncomplete) return;
+    if (!progress.dormant || !progress.retentionTip || !progress.retentionCanAutoOpen)
+      return;
+    if (open) return;
+    if (!allowsRetentionIdle(pathname)) return;
+    if (shownAutoOpenRef.current.has("retention_tip")) return;
+    if (readPersistedAutoOpenReasons().has("retention_tip")) return;
+
+    let timer: number | null = null;
+    const clear = () => {
+      if (timer !== null) {
+        window.clearTimeout(timer);
+        timer = null;
+      }
+    };
+    const arm = () => {
+      clear();
+      timer = window.setTimeout(() => {
+        if (shownAutoOpenRef.current.has("retention_tip")) return;
+        if (progressRef.current?.identityIncomplete) return;
+        if (!progressRef.current?.retentionTip) return;
+        shownAutoOpenRef.current.add("retention_tip");
+        persistAutoOpenReason("retention_tip");
+        setRetentionOpen(true);
+        openedAtRef.current = Date.now();
+        setOpen(true);
+        void postAva({ action: "stamp_retention_tip_shown" }).catch(
+          () => undefined,
+        );
+      }, RETENTION_IDLE_MS);
+    };
+
+    const onActivity = () => arm();
+    arm();
+    window.addEventListener("pointerdown", onActivity);
+    window.addEventListener("keydown", onActivity);
+    window.addEventListener("scroll", onActivity, { passive: true });
+    return () => {
+      clear();
+      window.removeEventListener("pointerdown", onActivity);
+      window.removeEventListener("keydown", onActivity);
+      window.removeEventListener("scroll", onActivity);
+    };
+  }, [
+    progress?.helperEnabled,
+    progress?.identityIncomplete,
+    progress?.dormant,
+    progress?.retentionTip,
+    progress?.retentionCanAutoOpen,
+    open,
+    pathname,
+  ]);
+
   // Never keep the modal over upload / create-memory flows.
   useEffect(() => {
     if (blocksAvaAutoOpen(pathname) && open) {
@@ -594,6 +664,15 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
     setGateSwitchError(null);
     setOpen(false);
     const current = progressRef.current;
+    const retentionId = current?.retentionTip?.id;
+    if (retentionOpen && retentionId) {
+      setRetentionOpen(false);
+      void postAva({
+        action: "snooze_retention_tip",
+        tipId: retentionId,
+      }).catch(() => undefined);
+      return;
+    }
     const stepId = current?.activeStepId;
     // Legacy+ upgrade cards: close like X, remember for this tab only.
     // Do not skip_step (Invalid request) or call billing.
@@ -676,6 +755,9 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
       runAction({ action: "resume" }, { openAfter: true });
       return;
     }
+    if (progress?.retentionTip && !progress.identityIncomplete) {
+      setRetentionOpen(true);
+    }
     openedAtRef.current = Date.now();
     setOpen(true);
   }
@@ -694,10 +776,26 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
     return null;
   }
 
-  const active =
+  const journeyStep =
     progress
       ? pickDisplayedAvaStep(progress, dismissedGates)
       : null;
+
+  const retentionAsStep: AvaStep | null =
+    retentionOpen && progress?.retentionTip
+      ? {
+          id: "complete",
+          title: progress.retentionTip.title,
+          description: progress.retentionTip.description,
+          href: progress.retentionTip.href,
+          ctaLabel: progress.retentionTip.ctaLabel,
+          optional: true,
+          status: "active",
+          upgradeNote: progress.retentionTip.upgradeNote ?? null,
+        }
+      : null;
+
+  const active = retentionAsStep ?? journeyStep;
 
   const firstName = progress?.screenName?.trim().split(/\s+/)[0] || null;
 
@@ -821,7 +919,7 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
                   </ul>
                 ) : null}
 
-                {active ? (
+                {active && !retentionOpen ? (
                   <StepExtras
                     step={active}
                     progress={progress}
@@ -844,7 +942,35 @@ export function AvaHelper({ initialProgress }: AvaHelperProps) {
                 active.inline !== "screen_name" &&
                 active.inline !== "avatar" ? (
                   <div className="mt-6 flex flex-col gap-2">
-                    {active.id === "photos_ready" && active.href ? (
+                    {retentionOpen && progress.retentionTip?.href ? (
+                      <>
+                        <Link
+                          href={progress.retentionTip.href}
+                          data-ava-primary
+                          className="ui-btn ui-btn-primary w-full justify-center focus-visible:ring-2 focus-visible:ring-accent/40"
+                          onClick={() => {
+                            const tipId = progress.retentionTip?.id;
+                            setRetentionOpen(false);
+                            setOpen(false);
+                            if (tipId) {
+                              void postAva({
+                                action: "complete_retention_tip",
+                                tipId,
+                              }).catch(() => undefined);
+                            }
+                          }}
+                        >
+                          {progress.retentionTip.ctaLabel}
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={dismissQuietly}
+                          className="ui-btn ui-btn-secondary w-full justify-center focus-visible:ring-2 focus-visible:ring-accent/40"
+                        >
+                          {t("ava.notNow")}
+                        </button>
+                      </>
+                    ) : active.id === "photos_ready" && active.href ? (
                       <Link
                         href={active.href}
                         data-ava-primary
