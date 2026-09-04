@@ -166,10 +166,12 @@ export async function loadRetentionVaultSnapshot(
   const accountAgeDays =
     (now.getTime() - createdAt.getTime()) / (24 * 60 * 60 * 1000);
 
-  const [hasLegacyPlus, hasFamilyTree] = await Promise.all([
+  const [legacyPlusGate, familyTreeGate] = await Promise.all([
     canUseLegacyPlusFeatures(userId),
     canUseFamilyTree(userId),
   ]);
+  const hasLegacyPlus = Boolean(legacyPlusGate.allowed);
+  const hasFamilyTree = Boolean(familyTreeGate.allowed);
 
   const openedSurfaces = state.helperProgress?.retentionOpenedSurfaces ?? [];
 
